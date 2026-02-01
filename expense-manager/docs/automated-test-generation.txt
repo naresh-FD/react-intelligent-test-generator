@@ -1,0 +1,409 @@
+================================================================================
+           AUTOMATED TEST GENERATION - DOCUMENTATION
+================================================================================
+
+This document describes the automated test generation system for React 19
+components using Jest + React Testing Library.
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. OVERVIEW
+2. INSTALLATION & SETUP
+3. CLI COMMANDS
+4. HOW IT WORKS
+5. RECOMMENDED WORKFLOW
+6. GENERATED TEST STRUCTURE
+7. CUSTOMIZATION
+8. TROUBLESHOOTING
+9. BEST PRACTICES
+
+================================================================================
+1. OVERVIEW
+================================================================================
+
+The auto-testgen system automatically generates test scaffolding for:
+
+  - React components (with renderWithProviders, snapshots, interactions)
+  - Utility functions (with export checks and stub tests)
+  - TypeScript/JavaScript files (.ts, .tsx, .js, .jsx)
+
+Key Features:
+  - AST parsing with Babel to detect exports and component types
+  - Type extraction with ts-morph for prop inference
+  - Safe overwriting (only overwrites files marked as @generated)
+  - Multiple modes: watch, git-unstaged, all, file
+  - Prettier formatting integration
+  - Coverage reporting support
+
+================================================================================
+2. INSTALLATION & SETUP
+================================================================================
+
+STEP 1: Install Required Dependencies
+--------------------------------------
+
+  npm install --save-dev @babel/parser @babel/traverse ts-morph chokidar
+
+STEP 2: Install Testing Libraries (if not already installed)
+-------------------------------------------------------------
+
+  npm install --save-dev jest @testing-library/react @testing-library/jest-dom
+  npm install --save-dev @testing-library/user-event jest-environment-jsdom
+
+STEP 3: Install Optional Dependencies
+-------------------------------------
+
+  npm install --save-dev prettier
+
+STEP 4: Verify package.json scripts
+-----------------------------------
+
+Ensure these scripts exist in package.json:
+
+  "scripts": {
+    "start:raw": "webpack serve --mode development",
+    "start": "node scripts/dev.mjs",
+    "start:no-testgen": "node scripts/dev.mjs --no-testgen",
+    "testgen": "node scripts/auto-testgen.mjs",
+    "testgen:watch": "node scripts/auto-testgen.mjs watch",
+    "testgen:watch:coverage": "node scripts/auto-testgen.mjs watch --coverage",
+    "testgen:all": "node scripts/auto-testgen.mjs all",
+    "testgen:all:coverage": "node scripts/auto-testgen.mjs all --coverage",
+    "testgen:git": "node scripts/auto-testgen.mjs git-unstaged",
+    "testgen:git:coverage": "node scripts/auto-testgen.mjs git-unstaged --coverage",
+    "testgen:file": "node scripts/auto-testgen.mjs file",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "test:coverage:check": "jest --coverage --coverageThreshold=\"{\\\"global\\\":{\\\"branches\\\":80,\\\"functions\\\":80,\\\"lines\\\":80,\\\"statements\\\":80}}\""
+  }
+
+STEP 5: Verify renderWithProviders exists
+-----------------------------------------
+
+File location: src/test-utils/renderWithProviders.tsx
+
+This file should wrap components with all necessary providers:
+  - MemoryRouter (for react-router-dom)
+  - QueryClientProvider (for @tanstack/react-query)
+  - Your app's context providers (Auth, Theme, etc.)
+
+================================================================================
+3. CLI COMMANDS
+================================================================================
+
+WATCH MODE (Recommended for Development)
+----------------------------------------
+  npm run testgen:watch
+  npm run testgen:watch:coverage
+
+  - Watches src/**/*.{ts,tsx,js,jsx}
+  - Only processes files when they change (add/change events)
+  - Uses ignoreInitial: true (does NOT scan all files on startup)
+  - With --coverage: runs Jest after each generation
+
+GIT UNSTAGED MODE (Recommended Before Commits)
+----------------------------------------------
+  npm run testgen:git
+  npm run testgen:git:coverage
+
+  - Processes only files with unstaged git changes
+  - Filters to: src/** and .ts/.tsx/.js/.jsx extensions
+  - Ignores: __tests__/**, node_modules/**, dist/**, build/**, coverage/**
+  - Safe for large repositories
+
+ALL MODE (Full Scan)
+--------------------
+  npm run testgen:all
+  npm run testgen:all:coverage
+
+  - Scans and processes all source files in src/
+  - Use sparingly (can generate many files)
+  - Useful for initial setup or after major refactoring
+
+SINGLE FILE MODE
+----------------
+  npm run testgen:file -- src/components/Button.tsx
+
+  - Processes only the specified file
+  - Useful for testing the generator on a specific file
+
+DEVELOPMENT SERVER WITH AUTO-TESTGEN
+------------------------------------
+  npm start           # Runs dev server + test generator in watch mode
+  npm run start:no-testgen  # Runs dev server only (no test generation)
+
+================================================================================
+4. HOW IT WORKS
+================================================================================
+
+FILE DETECTION FLOW
+-------------------
+1. Source file path: src/foo/Bar.tsx
+2. Test file path:   src/foo/__tests__/Bar.test.tsx
+
+FILE EXTENSION MAPPING
+----------------------
+  .tsx source -> .tsx test
+  .jsx source -> .jsx test
+  .ts source  -> .ts test
+  .js source  -> .js test
+
+EXPORT DETECTION (Babel AST)
+----------------------------
+The generator parses source files to detect:
+  - Default exports
+  - Named exports (const, function, class)
+  - Re-exports (export { A, B })
+
+Filtered out (not testable):
+  - Type exports
+  - Interface exports
+  - Names containing: Props, Context, Type, Interface
+
+COMPONENT DETECTION
+-------------------
+A file is treated as a component if:
+  1. Name starts with uppercase letter (React convention)
+  2. Contains JSX syntax (<, />, </)
+  3. Uses forwardRef, memo, or React.memo
+
+TYPE EXTRACTION (ts-morph)
+--------------------------
+For components, the generator attempts to:
+  1. Find [ComponentName]Props interface/type
+  2. Extract required (non-optional) properties
+  3. Generate placeholder values based on types
+
+GENERATED HEADER
+----------------
+All generated tests include:
+  /** @generated AUTO-GENERATED FILE - safe to overwrite */
+
+This header determines whether a test can be overwritten:
+  - Header PRESENT: safe to overwrite (will only overwrite if content differs)
+  - Header MISSING: treated as manual test, NEVER overwritten
+
+================================================================================
+5. RECOMMENDED WORKFLOW
+================================================================================
+
+DAILY DEVELOPMENT
+-----------------
+1. Run "npm start" to start dev server with auto-testgen
+2. Edit source files as normal
+3. Tests are auto-generated when you save
+4. Replace TODO placeholders in generated tests
+5. Run "npm test" to verify
+
+BEFORE COMMITTING
+-----------------
+1. Run "npm run testgen:git" to generate tests for changed files
+2. Review generated tests
+3. Replace TODOs with real test logic
+4. Run "npm run test:coverage:check" to verify 80% coverage
+5. Commit your changes
+
+INITIAL PROJECT SETUP
+---------------------
+1. Run "npm run testgen:all" to generate tests for all files
+2. Review each generated test
+3. Delete tests for files that don't need testing
+4. Customize tests with real assertions
+
+================================================================================
+6. GENERATED TEST STRUCTURE
+================================================================================
+
+COMPONENT TESTS
+---------------
+For components, the generator creates:
+
+  describe("ComponentName", () => {
+    const defaultProps = { /* extracted or placeholder */ };
+
+    describe("Rendering", () => {
+      it("renders without crashing", () => { ... });
+      it("renders with default props", () => { ... });
+    });
+
+    describe("Snapshot", () => {
+      it("matches snapshot", () => { ... });
+    });
+
+    describe("Props", () => {
+      it("applies custom className", () => { ... });
+      it("handles optional props correctly", () => { ... });
+    });
+
+    describe("User Interactions", () => {
+      it("handles click events", async () => { ... });
+      it("handles input changes", async () => { ... });
+    });
+
+    describe("Accessibility", () => {
+      it("has no accessibility violations", async () => { ... });
+      it("has proper ARIA attributes", () => { ... });
+      it("is keyboard navigable", async () => { ... });
+    });
+  });
+
+UTILITY TESTS
+-------------
+For utilities, the generator creates:
+
+  describe("utilityName", () => {
+    describe("functionName", () => {
+      it("is defined", () => { ... });
+      it("handles valid input", () => { ... });
+      it("handles edge cases", () => { ... });
+      it("handles invalid input", () => { ... });
+    });
+  });
+
+================================================================================
+7. CUSTOMIZATION
+================================================================================
+
+ADDING PROVIDERS TO renderWithProviders
+---------------------------------------
+Edit: src/test-utils/renderWithProviders.tsx
+
+Add your context providers to the AllProviders component:
+
+  function AllProviders({ children, queryClient }) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <YourNewProvider>
+          {children}
+        </YourNewProvider>
+      </QueryClientProvider>
+    );
+  }
+
+ADDING STABLE TEST IDS
+----------------------
+Add data-testid attributes to your components:
+
+  <button data-testid="submit-button">Submit</button>
+
+Then in tests:
+
+  const button = screen.getByTestId("submit-button");
+
+SKIPPING FILES FROM GENERATION
+------------------------------
+Files are automatically skipped if:
+  - Located in __tests__ directories
+  - Named *.test.* or *.spec.*
+  - Named index.* (re-export files)
+  - Already have manual tests (no @generated header)
+
+================================================================================
+8. TROUBLESHOOTING
+================================================================================
+
+ERROR: "Module not found" in generated tests
+--------------------------------------------
+Cause: Incorrect relative import paths
+
+Solution:
+  1. Verify test is in correct __tests__ directory
+  2. Check that import paths don't include file extensions
+  3. Ensure path aliases are NOT used in generated imports
+
+ERROR: "Cannot find module 'react'" or UMD global issues
+---------------------------------------------------------
+Cause: Missing React import in TypeScript files
+
+Solution: Generated tests include:
+  import * as React from "react";
+
+If you see this error in manual tests, add this import.
+
+ERROR: "useNavigate() may be used only in context of a Router"
+--------------------------------------------------------------
+Cause: Component uses react-router hooks without router wrapper
+
+Solution: Ensure renderWithProviders is configured with router:
+  renderWithProviders(<Component />, { withRouter: true });
+
+ERROR: "No QueryClient set"
+---------------------------
+Cause: Component uses react-query without QueryClientProvider
+
+Solution: renderWithProviders automatically provides QueryClient.
+If error persists, verify the queryClient option in your test setup.
+
+ERROR: "Provider not found" for custom contexts
+-----------------------------------------------
+Cause: Component requires context not included in AllProviders
+
+Solution: Add your context provider to:
+  src/test-utils/renderWithProviders.tsx
+
+ERROR: "Prettier formatting failed"
+-----------------------------------
+Cause: Prettier configuration issue or syntax error in generated code
+
+Solution:
+  1. Generated code will still be written (unformatted)
+  2. Run "npm run format" to format manually
+  3. Check for syntax errors in source file
+
+ERROR: "Cannot use import statement outside a module"
+-----------------------------------------------------
+Cause: Jest not configured for ESM
+
+Solution: Ensure jest.config.js has:
+  transform: {
+    "^.+\\.tsx?$": "ts-jest"
+  }
+
+ERROR: Git mode shows "No unstaged changes found"
+-------------------------------------------------
+Cause: All changes are staged or committed
+
+Solution:
+  1. Modify a file
+  2. Don't run "git add" on it
+  3. Run "npm run testgen:git"
+
+================================================================================
+9. BEST PRACTICES
+================================================================================
+
+FOR BETTER TEST GENERATION
+--------------------------
+1. Use consistent naming: ComponentName for components, camelCase for utils
+2. Create explicit Props interfaces: interface ButtonProps { ... }
+3. Add JSDoc comments to describe expected behavior
+4. Export types separately from runtime code
+
+FOR BETTER COVERAGE
+-------------------
+1. Replace ALL TODO placeholders with real assertions
+2. Add tests for all code branches (if/else, switch cases)
+3. Test error states and edge cases
+4. Mock external dependencies
+
+FOR MAINTAINABLE TESTS
+----------------------
+1. Use data-testid for stable element selection
+2. Prefer getByRole over getByTestId when possible
+3. Use screen.debug() to inspect rendered output
+4. Keep tests focused on behavior, not implementation
+
+RECOMMENDED TEST FILE STRUCTURE
+-------------------------------
+After generation, organize tests into:
+  - Rendering tests: verify component renders correctly
+  - Props tests: verify prop handling
+  - Interaction tests: verify user interactions
+  - Integration tests: verify component works with providers
+  - Edge case tests: verify error handling
+
+================================================================================
+END OF DOCUMENTATION
+================================================================================
