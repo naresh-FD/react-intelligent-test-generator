@@ -3,16 +3,17 @@
  * Auto Test Generator - Generates Jest + React Testing Library tests
  *
  * Usage:
- *   node scripts/auto-testgen.mjs watch [--coverage]  - Watch mode (only process add/change events)
- *   node scripts/auto-testgen.mjs all [--coverage]    - Process all source files
+ *   node scripts/auto-testgen.mjs watch [--coverage]       - Watch mode (only process add/change events)
+ *   node scripts/auto-testgen.mjs all [--coverage]         - Process all source files
  *   node scripts/auto-testgen.mjs file <path> [--coverage] - Process a single file
+ *   node scripts/auto-testgen.mjs git-unstaged [--coverage] - Process only git unstaged files
  */
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 
 const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
@@ -936,6 +937,90 @@ function runJest(testPattern, options = {}) {
 }
 
 /**
+ * Process only git unstaged files
+ */
+async function processGitUnstaged() {
+  console.log('🔍 Finding git unstaged changes...\n');
+
+  try {
+    // Get unstaged changes (modified files not yet staged)
+    const diffOutput = execSync('git diff --name-only', {
+      cwd: ROOT_DIR,
+      encoding: 'utf-8',
+    }).trim();
+
+    // Also get untracked files
+    const untrackedOutput = execSync('git ls-files --others --exclude-standard', {
+      cwd: ROOT_DIR,
+      encoding: 'utf-8',
+    }).trim();
+
+    // Combine both outputs
+    const allChanges = [diffOutput, untrackedOutput]
+      .filter(Boolean)
+      .join('\n');
+
+    if (!allChanges) {
+      console.log('No unstaged changes found.\n');
+      return { processed: 0, skipped: 0, errors: 0 };
+    }
+
+    // Filter to source files in src/
+    const files = allChanges
+      .split('\n')
+      .filter(Boolean)
+      .filter((file) => {
+        // Must be in src/ directory
+        if (!file.startsWith('src/')) return false;
+
+        // Must be a source file
+        const ext = path.extname(file);
+        if (!['.ts', '.tsx', '.js', '.jsx'].includes(ext)) return false;
+
+        // Skip test files and __tests__ directories
+        if (file.includes('__tests__')) return false;
+        if (file.includes('.test.') || file.includes('.spec.')) return false;
+
+        // Skip node_modules, dist, build, coverage
+        if (file.includes('node_modules')) return false;
+        if (file.includes('/dist/')) return false;
+        if (file.includes('/build/')) return false;
+        if (file.includes('/coverage/')) return false;
+
+        return true;
+      })
+      .map((file) => path.join(ROOT_DIR, file));
+
+    if (files.length === 0) {
+      console.log('No source files in unstaged changes.\n');
+      return { processed: 0, skipped: 0, errors: 0 };
+    }
+
+    console.log(`Found ${files.length} unstaged source file(s):\n`);
+    files.forEach((f) => console.log(`  - ${path.relative(ROOT_DIR, f)}`));
+    console.log('');
+
+    let processed = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    for (const file of files) {
+      const result = await processFile(file);
+      if (result.success) processed++;
+      else if (result.skipped) skipped++;
+      else if (result.error) errors++;
+    }
+
+    console.log(`\n📊 Summary: ${processed} generated, ${skipped} skipped, ${errors} errors`);
+    return { processed, skipped, errors };
+  } catch (err) {
+    console.error(`❌ Git command failed: ${err.message}`);
+    console.error('Make sure you are in a git repository.');
+    process.exit(1);
+  }
+}
+
+/**
  * Main entry point
  */
 async function main() {
@@ -970,22 +1055,31 @@ async function main() {
       }
       break;
 
+    case 'git-unstaged':
+      const gitResult = await processGitUnstaged();
+      if (hasCoverage && gitResult.processed > 0) {
+        await runJest(null, { coverage: true });
+      }
+      break;
+
     default:
       console.log(`
 Auto Test Generator - Generates Jest + React Testing Library tests
 
 Usage:
-  node scripts/auto-testgen.mjs watch [--coverage]       - Watch mode (run tests after each change)
-  node scripts/auto-testgen.mjs all [--coverage]         - Process all source files
-  node scripts/auto-testgen.mjs file <path> [--coverage] - Process a single file
+  node scripts/auto-testgen.mjs watch [--coverage]        - Watch mode (run tests after each change)
+  node scripts/auto-testgen.mjs all [--coverage]          - Process all source files
+  node scripts/auto-testgen.mjs file <path> [--coverage]  - Process a single file
+  node scripts/auto-testgen.mjs git-unstaged [--coverage] - Process only git unstaged files
 
 Options:
   --coverage   Run Jest with coverage after generating tests
 
 Commands:
-  watch   Only react to file add/change events (ignoreInitial: true)
-  all     Scan and process all source files in src/
-  file    Process a specific file path
+  watch        Only react to file add/change events (ignoreInitial: true)
+  all          Scan and process all source files in src/
+  file         Process a specific file path
+  git-unstaged Process only files with unstaged git changes (safest for large repos)
 `);
       process.exit(1);
   }

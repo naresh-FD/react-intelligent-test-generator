@@ -4,7 +4,9 @@
   "description": "Production-ready expense management application",
   "main": "index.js",
   "scripts": {
-    "start": "webpack serve --mode development",
+    "start:raw": "webpack serve --mode development",
+    "start": "node scripts/dev.mjs",
+    "start:no-testgen": "node scripts/dev.mjs --no-testgen",
     "build": "webpack --mode production",
     "lint": "eslint src --ext .ts,.tsx",
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
@@ -14,11 +16,15 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "test:coverage:check": "jest --coverage --coverageThreshold=\"{\\\"global\\\":{\\\"branches\\\":80,\\\"functions\\\":80,\\\"lines\\\":80,\\\"statements\\\":80}}\"",
     "testgen": "node scripts/auto-testgen.mjs",
     "testgen:watch": "node scripts/auto-testgen.mjs watch",
     "testgen:watch:coverage": "node scripts/auto-testgen.mjs watch --coverage",
     "testgen:all": "node scripts/auto-testgen.mjs all",
-    "testgen:all:coverage": "node scripts/auto-testgen.mjs all --coverage"
+    "testgen:all:coverage": "node scripts/auto-testgen.mjs all --coverage",
+    "testgen:git": "node scripts/auto-testgen.mjs git-unstaged",
+    "testgen:git:coverage": "node scripts/auto-testgen.mjs git-unstaged --coverage",
+    "testgen:file": "node scripts/auto-testgen.mjs file"
   },
   "keywords": [
     "expense",
