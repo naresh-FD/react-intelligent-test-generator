@@ -1,0 +1,55 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`BudgetProgress Snapshot matches snapshot 1`] = `
+<div
+  class="rounded-lg border border-border bg-card text-card-foreground shadow-sm"
+>
+  <div
+    class="space-y-1.5 p-6 flex flex-row items-center justify-between pb-2"
+  >
+    <h3
+      class="text-xl font-semibold leading-none tracking-tight"
+    >
+      Budget Progress
+    </h3>
+    <a
+      href="/budgets"
+    >
+      <button
+        class="inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-8 rounded-md px-3 text-xs"
+      >
+        Manage
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-arrow-right h-4 w-4"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M5 12h14"
+          />
+          <path
+            d="m12 5 7 7-7 7"
+          />
+        </svg>
+      </button>
+    </a>
+  </div>
+  <div
+    class="p-6 pt-0"
+  >
+    <div
+      class="flex h-32 items-center justify-center text-muted-foreground"
+    >
+      No active budgets
+    </div>
+  </div>
+</div>
+`;

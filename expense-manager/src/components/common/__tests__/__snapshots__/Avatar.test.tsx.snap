@@ -1,0 +1,10 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Avatar Snapshot matches snapshot 1`] = `
+<div
+  aria-label="Avatar"
+  class="flex items-center justify-center rounded-full bg-primary font-medium text-primary-foreground ring-2 ring-border h-10 w-10 text-sm"
+>
+  ?
+</div>
+`;

@@ -47,7 +47,7 @@ coverage/
 
 # Husky
 .husky/_
-*.test.tsx
-*.test.ts
+# *.test.tsx
+# *.test.ts
 
-*.snap
+# *.snap

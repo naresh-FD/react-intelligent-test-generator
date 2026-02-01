@@ -1,0 +1,168 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`ExpenseList Snapshot matches snapshot 1`] = `
+<div
+  class="space-y-4"
+>
+  <div
+    class="rounded-lg border border-border p-6 space-y-4"
+  >
+    <div
+      class="flex items-center space-x-4"
+    >
+      <div
+        aria-hidden="true"
+        class="animate-pulse bg-muted h-12 w-12 rounded-full"
+      />
+      <div
+        class="space-y-2 flex-1"
+      >
+        <div
+          aria-hidden="true"
+          class="animate-pulse rounded-md bg-muted h-4 w-[60%]"
+        />
+        <div
+          aria-hidden="true"
+          class="animate-pulse rounded-md bg-muted h-3 w-[40%]"
+        />
+      </div>
+    </div>
+    <div
+      aria-hidden="true"
+      class="animate-pulse rounded-md bg-muted h-4 w-full"
+    />
+    <div
+      aria-hidden="true"
+      class="animate-pulse rounded-md bg-muted h-4 w-[80%]"
+    />
+  </div>
+  <div
+    class="rounded-lg border border-border p-6 space-y-4"
+  >
+    <div
+      class="flex items-center space-x-4"
+    >
+      <div
+        aria-hidden="true"
+        class="animate-pulse bg-muted h-12 w-12 rounded-full"
+      />
+      <div
+        class="space-y-2 flex-1"
+      >
+        <div
+          aria-hidden="true"
+          class="animate-pulse rounded-md bg-muted h-4 w-[60%]"
+        />
+        <div
+          aria-hidden="true"
+          class="animate-pulse rounded-md bg-muted h-3 w-[40%]"
+        />
+      </div>
+    </div>
+    <div
+      aria-hidden="true"
+      class="animate-pulse rounded-md bg-muted h-4 w-full"
+    />
+    <div
+      aria-hidden="true"
+      class="animate-pulse rounded-md bg-muted h-4 w-[80%]"
+    />
+  </div>
+  <div
+    class="rounded-lg border border-border p-6 space-y-4"
+  >
+    <div
+      class="flex items-center space-x-4"
+    >
+      <div
+        aria-hidden="true"
+        class="animate-pulse bg-muted h-12 w-12 rounded-full"
+      />
+      <div
+        class="space-y-2 flex-1"
+      >
+        <div
+          aria-hidden="true"
+          class="animate-pulse rounded-md bg-muted h-4 w-[60%]"
+        />
+        <div
+          aria-hidden="true"
+          class="animate-pulse rounded-md bg-muted h-3 w-[40%]"
+        />
+      </div>
+    </div>
+    <div
+      aria-hidden="true"
+      class="animate-pulse rounded-md bg-muted h-4 w-full"
+    />
+    <div
+      aria-hidden="true"
+      class="animate-pulse rounded-md bg-muted h-4 w-[80%]"
+    />
+  </div>
+  <div
+    class="rounded-lg border border-border p-6 space-y-4"
+  >
+    <div
+      class="flex items-center space-x-4"
+    >
+      <div
+        aria-hidden="true"
+        class="animate-pulse bg-muted h-12 w-12 rounded-full"
+      />
+      <div
+        class="space-y-2 flex-1"
+      >
+        <div
+          aria-hidden="true"
+          class="animate-pulse rounded-md bg-muted h-4 w-[60%]"
+        />
+        <div
+          aria-hidden="true"
+          class="animate-pulse rounded-md bg-muted h-3 w-[40%]"
+        />
+      </div>
+    </div>
+    <div
+      aria-hidden="true"
+      class="animate-pulse rounded-md bg-muted h-4 w-full"
+    />
+    <div
+      aria-hidden="true"
+      class="animate-pulse rounded-md bg-muted h-4 w-[80%]"
+    />
+  </div>
+  <div
+    class="rounded-lg border border-border p-6 space-y-4"
+  >
+    <div
+      class="flex items-center space-x-4"
+    >
+      <div
+        aria-hidden="true"
+        class="animate-pulse bg-muted h-12 w-12 rounded-full"
+      />
+      <div
+        class="space-y-2 flex-1"
+      >
+        <div
+          aria-hidden="true"
+          class="animate-pulse rounded-md bg-muted h-4 w-[60%]"
+        />
+        <div
+          aria-hidden="true"
+          class="animate-pulse rounded-md bg-muted h-3 w-[40%]"
+        />
+      </div>
+    </div>
+    <div
+      aria-hidden="true"
+      class="animate-pulse rounded-md bg-muted h-4 w-full"
+    />
+    <div
+      aria-hidden="true"
+      class="animate-pulse rounded-md bg-muted h-4 w-[80%]"
+    />
+  </div>
+</div>
+`;

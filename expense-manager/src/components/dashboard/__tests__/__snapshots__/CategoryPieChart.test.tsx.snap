@@ -1,0 +1,26 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`CategoryPieChart Snapshot matches snapshot 1`] = `
+<div
+  class="rounded-lg border border-border bg-card text-card-foreground shadow-sm"
+>
+  <div
+    class="flex flex-col space-y-1.5 p-6"
+  >
+    <h3
+      class="text-xl font-semibold leading-none tracking-tight"
+    >
+      Expenses by Category
+    </h3>
+  </div>
+  <div
+    class="p-6 pt-0"
+  >
+    <div
+      class="flex h-[250px] items-center justify-center text-muted-foreground"
+    >
+      No data available
+    </div>
+  </div>
+</div>
+`;

@@ -1,0 +1,24 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`DataTable Snapshot matches snapshot 1`] = `
+<div
+  class="space-y-4"
+>
+  <div
+    class="overflow-x-auto rounded-lg border border-border"
+  >
+    <table
+      class="w-full"
+    >
+      <thead
+        class="bg-muted/50"
+      >
+        <tr />
+      </thead>
+      <tbody
+        class="divide-y divide-border"
+      />
+    </table>
+  </div>
+</div>
+`;
