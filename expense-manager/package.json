@@ -16,7 +16,9 @@
     "test:coverage": "jest --coverage",
     "testgen": "node scripts/auto-testgen.mjs",
     "testgen:watch": "node scripts/auto-testgen.mjs watch",
-    "testgen:all": "node scripts/auto-testgen.mjs all"
+    "testgen:watch:coverage": "node scripts/auto-testgen.mjs watch --coverage",
+    "testgen:all": "node scripts/auto-testgen.mjs all",
+    "testgen:all:coverage": "node scripts/auto-testgen.mjs all --coverage"
   },
   "keywords": [
     "expense",

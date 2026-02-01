@@ -3,15 +3,16 @@
  * Auto Test Generator - Generates Jest + React Testing Library tests
  *
  * Usage:
- *   node scripts/auto-testgen.mjs watch    - Watch mode (only process add/change events)
- *   node scripts/auto-testgen.mjs all      - Process all source files
- *   node scripts/auto-testgen.mjs file <path> - Process a single file
+ *   node scripts/auto-testgen.mjs watch [--coverage]  - Watch mode (only process add/change events)
+ *   node scripts/auto-testgen.mjs all [--coverage]    - Process all source files
+ *   node scripts/auto-testgen.mjs file <path> [--coverage] - Process a single file
  */
 
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
+import { spawn } from 'child_process';
 
 const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
@@ -822,10 +823,14 @@ async function processAll() {
 /**
  * Watch mode - only process add/change events
  */
-async function watchMode() {
+async function watchMode(runCoverage = false) {
   console.log('👀 Starting watch mode...\n');
   console.log('   Watching: src/**/*.{js,jsx,ts,tsx}');
-  console.log('   Ignoring: __tests__/**, node_modules/**, dist/**, reports/**, public/**\n');
+  console.log('   Ignoring: __tests__/**, node_modules/**, dist/**, reports/**, public/**');
+  if (runCoverage) {
+    console.log('   Coverage: enabled (will run tests after each change)');
+  }
+  console.log('');
 
   const watcher = chokidar.watch('src/**/*.{js,jsx,ts,tsx}', {
     cwd: ROOT_DIR,
@@ -842,12 +847,20 @@ async function watchMode() {
 
   watcher.on('add', async (filePath) => {
     console.log(`\n📄 File added: ${filePath}`);
-    await processFile(path.join(ROOT_DIR, filePath));
+    const result = await processFile(path.join(ROOT_DIR, filePath));
+    if (result.success && runCoverage) {
+      const testPattern = path.relative(ROOT_DIR, result.testFilePath).replace(/\\/g, '/');
+      await runJest(testPattern, { coverage: true });
+    }
   });
 
   watcher.on('change', async (filePath) => {
     console.log(`\n✏️  File changed: ${filePath}`);
-    await processFile(path.join(ROOT_DIR, filePath));
+    const result = await processFile(path.join(ROOT_DIR, filePath));
+    if (result.success && runCoverage) {
+      const testPattern = path.relative(ROOT_DIR, result.testFilePath).replace(/\\/g, '/');
+      await runJest(testPattern, { coverage: true });
+    }
   });
 
   watcher.on('error', (error) => {
@@ -868,30 +881,93 @@ async function watchMode() {
 }
 
 /**
+ * Run Jest tests with optional coverage
+ */
+function runJest(testPattern, options = {}) {
+  const { coverage = false, watch = false } = options;
+
+  return new Promise((resolve, reject) => {
+    const args = [];
+
+    if (testPattern) {
+      args.push('--testPathPattern', testPattern);
+    }
+
+    if (coverage) {
+      args.push('--coverage');
+      if (testPattern) {
+        // Only collect coverage for the specific file being tested
+        args.push('--collectCoverageFrom', testPattern.replace('__tests__/', '').replace('.test.tsx', '.tsx').replace('.test.ts', '.ts'));
+      }
+    }
+
+    if (watch) {
+      args.push('--watch');
+    }
+
+    console.log(`\n🧪 Running Jest${coverage ? ' with coverage' : ''}...`);
+    console.log(`   jest ${args.join(' ')}\n`);
+
+    const isWindows = process.platform === 'win32';
+    const jestBin = isWindows ? 'npx.cmd' : 'npx';
+    const jestArgs = isWindows ? ['jest', ...args] : ['jest', ...args];
+
+    const jest = spawn(jestBin, jestArgs, {
+      cwd: ROOT_DIR,
+      stdio: 'inherit',
+      shell: isWindows,
+    });
+
+    jest.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        // Don't reject on test failures, just log
+        console.log(`\n⚠️  Jest exited with code ${code}`);
+        resolve();
+      }
+    });
+
+    jest.on('error', (err) => {
+      console.error(`❌ Failed to run Jest: ${err.message}`);
+      resolve(); // Don't fail the whole process
+    });
+  });
+}
+
+/**
  * Main entry point
  */
 async function main() {
   const args = process.argv.slice(2);
   const command = args[0];
+  const hasCoverage = args.includes('--coverage');
 
   // Load dependencies
   await loadDependencies();
 
   switch (command) {
     case 'watch':
-      await watchMode();
+      await watchMode(hasCoverage);
       break;
 
     case 'all':
       await processAll();
+      if (hasCoverage) {
+        await runJest(null, { coverage: true });
+      }
       break;
 
     case 'file':
-      if (!args[1]) {
-        console.error('❌ Please provide a file path: node scripts/auto-testgen.mjs file <path>');
+      if (!args[1] || args[1] === '--coverage') {
+        console.error('❌ Please provide a file path: node scripts/auto-testgen.mjs file <path> [--coverage]');
         process.exit(1);
       }
-      await processFile(args[1]);
+      const result = await processFile(args[1]);
+      if (result.success && hasCoverage) {
+        const testPattern = path.relative(ROOT_DIR, result.testFilePath).replace(/\\/g, '/');
+        await runJest(testPattern, { coverage: true });
+      }
       break;
 
     default:
@@ -899,11 +975,14 @@ async function main() {
 Auto Test Generator - Generates Jest + React Testing Library tests
 
 Usage:
-  node scripts/auto-testgen.mjs watch        - Watch mode (only add/change events)
-  node scripts/auto-testgen.mjs all          - Process all source files
-  node scripts/auto-testgen.mjs file <path>  - Process a single file
+  node scripts/auto-testgen.mjs watch [--coverage]       - Watch mode (run tests after each change)
+  node scripts/auto-testgen.mjs all [--coverage]         - Process all source files
+  node scripts/auto-testgen.mjs file <path> [--coverage] - Process a single file
 
 Options:
+  --coverage   Run Jest with coverage after generating tests
+
+Commands:
   watch   Only react to file add/change events (ignoreInitial: true)
   all     Scan and process all source files in src/
   file    Process a specific file path

@@ -1,6 +1,6 @@
 import * as React from "react";
-import { render, type RenderOptions, type RenderResult } from "@testing-library/react";
-import { BrowserRouter, MemoryRouter } from "react-router-dom";
+import { render, type RenderOptions, type RenderResult, cleanup } from "@testing-library/react";
+import { MemoryRouter, BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   AuthProvider,
@@ -27,8 +27,8 @@ export interface RenderWithProvidersOptions extends Omit<RenderOptions, "wrapper
   withRouter?: boolean;
 
   /**
-   * Use MemoryRouter instead of BrowserRouter
-   * @default false
+   * Use MemoryRouter instead of BrowserRouter (recommended for tests)
+   * @default true
    */
   useMemoryRouter?: boolean;
 
@@ -52,6 +52,7 @@ function createTestQueryClient(): QueryClient {
       queries: {
         retry: false,
         staleTime: 0,
+        gcTime: 0,
       },
       mutations: {
         retry: false,
@@ -59,6 +60,17 @@ function createTestQueryClient(): QueryClient {
     },
   });
 }
+
+// Track active query clients for cleanup
+const activeQueryClients = new Set<QueryClient>();
+
+afterEach(() => {
+  // Clean up all active query clients to prevent Jest from hanging
+  activeQueryClients.forEach((client) => {
+    client.clear();
+  });
+  activeQueryClients.clear();
+});
 
 /**
  * All app providers wrapper for testing
@@ -109,10 +121,13 @@ export function renderWithProviders(
   const {
     initialRoute = "/",
     withRouter = true,
-    useMemoryRouter = false,
+    useMemoryRouter = true,
     queryClient = createTestQueryClient(),
     ...renderOptions
   } = options;
+
+  // Track for cleanup to prevent Jest from hanging
+  activeQueryClients.add(queryClient);
 
   function Wrapper({ children }: { children: React.ReactNode }) {
     const wrapped = <AllProviders queryClient={queryClient}>{children}</AllProviders>;

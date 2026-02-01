@@ -48,6 +48,8 @@ const config = {
   coverageReporters: ["text", "lcov", "html"],
   clearMocks: true,
   restoreMocks: true,
+  // Force Jest to exit after tests complete (handles async operations from React Query, etc.)
+  forceExit: true,
 };
 
 export default config;
