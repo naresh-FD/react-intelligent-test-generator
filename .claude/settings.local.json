@@ -5,7 +5,8 @@
       "Bash(node scripts/testgen/index.mjs:*)",
       "Bash(npm install:*)",
       "Bash(node scripts/generate-docs.mjs:*)",
-      "Bash(move:*)"
+      "Bash(move:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\ndocs: update test generator documentation and add export formats\n\n- Update command references in automated-test-generation.md and\n  GETTING-STARTED-TESTGEN.md to match actual package.json scripts\n- Add forwardRef components limitation to documentation\n- Add async/loading components troubleshooting guide\n- Add documentation export in multiple formats \\(txt, html, docx\\)\n- Add docs:generate script with docx library for Word export\n- Update configuration files reference table\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }

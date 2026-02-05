@@ -1,320 +1,339 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="UTF-8">
-  <title>Automated Test Generation - Getting Started Guide</title>
-  <style>
-    body {
-      font-family: 'Calibri', 'Segoe UI', sans-serif;
-      font-size: 11pt;
-      line-height: 1.6;
-      max-width: 8.5in;
-      margin: 0 auto;
-      padding: 1in;
-      color: #333;
-    }
-    h1 {
-      font-size: 24pt;
-      color: #1a365d;
-      border-bottom: 3px solid #3182ce;
-      padding-bottom: 10px;
-      margin-top: 0;
-    }
-    h2 {
-      font-size: 16pt;
-      color: #2c5282;
-      border-bottom: 1px solid #bee3f8;
-      padding-bottom: 5px;
-      margin-top: 30px;
-    }
-    h3 {
-      font-size: 13pt;
-      color: #2b6cb0;
-      margin-top: 20px;
-    }
-    p {
-      margin: 10px 0;
-    }
-    code {
-      font-family: 'Consolas', 'Courier New', monospace;
-      background-color: #f7fafc;
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-size: 10pt;
-      color: #c53030;
-    }
-    pre {
-      background-color: #1a202c;
-      color: #e2e8f0;
-      padding: 15px;
-      border-radius: 5px;
-      overflow-x: auto;
-      font-family: 'Consolas', 'Courier New', monospace;
-      font-size: 9pt;
-      line-height: 1.4;
-      margin: 15px 0;
-    }
-    pre code {
-      background-color: transparent;
-      color: #e2e8f0;
-      padding: 0;
-    }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      margin: 15px 0;
-    }
-    th, td {
-      border: 1px solid #cbd5e0;
-      padding: 10px 12px;
-      text-align: left;
-    }
-    th {
-      background-color: #edf2f7;
-      font-weight: bold;
-      color: #2d3748;
-    }
-    tr:nth-child(even) {
-      background-color: #f7fafc;
-    }
-    ul, ol {
-      margin: 10px 0;
-      padding-left: 25px;
-    }
-    li {
-      margin: 5px 0;
-    }
-    hr {
-      border: none;
-      border-top: 1px solid #e2e8f0;
-      margin: 30px 0;
-    }
-    .use-case {
-      background-color: #ebf8ff;
-      border-left: 4px solid #3182ce;
-      padding: 10px 15px;
-      margin: 15px 0;
-    }
-    .use-case-title {
-      font-weight: bold;
-      color: #2b6cb0;
-    }
-    .warning {
-      background-color: #fffaf0;
-      border-left: 4px solid #ed8936;
-      padding: 10px 15px;
-      margin: 15px 0;
-    }
-    .limitation {
-      background-color: #fff5f5;
-      border-left: 4px solid #e53e3e;
-      padding: 10px 15px;
-      margin: 15px 0;
-    }
-    .toc {
-      background-color: #f7fafc;
-      padding: 20px;
-      border-radius: 5px;
-      margin: 20px 0;
-    }
-    .toc a {
-      color: #3182ce;
-      text-decoration: none;
-    }
-    .page-break {
-      page-break-after: always;
-    }
-  </style>
-</head>
-<body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Automated Test Generation - Getting Started Guide</title>
+    <style>
+      body {
+        font-family: 'Calibri', 'Segoe UI', sans-serif;
+        font-size: 11pt;
+        line-height: 1.6;
+        max-width: 8.5in;
+        margin: 0 auto;
+        padding: 1in;
+        color: #333;
+      }
+      h1 {
+        font-size: 24pt;
+        color: #1a365d;
+        border-bottom: 3px solid #3182ce;
+        padding-bottom: 10px;
+        margin-top: 0;
+      }
+      h2 {
+        font-size: 16pt;
+        color: #2c5282;
+        border-bottom: 1px solid #bee3f8;
+        padding-bottom: 5px;
+        margin-top: 30px;
+      }
+      h3 {
+        font-size: 13pt;
+        color: #2b6cb0;
+        margin-top: 20px;
+      }
+      p {
+        margin: 10px 0;
+      }
+      code {
+        font-family: 'Consolas', 'Courier New', monospace;
+        background-color: #f7fafc;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 10pt;
+        color: #c53030;
+      }
+      pre {
+        background-color: #1a202c;
+        color: #e2e8f0;
+        padding: 15px;
+        border-radius: 5px;
+        overflow-x: auto;
+        font-family: 'Consolas', 'Courier New', monospace;
+        font-size: 9pt;
+        line-height: 1.4;
+        margin: 15px 0;
+      }
+      pre code {
+        background-color: transparent;
+        color: #e2e8f0;
+        padding: 0;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 15px 0;
+      }
+      th,
+      td {
+        border: 1px solid #cbd5e0;
+        padding: 10px 12px;
+        text-align: left;
+      }
+      th {
+        background-color: #edf2f7;
+        font-weight: bold;
+        color: #2d3748;
+      }
+      tr:nth-child(even) {
+        background-color: #f7fafc;
+      }
+      ul,
+      ol {
+        margin: 10px 0;
+        padding-left: 25px;
+      }
+      li {
+        margin: 5px 0;
+      }
+      hr {
+        border: none;
+        border-top: 1px solid #e2e8f0;
+        margin: 30px 0;
+      }
+      .use-case {
+        background-color: #ebf8ff;
+        border-left: 4px solid #3182ce;
+        padding: 10px 15px;
+        margin: 15px 0;
+      }
+      .use-case-title {
+        font-weight: bold;
+        color: #2b6cb0;
+      }
+      .warning {
+        background-color: #fffaf0;
+        border-left: 4px solid #ed8936;
+        padding: 10px 15px;
+        margin: 15px 0;
+      }
+      .limitation {
+        background-color: #fff5f5;
+        border-left: 4px solid #e53e3e;
+        padding: 10px 15px;
+        margin: 15px 0;
+      }
+      .toc {
+        background-color: #f7fafc;
+        padding: 20px;
+        border-radius: 5px;
+        margin: 20px 0;
+      }
+      .toc a {
+        color: #3182ce;
+        text-decoration: none;
+      }
+      .page-break {
+        page-break-after: always;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Automated Test Generation - Getting Started Guide</h1>
+    <p><strong>For React 19 Components</strong></p>
+    <p><em>Last Updated: February 2026</em></p>
 
-<h1>Automated Test Generation - Getting Started Guide</h1>
-<p><strong>For React 19 Components</strong></p>
-<p><em>Last Updated: February 2026</em></p>
+    <hr />
 
-<hr>
+    <div class="toc">
+      <h2 style="margin-top: 0">Table of Contents</h2>
+      <ol>
+        <li><a href="#quick-start">Quick Start</a></li>
+        <li><a href="#commands">Available Commands</a></li>
+        <li><a href="#how-it-works">How It Works</a></li>
+        <li><a href="#test-structure">Generated Test Structure</a></li>
+        <li><a href="#best-practices">Best Practices</a></li>
+        <li><a href="#troubleshooting">Troubleshooting</a></li>
+        <li><a href="#summary">Summary</a></li>
+      </ol>
+    </div>
 
-<div class="toc">
-  <h2 style="margin-top: 0;">Table of Contents</h2>
-  <ol>
-    <li><a href="#quick-start">Quick Start</a></li>
-    <li><a href="#commands">Available Commands</a></li>
-    <li><a href="#how-it-works">How It Works</a></li>
-    <li><a href="#test-structure">Generated Test Structure</a></li>
-    <li><a href="#best-practices">Best Practices</a></li>
-    <li><a href="#troubleshooting">Troubleshooting</a></li>
-    <li><a href="#summary">Summary</a></li>
-  </ol>
-</div>
+    <hr />
 
-<hr>
+    <h2 id="quick-start">1. Quick Start</h2>
 
-<h2 id="quick-start">1. Quick Start</h2>
+    <h3>1.1 Verify Dependencies Are Installed</h3>
+    <p>All required dependencies should already be installed. If not, run:</p>
+    <pre><code>npm install</code></pre>
 
-<h3>1.1 Verify Dependencies Are Installed</h3>
-<p>All required dependencies should already be installed. If not, run:</p>
-<pre><code>npm install</code></pre>
+    <p>Required dev dependencies (already in package.json):</p>
+    <ul>
+      <li>
+        <code>@babel/parser</code>, <code>@babel/traverse</code> - AST parsing for export detection
+      </li>
+      <li><code>ts-morph</code> - TypeScript type extraction</li>
+      <li><code>chokidar</code> - File watching</li>
+      <li><code>prettier</code> - Code formatting</li>
+      <li>
+        <code>jest</code>, <code>@testing-library/react</code>,
+        <code>@testing-library/jest-dom</code>, <code>@testing-library/user-event</code> - Testing
+      </li>
+    </ul>
 
-<p>Required dev dependencies (already in package.json):</p>
-<ul>
-  <li><code>@babel/parser</code>, <code>@babel/traverse</code> - AST parsing for export detection</li>
-  <li><code>ts-morph</code> - TypeScript type extraction</li>
-  <li><code>chokidar</code> - File watching</li>
-  <li><code>prettier</code> - Code formatting</li>
-  <li><code>jest</code>, <code>@testing-library/react</code>, <code>@testing-library/jest-dom</code>, <code>@testing-library/user-event</code> - Testing</li>
-</ul>
+    <h3>1.2 Start Development with Auto Test Generation</h3>
+    <pre><code>npm start</code></pre>
 
-<h3>1.2 Start Development with Auto Test Generation</h3>
-<pre><code>npm start</code></pre>
+    <div class="use-case">
+      <span class="use-case-title">Use Case:</span> This runs BOTH the Webpack dev server (your app
+      at http://localhost:3000) and the test generator, which creates tests when you edit files.
+    </div>
 
-<div class="use-case">
-  <span class="use-case-title">Use Case:</span> This runs BOTH the Webpack dev server (your app at http://localhost:3000) and the test generator, which creates tests when you edit files.
-</div>
-
-<h3>1.3 Run Tests</h3>
-<pre><code>npm test                    # Run all tests
+    <h3>1.3 Run Tests</h3>
+    <pre><code>npm test                    # Run all tests
 npm run test:watch          # Run tests in watch mode
 npm run test:coverage       # Run with coverage report
 npm run test:coverage:check # Run with 80% coverage threshold</code></pre>
 
-<hr>
+    <hr />
 
-<h2 id="commands">2. Available Commands</h2>
+    <h2 id="commands">2. Available Commands</h2>
 
-<h3>2.1 Development Commands</h3>
-<table>
-  <tr>
-    <th>Command</th>
-    <th>Description</th>
-    <th>Use Case</th>
-  </tr>
-  <tr>
-    <td><code>npm start</code></td>
-    <td>Run dev server + test generator watcher</td>
-    <td>Daily development workflow</td>
-  </tr>
-  <tr>
-    <td><code>npm run start:raw</code></td>
-    <td>Run only dev server (no test generation)</td>
-    <td>When you don't need auto test generation</td>
-  </tr>
-  <tr>
-    <td><code>npm run start:no-testgen</code></td>
-    <td>Same as start:raw</td>
-    <td>Alternative alias</td>
-  </tr>
-</table>
+    <h3>2.1 Development Commands</h3>
+    <table>
+      <tr>
+        <th>Command</th>
+        <th>Description</th>
+        <th>Use Case</th>
+      </tr>
+      <tr>
+        <td><code>npm start</code></td>
+        <td>Run dev server + test generator watcher</td>
+        <td>Daily development workflow</td>
+      </tr>
+      <tr>
+        <td><code>npm run start:raw</code></td>
+        <td>Run only dev server (no test generation)</td>
+        <td>When you don't need auto test generation</td>
+      </tr>
+      <tr>
+        <td><code>npm run start:no-testgen</code></td>
+        <td>Same as start:raw</td>
+        <td>Alternative alias</td>
+      </tr>
+    </table>
 
-<h3>2.2 Test Generation Commands</h3>
-<table>
-  <tr>
-    <th>Command</th>
-    <th>Description</th>
-    <th>Use Case</th>
-  </tr>
-  <tr>
-    <td><code>npm run test:generate:git</code></td>
-    <td>Generate tests for git unstaged files only</td>
-    <td><strong>Recommended</strong> - Safest option for daily use</td>
-  </tr>
-  <tr>
-    <td><code>npm run test:generate</code></td>
-    <td>Generate tests for ALL source files</td>
-    <td>Initial setup or codebase audit</td>
-  </tr>
-  <tr>
-    <td><code>npm run test:generate:file &lt;path&gt;</code></td>
-    <td>Generate test for a single file</td>
-    <td>Targeted regeneration after major changes</td>
-  </tr>
-</table>
+    <h3>2.2 Test Generation Commands</h3>
+    <table>
+      <tr>
+        <th>Command</th>
+        <th>Description</th>
+        <th>Use Case</th>
+      </tr>
+      <tr>
+        <td><code>npm run test:generate:git</code></td>
+        <td>Generate tests for git unstaged files only</td>
+        <td><strong>Recommended</strong> - Safest option for daily use</td>
+      </tr>
+      <tr>
+        <td><code>npm run test:generate</code></td>
+        <td>Generate tests for ALL source files</td>
+        <td>Initial setup or codebase audit</td>
+      </tr>
+      <tr>
+        <td><code>npm run test:generate:file &lt;path&gt;</code></td>
+        <td>Generate test for a single file</td>
+        <td>Targeted regeneration after major changes</td>
+      </tr>
+    </table>
 
-<h3>2.3 Testing Commands</h3>
-<table>
-  <tr>
-    <th>Command</th>
-    <th>Description</th>
-    <th>Use Case</th>
-  </tr>
-  <tr>
-    <td><code>npm test</code></td>
-    <td>Run all tests</td>
-    <td>Quick validation</td>
-  </tr>
-  <tr>
-    <td><code>npm run test:watch</code></td>
-    <td>Run tests in watch mode</td>
-    <td>TDD workflow</td>
-  </tr>
-  <tr>
-    <td><code>npm run test:coverage</code></td>
-    <td>Run with coverage report</td>
-    <td>Check current coverage</td>
-  </tr>
-  <tr>
-    <td><code>npm run test:coverage:check</code></td>
-    <td>Enforce 80% coverage threshold</td>
-    <td>Pre-commit validation</td>
-  </tr>
-</table>
+    <h3>2.3 Testing Commands</h3>
+    <table>
+      <tr>
+        <th>Command</th>
+        <th>Description</th>
+        <th>Use Case</th>
+      </tr>
+      <tr>
+        <td><code>npm test</code></td>
+        <td>Run all tests</td>
+        <td>Quick validation</td>
+      </tr>
+      <tr>
+        <td><code>npm run test:watch</code></td>
+        <td>Run tests in watch mode</td>
+        <td>TDD workflow</td>
+      </tr>
+      <tr>
+        <td><code>npm run test:coverage</code></td>
+        <td>Run with coverage report</td>
+        <td>Check current coverage</td>
+      </tr>
+      <tr>
+        <td><code>npm run test:coverage:check</code></td>
+        <td>Enforce 80% coverage threshold</td>
+        <td>Pre-commit validation</td>
+      </tr>
+    </table>
 
-<hr>
+    <hr />
 
-<h2 id="how-it-works">3. How It Works</h2>
+    <h2 id="how-it-works">3. How It Works</h2>
 
-<h3>3.1 File Detection Flow</h3>
-<p>The generator uses <strong>Babel AST parsing</strong> to detect exports from your source files:</p>
+    <h3>3.1 File Detection Flow</h3>
+    <p>
+      The generator uses <strong>Babel AST parsing</strong> to detect exports from your source
+      files:
+    </p>
 
-<table>
-  <tr>
-    <th>Source File</th>
-    <th>Generated Test</th>
-  </tr>
-  <tr>
-    <td><code>src/components/Button.tsx</code></td>
-    <td><code>src/components/__tests__/Button.test.tsx</code></td>
-  </tr>
-  <tr>
-    <td><code>src/hooks/useAuth.ts</code></td>
-    <td><code>src/hooks/__tests__/useAuth.test.ts</code></td>
-  </tr>
-  <tr>
-    <td><code>src/utils/formatters.ts</code></td>
-    <td><code>src/utils/__tests__/formatters.test.ts</code></td>
-  </tr>
-</table>
+    <table>
+      <tr>
+        <th>Source File</th>
+        <th>Generated Test</th>
+      </tr>
+      <tr>
+        <td><code>src/components/Button.tsx</code></td>
+        <td><code>src/components/__tests__/Button.test.tsx</code></td>
+      </tr>
+      <tr>
+        <td><code>src/hooks/useAuth.ts</code></td>
+        <td><code>src/hooks/__tests__/useAuth.test.ts</code></td>
+      </tr>
+      <tr>
+        <td><code>src/utils/formatters.ts</code></td>
+        <td><code>src/utils/__tests__/formatters.test.ts</code></td>
+      </tr>
+    </table>
 
-<h3>3.2 Safety Rules</h3>
-<ol>
-  <li><strong>Only generates for changed files</strong> (in git-unstaged mode)</li>
-  <li><strong>Never overwrites manual tests</strong> - Files without the <code>@generated</code> header are safe</li>
-  <li><strong>Skips certain files:</strong>
+    <h3>3.2 Safety Rules</h3>
+    <ol>
+      <li><strong>Only generates for changed files</strong> (in git-unstaged mode)</li>
+      <li>
+        <strong>Never overwrites manual tests</strong> - Files without the
+        <code>@generated</code> header are safe
+      </li>
+      <li>
+        <strong>Skips certain files:</strong>
+        <ul>
+          <li><code>index.ts/tsx</code> files (typically re-exports)</li>
+          <li>Files in <code>__tests__</code> directories</li>
+          <li>
+            Files in <code>node_modules</code>, <code>dist</code>, <code>build</code>,
+            <code>coverage</code>
+          </li>
+        </ul>
+      </li>
+    </ol>
+
+    <h3>3.3 Component Detection</h3>
+    <p>A file is treated as a React component if:</p>
     <ul>
-      <li><code>index.ts/tsx</code> files (typically re-exports)</li>
-      <li>Files in <code>__tests__</code> directories</li>
-      <li>Files in <code>node_modules</code>, <code>dist</code>, <code>build</code>, <code>coverage</code></li>
+      <li>Export name starts with uppercase (e.g., <code>Button</code>, <code>UserCard</code>)</li>
+      <li>Contains JSX syntax (<code>&lt;</code> with <code>/&gt;</code> or <code>&lt;/</code>)</li>
+      <li>Uses standard function declarations or arrow functions</li>
     </ul>
-  </li>
-</ol>
 
-<h3>3.3 Component Detection</h3>
-<p>A file is treated as a React component if:</p>
-<ul>
-  <li>Export name starts with uppercase (e.g., <code>Button</code>, <code>UserCard</code>)</li>
-  <li>Contains JSX syntax (<code>&lt;</code> with <code>/&gt;</code> or <code>&lt;/</code>)</li>
-  <li>Uses standard function declarations or arrow functions</li>
-</ul>
+    <div class="limitation">
+      <strong>Known Limitation:</strong> Components created with <code>forwardRef</code> are not
+      automatically detected. You'll need to write tests manually for these components.
+    </div>
 
-<div class="limitation">
-  <strong>Known Limitation:</strong> Components created with <code>forwardRef</code> are not automatically detected. You'll need to write tests manually for these components.
-</div>
+    <hr />
 
-<hr>
+    <h2 id="test-structure">4. Generated Test Structure</h2>
 
-<h2 id="test-structure">4. Generated Test Structure</h2>
-
-<h3>4.1 For React Components</h3>
-<pre><code>/** @generated AUTO-GENERATED FILE - safe to overwrite */
+    <h3>4.1 For React Components</h3>
+    <pre><code>/** @generated AUTO-GENERATED FILE - safe to overwrite */
 import * as React from "react";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -358,12 +377,14 @@ describe("Button", () =&gt; {
   describe("Accessibility", () =&gt; { /* ... */ });
 });</code></pre>
 
-<div class="use-case">
-  <span class="use-case-title">Use Case:</span> This structure provides a consistent starting point for all component tests. Developers fill in the TODO placeholders with meaningful assertions.
-</div>
+    <div class="use-case">
+      <span class="use-case-title">Use Case:</span> This structure provides a consistent starting
+      point for all component tests. Developers fill in the TODO placeholders with meaningful
+      assertions.
+    </div>
 
-<h3>4.2 For Utility Functions</h3>
-<pre><code>/** @generated AUTO-GENERATED FILE - safe to overwrite */
+    <h3>4.2 For Utility Functions</h3>
+    <pre><code>/** @generated AUTO-GENERATED FILE - safe to overwrite */
 import { formatCurrency, formatDate } from '../formatters';
 
 describe('formatters', () =&gt; {
@@ -382,25 +403,26 @@ describe('formatters', () =&gt; {
   });
 });</code></pre>
 
-<hr>
+    <hr />
 
-<h2 id="best-practices">5. Best Practices</h2>
+    <h2 id="best-practices">5. Best Practices</h2>
 
-<h3>5.1 Use Git-Unstaged Mode for Safety</h3>
-<pre><code># Before committing, generate tests only for your changes
+    <h3>5.1 Use Git-Unstaged Mode for Safety</h3>
+    <pre><code># Before committing, generate tests only for your changes
 npm run test:generate:git
 
 # Then run tests
 npm test</code></pre>
 
-<div class="use-case">
-  <span class="use-case-title">Use Case:</span> This ensures you only generate tests for files you've modified, avoiding unintended changes to other tests.
-</div>
+    <div class="use-case">
+      <span class="use-case-title">Use Case:</span> This ensures you only generate tests for files
+      you've modified, avoiding unintended changes to other tests.
+    </div>
 
-<h3>5.2 Add Proper Selectors to Components</h3>
-<p>The generator creates TODO placeholders. Replace them with proper selectors:</p>
+    <h3>5.2 Add Proper Selectors to Components</h3>
+    <p>The generator creates TODO placeholders. Replace them with proper selectors:</p>
 
-<pre><code>// BAD - Generated placeholder
+    <pre><code>// BAD - Generated placeholder
 const button = screen.getByRole('button');
 
 // GOOD - Use accessible name
@@ -409,8 +431,8 @@ const button = screen.getByRole('button', { name: /submit/i });
 // GOOD - Or add data-testid for complex elements
 const chart = screen.getByTestId('expense-chart');</code></pre>
 
-<h3>5.3 Fill in Required Props</h3>
-<pre><code>// Generated (may need adjustment)
+    <h3>5.3 Fill in Required Props</h3>
+    <pre><code>// Generated (may need adjustment)
 const defaultProps = {
   title: 'TODO',
   onSubmit: () =&gt; { /* TODO */ },
@@ -422,10 +444,10 @@ const defaultProps = {
   onSubmit: jest.fn(),
 };</code></pre>
 
-<h3>5.4 Add Branch Coverage Tests</h3>
-<p>Generated tests provide baseline coverage. Add tests for:</p>
+    <h3>5.4 Add Branch Coverage Tests</h3>
+    <p>Generated tests provide baseline coverage. Add tests for:</p>
 
-<pre><code>// Loading state
+    <pre><code>// Loading state
 it("shows loading spinner when loading", () =&gt; {
   renderWithProviders(&lt;ExpenseList isLoading={true} /&gt;);
   expect(screen.getByRole("status")).toBeInTheDocument();
@@ -443,65 +465,79 @@ it("shows empty state when no data", () =&gt; {
   expect(screen.getByText(/no expenses/i)).toBeInTheDocument();
 });</code></pre>
 
-<hr>
+    <hr />
 
-<h2 id="troubleshooting">6. Troubleshooting</h2>
+    <h2 id="troubleshooting">6. Troubleshooting</h2>
 
-<h3>6.1 "Cannot find module" in generated tests</h3>
-<p><strong>Cause:</strong> Import path issues or path aliases not configured.</p>
-<p><strong>Fix:</strong> The generator computes relative imports automatically. If using path aliases like <code>@/</code>, ensure Jest is configured:</p>
-<pre><code>// jest.config.js
+    <h3>6.1 "Cannot find module" in generated tests</h3>
+    <p><strong>Cause:</strong> Import path issues or path aliases not configured.</p>
+    <p>
+      <strong>Fix:</strong> The generator computes relative imports automatically. If using path
+      aliases like <code>@/</code>, ensure Jest is configured:
+    </p>
+    <pre><code>// jest.config.js
 moduleNameMapper: {
   "^@/(.*)$": "&lt;rootDir&gt;/src/$1",
   "^@components/(.*)$": "&lt;rootDir&gt;/src/components/$1",
   // ... etc
 }</code></pre>
 
-<h3>6.2 "React refers to a UMD global" (TS2686)</h3>
-<p><strong>Cause:</strong> Missing React import in TypeScript tests.</p>
-<p><strong>Fix:</strong> Ensure your <code>tsconfig.json</code> has:</p>
-<pre><code>{
+    <h3>6.2 "React refers to a UMD global" (TS2686)</h3>
+    <p><strong>Cause:</strong> Missing React import in TypeScript tests.</p>
+    <p><strong>Fix:</strong> Ensure your <code>tsconfig.json</code> has:</p>
+    <pre><code>{
   "compilerOptions": {
     "jsx": "react-jsx",
     "esModuleInterop": true
   }
 }</code></pre>
 
-<h3>6.3 Tests fail because Router/Providers missing</h3>
-<p><strong>Cause:</strong> Component expects context that isn't provided.</p>
-<p><strong>Fix:</strong> The <code>renderWithProviders</code> utility already wraps with MemoryRouter and all app providers. If you need custom initial route:</p>
-<pre><code>renderWithProviders(&lt;ExpensePage /&gt;, { initialRoute: "/expenses/123" });</code></pre>
+    <h3>6.3 Tests fail because Router/Providers missing</h3>
+    <p><strong>Cause:</strong> Component expects context that isn't provided.</p>
+    <p>
+      <strong>Fix:</strong> The <code>renderWithProviders</code> utility already wraps with
+      MemoryRouter and all app providers. If you need custom initial route:
+    </p>
+    <pre><code>renderWithProviders(&lt;ExpensePage /&gt;, { initialRoute: "/expenses/123" });</code></pre>
 
-<h3>6.4 Generated tests fail for async components</h3>
-<p><strong>Cause:</strong> Component shows loading state initially before data loads.</p>
-<p><strong>Fix:</strong> Components that fetch data will render a loading skeleton first. Solutions:</p>
-<ol>
-  <li>Mock the data provider to return data immediately</li>
-  <li>Use <code>waitFor</code> to wait for elements to appear</li>
-  <li>Add <code>screen.findByRole</code> instead of <code>getByRole</code> for async elements</li>
-</ol>
-<pre><code>// Instead of:
+    <h3>6.4 Generated tests fail for async components</h3>
+    <p><strong>Cause:</strong> Component shows loading state initially before data loads.</p>
+    <p>
+      <strong>Fix:</strong> Components that fetch data will render a loading skeleton first.
+      Solutions:
+    </p>
+    <ol>
+      <li>Mock the data provider to return data immediately</li>
+      <li>Use <code>waitFor</code> to wait for elements to appear</li>
+      <li>
+        Add <code>screen.findByRole</code> instead of <code>getByRole</code> for async elements
+      </li>
+    </ol>
+    <pre><code>// Instead of:
 expect(screen.getByRole('button', { name: /submit/i })).toBeInTheDocument();
 
 // Use:
 expect(await screen.findByRole('button', { name: /submit/i })).toBeInTheDocument();</code></pre>
 
-<h3>6.5 Coverage below 80%</h3>
-<p><strong>Cause:</strong> Generated scaffolding provides baseline; complex branches need manual tests.</p>
-<p><strong>Fix:</strong></p>
-<ol>
-  <li>Replace TODO placeholders with real props and assertions</li>
-  <li>Add tests for loading/error/empty states</li>
-  <li>Add interaction tests for all click/input handlers</li>
-  <li>Test conditional rendering branches</li>
-</ol>
+    <h3>6.5 Coverage below 80%</h3>
+    <p>
+      <strong>Cause:</strong> Generated scaffolding provides baseline; complex branches need manual
+      tests.
+    </p>
+    <p><strong>Fix:</strong></p>
+    <ol>
+      <li>Replace TODO placeholders with real props and assertions</li>
+      <li>Add tests for loading/error/empty states</li>
+      <li>Add interaction tests for all click/input handlers</li>
+      <li>Test conditional rendering branches</li>
+    </ol>
 
-<hr>
+    <hr />
 
-<h2>7. Recommended Workflow</h2>
+    <h2>7. Recommended Workflow</h2>
 
-<h3>7.1 Daily Development</h3>
-<pre><code># 1. Start development (includes test generator watcher)
+    <h3>7.1 Daily Development</h3>
+    <pre><code># 1. Start development (includes test generator watcher)
 npm start
 
 # 2. Edit components - tests are auto-generated
@@ -512,8 +548,8 @@ npm test
 # 4. Before committing, check coverage
 npm run test:coverage:check</code></pre>
 
-<h3>7.2 Before Pull Request</h3>
-<pre><code># 1. Generate tests for your changes only
+    <h3>7.2 Before Pull Request</h3>
+    <pre><code># 1. Generate tests for your changes only
 npm run test:generate:git
 
 # 2. Run all tests
@@ -526,10 +562,10 @@ npm run test:coverage:check
 git add .
 git commit -m "feat: add new feature with tests"</code></pre>
 
-<hr>
+    <hr />
 
-<h2>8. Project Structure</h2>
-<pre><code>expense-manager/
+    <h2>8. Project Structure</h2>
+    <pre><code>expense-manager/
 ├── src/
 │   ├── components/
 │   │   ├── Button.tsx
@@ -549,58 +585,58 @@ git commit -m "feat: add new feature with tests"</code></pre>
 ├── package.json
 └── tsconfig.json</code></pre>
 
-<hr>
+    <hr />
 
-<h2 id="summary">9. Summary</h2>
+    <h2 id="summary">9. Summary</h2>
 
-<table>
-  <tr>
-    <th>Task</th>
-    <th>Command</th>
-  </tr>
-  <tr>
-    <td>Start development</td>
-    <td><code>npm start</code></td>
-  </tr>
-  <tr>
-    <td>Generate tests for changed files</td>
-    <td><code>npm run test:generate:git</code></td>
-  </tr>
-  <tr>
-    <td>Generate tests for all files</td>
-    <td><code>npm run test:generate</code></td>
-  </tr>
-  <tr>
-    <td>Generate test for single file</td>
-    <td><code>npm run test:generate:file &lt;path&gt;</code></td>
-  </tr>
-  <tr>
-    <td>Run all tests</td>
-    <td><code>npm test</code></td>
-  </tr>
-  <tr>
-    <td>Run with coverage</td>
-    <td><code>npm run test:coverage</code></td>
-  </tr>
-  <tr>
-    <td>Enforce 80% coverage</td>
-    <td><code>npm run test:coverage:check</code></td>
-  </tr>
-</table>
+    <table>
+      <tr>
+        <th>Task</th>
+        <th>Command</th>
+      </tr>
+      <tr>
+        <td>Start development</td>
+        <td><code>npm start</code></td>
+      </tr>
+      <tr>
+        <td>Generate tests for changed files</td>
+        <td><code>npm run test:generate:git</code></td>
+      </tr>
+      <tr>
+        <td>Generate tests for all files</td>
+        <td><code>npm run test:generate</code></td>
+      </tr>
+      <tr>
+        <td>Generate test for single file</td>
+        <td><code>npm run test:generate:file &lt;path&gt;</code></td>
+      </tr>
+      <tr>
+        <td>Run all tests</td>
+        <td><code>npm test</code></td>
+      </tr>
+      <tr>
+        <td>Run with coverage</td>
+        <td><code>npm run test:coverage</code></td>
+      </tr>
+      <tr>
+        <td>Enforce 80% coverage</td>
+        <td><code>npm run test:coverage:check</code></td>
+      </tr>
+    </table>
 
-<div class="warning">
-  <strong>Remember:</strong> The generator removes initial friction by creating test scaffolding, but you'll still need to:
-  <ol>
-    <li>Fill in TODO placeholders with real values</li>
-    <li>Add branch coverage tests (loading/error/empty states)</li>
-    <li>Add interaction tests with proper selectors</li>
-  </ol>
-</div>
+    <div class="warning">
+      <strong>Remember:</strong> The generator removes initial friction by creating test
+      scaffolding, but you'll still need to:
+      <ol>
+        <li>Fill in TODO placeholders with real values</li>
+        <li>Add branch coverage tests (loading/error/empty states)</li>
+        <li>Add interaction tests with proper selectors</li>
+      </ol>
+    </div>
 
-<hr>
-<p style="text-align: center; color: #718096; font-size: 10pt;">
-  <em>Generated for Expense Manager Project - React Test Generator Documentation</em>
-</p>
-
-</body>
+    <hr />
+    <p style="text-align: center; color: #718096; font-size: 10pt">
+      <em>Generated for Expense Manager Project - React Test Generator Documentation</em>
+    </p>
+  </body>
 </html>

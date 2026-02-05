@@ -47,4 +47,4 @@ coverage/
 
 # Husky
 .husky/_
-   
+*.zip
