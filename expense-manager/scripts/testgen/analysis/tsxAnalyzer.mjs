@@ -306,7 +306,15 @@ export class DeepComponentAnalyzer {
 
     if (!element.attributes) return attrs;
 
-    for (const attr of element.attributes) {
+    // Handle both JSX element attributes and spread attributes
+    const attributesArray = element.attributes.properties || element.attributes;
+
+    // Check if it's iterable before trying to iterate
+    if (!attributesArray || typeof attributesArray[Symbol.iterator] !== 'function') {
+      return attrs;
+    }
+
+    for (const attr of attributesArray) {
       if (this.ts.isJsxAttribute(attr) && this.ts.isIdentifier(attr.name)) {
         const name = attr.name.text;
         let value = '';
