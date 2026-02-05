@@ -95,16 +95,22 @@ ${tests}
 
   generateComponentTests(comp) {
     const lines = [];
-    const propsType = this.generatePropsType(comp);
+    const hasProps = comp.props && comp.props.length > 0;
 
     lines.push(`describe("${comp.name}", () => {`);
-    lines.push(`  type Props = React.ComponentProps<typeof ${comp.name}>;`);
-    lines.push(`  const defaultProps: Partial<Props> = ${this.generateDefaultPropsObject(comp)};`);
-    lines.push('');
-    lines.push('  const renderUI = (props: Partial<Props> = {}) =>');
-    lines.push(
-      `    renderWithProviders(<${comp.name} {...(defaultProps as Props)} {...(props as Props)} />);`
-    );
+
+    if (hasProps) {
+      lines.push(`  type Props = React.ComponentProps<typeof ${comp.name}>;`);
+      lines.push(
+        `  const defaultProps: Partial<Props> = ${this.generateDefaultPropsObject(comp)};`
+      );
+      lines.push('');
+      lines.push('  const renderUI = (props: Partial<Props> = {}) =>');
+      lines.push(`    renderWithProviders(<${comp.name} {...defaultProps} {...props} />);`);
+    } else {
+      lines.push('  const renderUI = () =>');
+      lines.push(`    renderWithProviders(<${comp.name} />);`);
+    }
     lines.push('');
 
     // Rendering tests
