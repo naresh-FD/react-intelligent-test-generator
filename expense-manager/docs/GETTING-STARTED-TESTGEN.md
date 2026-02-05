@@ -67,15 +67,11 @@ npm run test:coverage:check # Run with 80% coverage threshold
 
 ### Test Generation
 
-| Command                          | Description                                         |
-| -------------------------------- | --------------------------------------------------- |
-| `npm run testgen:git`            | Generate tests for git unstaged files only (safest) |
-| `npm run testgen:git:coverage`   | Same as above, then run coverage                    |
-| `npm run testgen:watch`          | Watch mode - generate tests on file changes         |
-| `npm run testgen:watch:coverage` | Watch mode with coverage after each change          |
-| `npm run testgen:all`            | Generate tests for ALL source files                 |
-| `npm run testgen:all:coverage`   | Same as above, then run coverage                    |
-| `npm run testgen:file <path>`    | Generate test for a single file                     |
+| Command                              | Description                                         |
+| ------------------------------------ | --------------------------------------------------- |
+| `npm run test:generate:git`          | Generate tests for git unstaged files only (safest) |
+| `npm run test:generate`              | Generate tests for ALL source files                 |
+| `npm run test:generate:file <path>`  | Generate test for a single file                     |
 
 ### Testing
 
@@ -120,7 +116,9 @@ A file is treated as a React component if:
 
 - Export name starts with uppercase (e.g., `Button`, `UserCard`)
 - Contains JSX syntax (`<` with `/>` or `</`)
-- Uses `forwardRef`, `memo`, etc.
+- Uses standard function declarations or arrow functions
+
+**Known Limitation:** Components created with `forwardRef` are not automatically detected. You'll need to write tests manually for these components.
 
 ---
 
@@ -209,7 +207,7 @@ describe('formatters', () => {
 
 ```bash
 # Before committing, generate tests only for your changes
-npm run testgen:git
+npm run test:generate:git
 
 # Then run tests
 npm test
@@ -334,14 +332,22 @@ moduleNameMapper: {
 renderWithProviders(<ExpensePage />, { initialRoute: "/expenses/123" });
 ```
 
-### Watch mode creates too many tests on startup
+### Generated tests fail for async components
 
-**Cause**: Initial scan not disabled.
+**Cause**: Component shows loading state initially before data loads.
 
-**Fix**: This shouldn't happen (uses `ignoreInitial: true`). If it does, use git-unstaged mode instead:
+**Fix**: Components that fetch data will render a loading skeleton first. The generated tests detect buttons/inputs from the JSX but may not find them at runtime. Solutions:
 
-```bash
-npm run testgen:git
+1. Mock the data provider to return data immediately
+2. Use `waitFor` to wait for elements to appear
+3. Add `screen.findByRole` instead of `getByRole` for async elements
+
+```typescript
+// Instead of:
+expect(screen.getByRole('button', { name: /submit/i })).toBeInTheDocument();
+
+// Use:
+expect(await screen.findByRole('button', { name: /submit/i })).toBeInTheDocument();
 ```
 
 ### Coverage below 80%
@@ -385,7 +391,7 @@ npm run test:coverage:check
 
 ```bash
 # 1. Generate tests for your changes only
-npm run testgen:git
+npm run test:generate:git
 
 # 2. Run all tests
 npm test
@@ -402,7 +408,7 @@ git commit -m "feat: add new feature with tests"
 
 ## Project Structure
 
-```
+```text
 expense-manager/
 ├── src/
 │   ├── components/
@@ -428,13 +434,15 @@ expense-manager/
 
 ## Summary
 
-| Task                             | Command                       |
-| -------------------------------- | ----------------------------- |
-| Start development                | `npm start`                   |
-| Generate tests for changed files | `npm run testgen:git`         |
-| Run all tests                    | `npm test`                    |
-| Run with coverage                | `npm run test:coverage`       |
-| Enforce 80% coverage             | `npm run test:coverage:check` |
+| Task                             | Command                              |
+| -------------------------------- | ------------------------------------ |
+| Start development                | `npm start`                          |
+| Generate tests for changed files | `npm run test:generate:git`          |
+| Generate tests for all files     | `npm run test:generate`              |
+| Generate test for single file    | `npm run test:generate:file <path>`  |
+| Run all tests                    | `npm test`                           |
+| Run with coverage                | `npm run test:coverage`              |
+| Enforce 80% coverage             | `npm run test:coverage:check`        |
 
 The generator removes initial friction by creating test scaffolding, but you'll still need to:
 

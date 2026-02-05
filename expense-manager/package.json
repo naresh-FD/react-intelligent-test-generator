@@ -19,7 +19,8 @@
     "test:coverage:check": "jest --coverage --coverageThreshold=\"{\\\"global\\\":{\\\"branches\\\":80,\\\"functions\\\":80,\\\"lines\\\":80,\\\"statements\\\":80}}\"",
     "test:generate": "node scripts/testgen/index.mjs all",
     "test:generate:file": "node scripts/testgen/index.mjs file",
-    "test:generate:git": "node scripts/testgen/index.mjs git-unstaged"
+    "test:generate:git": "node scripts/testgen/index.mjs git-unstaged",
+    "docs:generate": "node scripts/docs/generate-docs.mjs"
   },
   "keywords": [
     "expense",
@@ -63,6 +64,7 @@
     "chokidar": "^3.6.0",
     "copy-webpack-plugin": "^13.0.1",
     "css-loader": "^7.1.3",
+    "docx": "^9.5.1",
     "dotenv-webpack": "^8.1.1",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",

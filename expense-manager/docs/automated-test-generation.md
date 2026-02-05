@@ -176,7 +176,7 @@ Developer Workflow
 ### 5.1 Git-Unstaged Mode (Primary)
 
 ```bash
-npm run testgen
+npm run test:generate:git
 ```
 
 **Behavior:**
@@ -187,26 +187,10 @@ npm run testgen
 
 **Use Case:** Incremental test generation during active development.
 
-### 5.2 Watch Mode (Optional)
+### 5.2 All Mode (Manual / One-Time Only)
 
 ```bash
-npm run testgen:watch
-npm run testgen:watch:coverage  # With coverage report
-```
-
-**Behavior:**
-- Uses `chokidar` to monitor file system changes
-- `ignoreInitial: true` - Does not process existing files on startup
-- Only reacts to `add` and `change` events
-- Automatically generates tests when source files are saved
-
-**Use Case:** Continuous development with real-time test scaffolding.
-
-### 5.3 All Mode (Manual / One-Time Only)
-
-```bash
-npm run testgen:all
-npm run testgen:all:coverage  # With coverage report
+npm run test:generate
 ```
 
 **Behavior:**
@@ -217,11 +201,10 @@ npm run testgen:all:coverage  # With coverage report
 
 **Use Case:** Initial project setup or codebase-wide audit.
 
-### 5.4 File Mode (Single-File Generation)
+### 5.3 File Mode (Single-File Generation)
 
 ```bash
-npm run testgen file src/components/MyComponent.tsx
-npm run testgen file src/components/MyComponent.tsx --coverage
+npm run test:generate:file src/components/MyComponent.tsx
 ```
 
 **Behavior:**
@@ -284,12 +267,15 @@ The generator distinguishes between React components and utility functions:
 **Component Indicators:**
 - Export name starts with uppercase letter (PascalCase)
 - Source contains JSX syntax (`<`, `/>`, `</`)
-- Uses `forwardRef`, `memo`, or `React.memo`
+- Standard function declarations or arrow functions
 
 **Utility Indicators:**
 - Export name starts with lowercase letter (camelCase)
 - No JSX detected
 - Pure function or constant export
+
+**Known Limitation - forwardRef Components:**
+Components created with `forwardRef` are currently not detected by the AST analyzer. This is because `forwardRef` wraps the component in a higher-order function call, making it harder to identify as a React component through static analysis. For these components, you should write tests manually or create a wrapper component that the generator can detect.
 
 ### 7.3 Export Detection Using AST
 
@@ -718,6 +704,8 @@ This system explicitly does NOT aim to:
 | **No mock data generation** | Developers must provide realistic test data | Create shared test fixtures |
 | **Dynamic components are harder to test** | Components with complex conditional rendering | Manual test augmentation required |
 | **Context-dependent components** | May need custom provider configuration | Use `renderWithProviders` options |
+| **forwardRef components not detected** | Components using `forwardRef` are skipped | Write tests manually for these components |
+| **Async/Loading components** | Generated tests may fail if component shows loading state initially | Use `waitFor` or mock data providers to render final state |
 
 ---
 
@@ -995,17 +983,19 @@ Use this system as a **testing accelerator**, not a testing replacement. The gen
 ### Commands
 
 ```bash
-npm run testgen              # Process unstaged Git changes
-npm run testgen:watch        # Watch mode (react to file changes)
-npm run testgen:all          # Process all source files
-npm run testgen file <path>  # Process single file
+npm run test:generate:git           # Process unstaged Git changes (recommended)
+npm run test:generate               # Process all source files
+npm run test:generate:file <path>   # Process single file
 ```
 
 ### Configuration Files
 
 | File | Purpose |
 |------|---------|
-| `scripts/auto-testgen.mjs` | Main generator script |
+| `scripts/testgen/index.mjs` | Main generator entry point |
+| `scripts/testgen/analysis/tsxAnalyzer.mjs` | Component AST analyzer |
+| `scripts/testgen/generation/testWriter.mjs` | Test code generator |
+| `scripts/testgen/config.mjs` | Generator configuration |
 | `src/test-utils/renderWithProviders.tsx` | Test wrapper utility |
 | `src/test-utils/setupTests.ts` | Jest environment setup |
 | `jest.config.js` | Jest configuration |

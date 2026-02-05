@@ -1,0 +1,490 @@
+================================================================================
+        AUTOMATED TEST GENERATION - GETTING STARTED GUIDE
+                    For React 19 Components
+================================================================================
+
+Last Updated: February 2026
+
+================================================================================
+                        TABLE OF CONTENTS
+================================================================================
+
+1. Quick Start
+2. Available Commands
+3. How It Works
+4. Generated Test Structure
+5. Best Practices
+6. Troubleshooting
+7. Recommended Workflow
+8. Project Structure
+9. Summary
+
+================================================================================
+                        1. QUICK START
+================================================================================
+
+1.1 Verify Dependencies Are Installed
+-------------------------------------
+All required dependencies should already be installed. If not, run:
+
+    npm install
+
+Required dev dependencies (already in package.json):
+  - @babel/parser, @babel/traverse - AST parsing for export detection
+  - ts-morph - TypeScript type extraction
+  - chokidar - File watching
+  - prettier - Code formatting
+  - jest, @testing-library/react, @testing-library/jest-dom,
+    @testing-library/user-event - Testing
+
+
+1.2 Start Development with Auto Test Generation
+-----------------------------------------------
+    npm start
+
+USE CASE: This runs BOTH the Webpack dev server (your app at
+http://localhost:3000) and the test generator, which creates tests
+when you edit files.
+
+
+1.3 Run Tests
+-------------
+    npm test                    # Run all tests
+    npm run test:watch          # Run tests in watch mode
+    npm run test:coverage       # Run with coverage report
+    npm run test:coverage:check # Run with 80% coverage threshold
+
+
+================================================================================
+                        2. AVAILABLE COMMANDS
+================================================================================
+
+2.1 Development Commands
+------------------------
++---------------------------+------------------------------------------+
+| Command                   | Description                              |
++---------------------------+------------------------------------------+
+| npm start                 | Run dev server + test generator watcher  |
+| npm run start:raw         | Run only dev server (no test generation) |
+| npm run start:no-testgen  | Same as start:raw                        |
++---------------------------+------------------------------------------+
+
+USE CASE: Use "npm start" for daily development. Use "npm run start:raw"
+when you don't need auto test generation.
+
+
+2.2 Test Generation Commands
+----------------------------
++-------------------------------------+---------------------------------------------+
+| Command                             | Description                                 |
++-------------------------------------+---------------------------------------------+
+| npm run test:generate:git           | Generate tests for git unstaged files only  |
+|                                     | (RECOMMENDED - Safest option)               |
++-------------------------------------+---------------------------------------------+
+| npm run test:generate               | Generate tests for ALL source files         |
++-------------------------------------+---------------------------------------------+
+| npm run test:generate:file <path>   | Generate test for a single file             |
++-------------------------------------+---------------------------------------------+
+
+USE CASE:
+  - test:generate:git    -> Daily development, before commits
+  - test:generate        -> Initial setup or codebase audit
+  - test:generate:file   -> After major changes to a specific component
+
+
+2.3 Testing Commands
+--------------------
++-------------------------------+--------------------------------+
+| Command                       | Description                    |
++-------------------------------+--------------------------------+
+| npm test                      | Run all tests                  |
+| npm run test:watch            | Run tests in watch mode        |
+| npm run test:coverage         | Run with coverage report       |
+| npm run test:coverage:check   | Enforce 80% coverage threshold |
++-------------------------------+--------------------------------+
+
+
+================================================================================
+                        3. HOW IT WORKS
+================================================================================
+
+3.1 File Detection Flow
+-----------------------
+The generator uses Babel AST parsing to detect exports from your source files:
+
+    Source File                      ->  Generated Test
+    -----------------------------------------------------------------------
+    src/components/Button.tsx        ->  src/components/__tests__/Button.test.tsx
+    src/hooks/useAuth.ts             ->  src/hooks/__tests__/useAuth.test.ts
+    src/utils/formatters.ts          ->  src/utils/__tests__/formatters.test.ts
+
+
+3.2 Safety Rules
+----------------
+1. Only generates for changed files (in git-unstaged mode)
+
+2. Never overwrites manual tests - Files without the @generated header are safe
+
+3. Skips certain files:
+   - index.ts/tsx files (typically re-exports)
+   - Files in __tests__ directories
+   - Files in node_modules, dist, build, coverage
+
+
+3.3 Component Detection
+-----------------------
+A file is treated as a React component if:
+  - Export name starts with uppercase (e.g., Button, UserCard)
+  - Contains JSX syntax (< with /> or </)
+  - Uses standard function declarations or arrow functions
+
+*** KNOWN LIMITATION ***
+Components created with forwardRef are NOT automatically detected.
+You'll need to write tests manually for these components.
+
+
+================================================================================
+                    4. GENERATED TEST STRUCTURE
+================================================================================
+
+4.1 For React Components
+------------------------
+
+/** @generated AUTO-GENERATED FILE - safe to overwrite */
+import * as React from "react";
+import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { renderWithProviders } from "../../../test-utils/renderWithProviders";
+import Button from "../Button";
+
+describe("Button", () => {
+  // Auto-detected required props
+  const defaultProps = {
+    onClick: () => { /* TODO */ },
+    children: "TODO",
+  };
+
+  // ============ Rendering ============
+  describe("Rendering", () => {
+    it("renders without crashing", () => {
+      renderWithProviders(<Button {...defaultProps} />);
+    });
+
+    it("renders with default props", () => {
+      const { container } = renderWithProviders(<Button {...defaultProps} />);
+      expect(container.firstChild).toBeInTheDocument();
+    });
+  });
+
+  // ============ Snapshot ============
+  describe("Snapshot", () => {
+    it("matches snapshot", () => {
+      const { container } = renderWithProviders(<Button {...defaultProps} />);
+      expect(container.firstChild).toMatchSnapshot();
+    });
+  });
+
+  // ============ Props ============
+  describe("Props", () => { /* ... */ });
+
+  // ============ User Interactions ============
+  describe("User Interactions", () => { /* ... */ });
+
+  // ============ Accessibility ============
+  describe("Accessibility", () => { /* ... */ });
+});
+
+USE CASE: This structure provides a consistent starting point for all
+component tests. Developers fill in the TODO placeholders with meaningful
+assertions.
+
+
+4.2 For Utility Functions
+-------------------------
+
+/** @generated AUTO-GENERATED FILE - safe to overwrite */
+import { formatCurrency, formatDate } from '../formatters';
+
+describe('formatters', () => {
+  describe('formatCurrency', () => {
+    it('is defined', () => {
+      expect(formatCurrency).toBeDefined();
+    });
+
+    it('handles valid input', () => {
+      // TODO: Add test for valid input
+    });
+
+    it('handles edge cases', () => {
+      // TODO: Add edge case tests
+    });
+  });
+});
+
+
+================================================================================
+                        5. BEST PRACTICES
+================================================================================
+
+5.1 Use Git-Unstaged Mode for Safety
+------------------------------------
+    # Before committing, generate tests only for your changes
+    npm run test:generate:git
+
+    # Then run tests
+    npm test
+
+USE CASE: This ensures you only generate tests for files you've modified,
+avoiding unintended changes to other tests.
+
+
+5.2 Add Proper Selectors to Components
+--------------------------------------
+The generator creates TODO placeholders. Replace them with proper selectors:
+
+    // BAD - Generated placeholder
+    const button = screen.getByRole('button');
+
+    // GOOD - Use accessible name
+    const button = screen.getByRole('button', { name: /submit/i });
+
+    // GOOD - Or add data-testid for complex elements
+    const chart = screen.getByTestId('expense-chart');
+
+
+5.3 Fill in Required Props
+--------------------------
+    // Generated (may need adjustment)
+    const defaultProps = {
+      title: 'TODO',
+      onSubmit: () => { /* TODO */ },
+    };
+
+    // BETTER - Update with realistic values
+    const defaultProps = {
+      title: 'Create Expense',
+      onSubmit: jest.fn(),
+    };
+
+
+5.4 Add Branch Coverage Tests
+-----------------------------
+Generated tests provide baseline coverage. Add tests for:
+
+    // Loading state
+    it("shows loading spinner when loading", () => {
+      renderWithProviders(<ExpenseList isLoading={true} />);
+      expect(screen.getByRole("status")).toBeInTheDocument();
+    });
+
+    // Error state
+    it("shows error message on error", () => {
+      renderWithProviders(<ExpenseList error="Failed to load" />);
+      expect(screen.getByText(/failed to load/i)).toBeInTheDocument();
+    });
+
+    // Empty state
+    it("shows empty state when no data", () => {
+      renderWithProviders(<ExpenseList expenses={[]} />);
+      expect(screen.getByText(/no expenses/i)).toBeInTheDocument();
+    });
+
+
+================================================================================
+                        6. TROUBLESHOOTING
+================================================================================
+
+6.1 "Cannot find module" in generated tests
+-------------------------------------------
+CAUSE: Import path issues or path aliases not configured.
+
+FIX: The generator computes relative imports automatically. If using path
+aliases like @/, ensure Jest is configured:
+
+    // jest.config.js
+    moduleNameMapper: {
+      "^@/(.*)$": "<rootDir>/src/$1",
+      "^@components/(.*)$": "<rootDir>/src/components/$1",
+      // ... etc
+    }
+
+
+6.2 "React refers to a UMD global" (TS2686)
+-------------------------------------------
+CAUSE: Missing React import in TypeScript tests.
+
+FIX: Ensure your tsconfig.json has:
+
+    {
+      "compilerOptions": {
+        "jsx": "react-jsx",
+        "esModuleInterop": true
+      }
+    }
+
+
+6.3 Tests fail because Router/Providers missing
+-----------------------------------------------
+CAUSE: Component expects context that isn't provided.
+
+FIX: The renderWithProviders utility already wraps with MemoryRouter and
+all app providers. If you need custom initial route:
+
+    renderWithProviders(<ExpensePage />, { initialRoute: "/expenses/123" });
+
+
+6.4 Generated tests fail for async components
+---------------------------------------------
+CAUSE: Component shows loading state initially before data loads.
+
+FIX: Components that fetch data will render a loading skeleton first.
+Solutions:
+
+1. Mock the data provider to return data immediately
+2. Use waitFor to wait for elements to appear
+3. Add screen.findByRole instead of getByRole for async elements
+
+    // Instead of:
+    expect(screen.getByRole('button', { name: /submit/i })).toBeInTheDocument();
+
+    // Use:
+    expect(await screen.findByRole('button', { name: /submit/i })).toBeInTheDocument();
+
+
+6.5 Coverage below 80%
+----------------------
+CAUSE: Generated scaffolding provides baseline; complex branches need
+manual tests.
+
+FIX:
+1. Replace TODO placeholders with real props and assertions
+2. Add tests for loading/error/empty states
+3. Add interaction tests for all click/input handlers
+4. Test conditional rendering branches
+
+
+================================================================================
+                    7. RECOMMENDED WORKFLOW
+================================================================================
+
+7.1 Daily Development
+---------------------
+    # 1. Start development (includes test generator watcher)
+    npm start
+
+    # 2. Edit components - tests are auto-generated
+
+    # 3. Run tests periodically
+    npm test
+
+    # 4. Before committing, check coverage
+    npm run test:coverage:check
+
+
+7.2 Before Pull Request
+-----------------------
+    # 1. Generate tests for your changes only
+    npm run test:generate:git
+
+    # 2. Run all tests
+    npm test
+
+    # 3. Check coverage meets threshold
+    npm run test:coverage:check
+
+    # 4. Commit and push
+    git add .
+    git commit -m "feat: add new feature with tests"
+
+
+================================================================================
+                        8. PROJECT STRUCTURE
+================================================================================
+
+expense-manager/
+├── src/
+│   ├── components/
+│   │   ├── Button.tsx
+│   │   └── __tests__/
+│   │       └── Button.test.tsx    <- Generated tests go here
+│   ├── hooks/
+│   ├── services/
+│   ├── utils/
+│   └── test-utils/
+│       ├── renderWithProviders.tsx  <- Shared test wrapper
+│       ├── setupTests.ts            <- Jest setup
+│       └── index.ts
+├── scripts/
+│   ├── testgen/                    <- Modular test generator system
+│   │   ├── index.mjs               <- Main entry point
+│   │   ├── config.mjs              <- Configuration
+│   │   ├── analysis/
+│   │   │   └── tsxAnalyzer.mjs     <- Component AST analyzer
+│   │   └── generation/
+│   │       └── testWriter.mjs      <- Test code generator
+│   └── dev.mjs                     <- Dev server + watcher
+├── jest.config.js
+├── package.json
+└── tsconfig.json
+
+
+================================================================================
+                            9. SUMMARY
+================================================================================
+
++----------------------------------+--------------------------------------+
+| Task                             | Command                              |
++----------------------------------+--------------------------------------+
+| Start development                | npm start                            |
+| Generate tests for changed files | npm run test:generate:git            |
+| Generate tests for all files     | npm run test:generate                |
+| Generate test for single file    | npm run test:generate:file <path>    |
+| Run all tests                    | npm test                             |
+| Run with coverage                | npm run test:coverage                |
+| Enforce 80% coverage             | npm run test:coverage:check          |
++----------------------------------+--------------------------------------+
+
+
+*** IMPORTANT REMINDERS ***
+
+The generator removes initial friction by creating test scaffolding,
+but you'll still need to:
+
+1. Fill in TODO placeholders with real values
+2. Add branch coverage tests (loading/error/empty states)
+3. Add interaction tests with proper selectors
+
+Generated tests get you to 60% coverage. Human intent gets you to 100% confidence.
+
+
+================================================================================
+                    CONFIGURATION FILES REFERENCE
+================================================================================
+
++-------------------------------------------+----------------------------------+
+| File                                      | Purpose                          |
++-------------------------------------------+----------------------------------+
+| scripts/testgen/index.mjs                 | Main generator entry point       |
+| scripts/testgen/analysis/tsxAnalyzer.mjs  | Component AST analyzer           |
+| scripts/testgen/generation/testWriter.mjs | Test code generator              |
+| scripts/testgen/config.mjs                | Generator configuration          |
+| src/test-utils/renderWithProviders.tsx    | Test wrapper utility             |
+| src/test-utils/setupTests.ts              | Jest environment setup           |
+| jest.config.js                            | Jest configuration               |
++-------------------------------------------+----------------------------------+
+
+
+================================================================================
+                    GENERATED FILE MARKERS
+================================================================================
+
+Tests with this header will be regenerated:
+
+    /** @generated AUTO-GENERATED FILE - safe to overwrite */
+
+Remove the header to protect manual edits from being overwritten.
+
+
+================================================================================
+        Generated for Expense Manager Project - React Test Generator
+================================================================================
