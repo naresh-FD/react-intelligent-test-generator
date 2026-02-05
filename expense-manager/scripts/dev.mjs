@@ -36,7 +36,9 @@ const colors = {
 
 function log(prefix, color, message) {
   const timestamp = new Date().toLocaleTimeString();
-  console.log(`${colors.dim}[${timestamp}]${colors.reset} ${color}[${prefix}]${colors.reset} ${message}`);
+  console.log(
+    `${colors.dim}[${timestamp}]${colors.reset} ${color}[${prefix}]${colors.reset} ${message}`
+  );
 }
 
 /**
@@ -101,6 +103,9 @@ devServer.on('close', (code) => {
     log('DEV', colors.yellow, `Dev server exited with code ${code}`);
   }
 });
+
+// Cleanup function to kill child processes
+function cleanup() {
   processes.forEach((proc) => {
     if (!proc.killed) {
       proc.kill('SIGTERM');
