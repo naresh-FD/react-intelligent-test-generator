@@ -33,7 +33,13 @@ module.exports = {
     rules: [
       {
         test: /\.tsx?$/,
-        use: 'ts-loader',
+        use: {
+          loader: 'ts-loader',
+          options: {
+            transpileOnly: true,
+            happyPackMode: true,
+          },
+        },
         exclude: /node_modules/,
       },
       {
@@ -69,19 +75,21 @@ module.exports = {
     new DotenvWebpackPlugin({
       systemvars: true,
     }),
-    ...(isDevelopment ? [] : [
-      new CopyWebpackPlugin({
-        patterns: [
-          {
-            from: 'public',
-            to: '',
-            globOptions: {
-              ignore: ['**/index.html', '**/favicon.ico'],
-            },
-          },
-        ],
-      }),
-    ]),
+    ...(isDevelopment
+      ? []
+      : [
+          new CopyWebpackPlugin({
+            patterns: [
+              {
+                from: 'public',
+                to: '',
+                globOptions: {
+                  ignore: ['**/index.html', '**/favicon.ico'],
+                },
+              },
+            ],
+          }),
+        ]),
   ],
   devServer: {
     static: {

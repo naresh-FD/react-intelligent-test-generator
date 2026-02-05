@@ -1,6 +1,5 @@
 /** @generated AUTO-GENERATED FILE - safe to overwrite */
 import { render } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { App } from '../App';
 
 // App has its own BrowserRouter and providers, so use basic render
