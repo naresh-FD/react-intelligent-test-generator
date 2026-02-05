@@ -1,6 +1,5 @@
 /** @generated AUTO-GENERATED FILE - safe to overwrite */
-import * as React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../App';
 
@@ -44,14 +43,12 @@ describe('App', () => {
   // ============ User Interactions ============
   describe('User Interactions', () => {
     it('handles click events', async () => {
-      const user = userEvent.setup();
       render(<App {...defaultProps} />);
 
       // TODO: Add click interaction tests
     });
 
     it('handles input changes', async () => {
-      const user = userEvent.setup();
       render(<App {...defaultProps} />);
 
       // TODO: Add input interaction tests
@@ -72,9 +69,7 @@ describe('App', () => {
     });
 
     it('is keyboard navigable', async () => {
-      const user = userEvent.setup();
       render(<App {...defaultProps} />);
-
       // TODO: Test keyboard navigation
     });
   });

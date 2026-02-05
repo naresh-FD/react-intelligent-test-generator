@@ -54,6 +54,7 @@ export function ExpenseList() {
     setEditingExpense(null);
     setIsFormOpen(true);
   }, []);
+  console.log('dg bmnb   j  gchgchgc');
 
   const handleEdit = useCallback((expense: Expense) => {
     setEditingExpense(expense);

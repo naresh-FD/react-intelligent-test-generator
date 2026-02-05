@@ -39,7 +39,7 @@ export function ExpenseForm({
     reset,
     setValue,
     formState: { errors, isSubmitting },
-  } = useForm<ExpenseFormData>({
+  } = useForm({
     resolver: zodResolver(expenseSchema),
     defaultValues: {
       amount: 0,
@@ -89,7 +89,7 @@ export function ExpenseForm({
     setValue('categoryId', '');
   }, [transactionType, setValue]);
 
-  const handleFormSubmit = async (data: ExpenseFormData) => {
+  const handleFormSubmit = async (data: any) => {
     await onSubmit(data);
     onClose();
   };

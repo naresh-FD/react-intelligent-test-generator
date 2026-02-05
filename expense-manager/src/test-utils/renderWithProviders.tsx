@@ -1,7 +1,7 @@
-import * as React from "react";
-import { render, type RenderOptions, type RenderResult, cleanup } from "@testing-library/react";
-import { MemoryRouter, BrowserRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import * as React from 'react';
+import { render, type RenderOptions, type RenderResult } from '@testing-library/react';
+import { MemoryRouter, BrowserRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   AuthProvider,
   ThemeProvider,
@@ -9,12 +9,12 @@ import {
   ExpenseProvider,
   CategoryProvider,
   BudgetProvider,
-} from "@/contexts";
+} from '@/contexts';
 
 /**
  * Options for renderWithProviders
  */
-export interface RenderWithProvidersOptions extends Omit<RenderOptions, "wrapper"> {
+export interface RenderWithProvidersOptions extends Omit<RenderOptions, 'wrapper'> {
   /**
    * Initial route for MemoryRouter (if using router)
    */
@@ -119,7 +119,7 @@ export function renderWithProviders(
   options: RenderWithProvidersOptions = {}
 ): RenderResult & { queryClient: QueryClient } {
   const {
-    initialRoute = "/",
+    initialRoute = '/',
     withRouter = true,
     useMemoryRouter = true,
     queryClient = createTestQueryClient(),
@@ -154,4 +154,4 @@ export function renderWithProviders(
 /**
  * Re-export everything from @testing-library/react for convenience
  */
-export * from "@testing-library/react";
+export * from '@testing-library/react';
