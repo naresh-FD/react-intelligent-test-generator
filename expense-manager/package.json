@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start:raw": "webpack serve --mode development",
-    "start": "node scripts/testgen/index.mjs git-unstaged && node scripts/dev.mjs",
+    "start": "node scripts/dev.mjs",
     "start:no-testgen": "node scripts/dev.mjs --no-testgen",
     "build": "webpack --mode production",
     "lint": "eslint src --ext .ts,.tsx",

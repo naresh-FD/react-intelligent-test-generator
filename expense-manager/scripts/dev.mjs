@@ -2,17 +2,16 @@
 /**
  * Development Server with Auto Test Generation
  *
- * This script runs both:
- * 1. Webpack dev server (your app)
- * 2. Auto test generator in watch mode
+ * This script:
+ * 1. Generates tests for unstaged files (one-time at startup)
+ * 2. Starts webpack dev server for your app
  *
  * Usage:
- *   node scripts/dev.mjs              - Run both server + watcher
+ *   node scripts/dev.mjs              - Run server + generate tests for unstaged
  *   node scripts/dev.mjs --no-testgen - Run only the dev server
- *   node scripts/dev.mjs --coverage   - Run with coverage enabled
  */
 
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
@@ -22,7 +21,6 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 
 const args = process.argv.slice(2);
 const noTestgen = args.includes('--no-testgen');
-const withCoverage = args.includes('--coverage');
 
 const isWindows = process.platform === 'win32';
 
@@ -70,11 +68,27 @@ function spawnWithPrefix(command, args, prefix, color) {
 
 console.log(`
 ${colors.green}╔═══════════════════════════════════════════════════════════╗
-║           Development Server + Auto Test Generator          ║
+║              Development Server with Test Generation        ║
 ╚═══════════════════════════════════════════════════════════╝${colors.reset}
 `);
 
 const processes = [];
+
+// Generate tests for unstaged files (one-time at startup)
+if (!noTestgen) {
+  try {
+    log('TEST', colors.yellow, 'Generating tests for unstaged files...');
+    execSync('node scripts/testgen/index.mjs git-unstaged', {
+      cwd: ROOT_DIR,
+      stdio: 'inherit',
+    });
+  } catch (error) {
+    // Non-fatal - just warn but continue
+    log('TEST', colors.dim, 'No unstaged files or test generation skipped');
+  }
+} else {
+  log('TEST', colors.dim, 'Test generation disabled (--no-testgen)');
+}
 
 // Start Webpack Dev Server (use start:raw to avoid recursion since "start" calls this script)
 log('DEV', colors.cyan, 'Starting webpack dev server...');
@@ -87,31 +101,6 @@ devServer.on('close', (code) => {
     log('DEV', colors.yellow, `Dev server exited with code ${code}`);
   }
 });
-
-// Start Test Generator Watcher (unless --no-testgen)
-if (!noTestgen) {
-  log('TEST', colors.yellow, 'Starting auto test generator in watch mode...');
-
-  const testgenArgs = ['scripts/auto-testgen.mjs', 'watch'];
-  if (withCoverage) {
-    testgenArgs.push('--coverage');
-  }
-
-  const testgen = spawnWithPrefix('node', testgenArgs, 'TEST', colors.yellow);
-  processes.push(testgen);
-
-  testgen.on('close', (code) => {
-    if (code !== null) {
-      log('TEST', colors.yellow, `Test generator exited with code ${code}`);
-    }
-  });
-} else {
-  log('TEST', colors.dim, 'Test generator disabled (--no-testgen)');
-}
-
-// Handle cleanup on exit
-function cleanup() {
-  console.log(`\n${colors.yellow}Shutting down...${colors.reset}`);
   processes.forEach((proc) => {
     if (!proc.killed) {
       proc.kill('SIGTERM');
