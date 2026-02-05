@@ -26,6 +26,7 @@ npm install
 ```
 
 Required dev dependencies (already in package.json):
+
 - `@babel/parser`, `@babel/traverse` - AST parsing for export detection
 - `ts-morph` - TypeScript type extraction
 - `chokidar` - File watching
@@ -39,6 +40,7 @@ npm start
 ```
 
 This runs BOTH:
+
 - Webpack dev server (your app at http://localhost:3000)
 - Test generator in watch mode (creates tests when you edit files)
 
@@ -57,31 +59,31 @@ npm run test:coverage:check # Run with 80% coverage threshold
 
 ### Development
 
-| Command | Description |
-|---------|-------------|
-| `npm start` | Run dev server + test generator watcher |
-| `npm run start:raw` | Run only dev server (no test generation) |
-| `npm run start:no-testgen` | Same as start:raw |
+| Command                    | Description                              |
+| -------------------------- | ---------------------------------------- |
+| `npm start`                | Run dev server + test generator watcher  |
+| `npm run start:raw`        | Run only dev server (no test generation) |
+| `npm run start:no-testgen` | Same as start:raw                        |
 
 ### Test Generation
 
-| Command | Description |
-|---------|-------------|
-| `npm run testgen:git` | Generate tests for git unstaged files only (safest) |
-| `npm run testgen:git:coverage` | Same as above, then run coverage |
-| `npm run testgen:watch` | Watch mode - generate tests on file changes |
-| `npm run testgen:watch:coverage` | Watch mode with coverage after each change |
-| `npm run testgen:all` | Generate tests for ALL source files |
-| `npm run testgen:all:coverage` | Same as above, then run coverage |
-| `npm run testgen:file <path>` | Generate test for a single file |
+| Command                          | Description                                         |
+| -------------------------------- | --------------------------------------------------- |
+| `npm run testgen:git`            | Generate tests for git unstaged files only (safest) |
+| `npm run testgen:git:coverage`   | Same as above, then run coverage                    |
+| `npm run testgen:watch`          | Watch mode - generate tests on file changes         |
+| `npm run testgen:watch:coverage` | Watch mode with coverage after each change          |
+| `npm run testgen:all`            | Generate tests for ALL source files                 |
+| `npm run testgen:all:coverage`   | Same as above, then run coverage                    |
+| `npm run testgen:file <path>`    | Generate test for a single file                     |
 
 ### Testing
 
-| Command | Description |
-|---------|-------------|
-| `npm test` | Run all tests |
-| `npm run test:watch` | Run tests in watch mode |
-| `npm run test:coverage` | Run with coverage report |
+| Command                       | Description                    |
+| ----------------------------- | ------------------------------ |
+| `npm test`                    | Run all tests                  |
+| `npm run test:watch`          | Run tests in watch mode        |
+| `npm run test:coverage`       | Run with coverage report       |
 | `npm run test:coverage:check` | Enforce 80% coverage threshold |
 
 ---
@@ -115,6 +117,7 @@ src/utils/formatters.ts    →   src/utils/__tests__/formatters.test.ts
 ### Component Detection
 
 A file is treated as a React component if:
+
 - Export name starts with uppercase (e.g., `Button`, `UserCard`)
 - Contains JSX syntax (`<` with `/>` or `</`)
 - Uses `forwardRef`, `memo`, etc.
@@ -175,24 +178,24 @@ describe("Button", () => {
 
 ```typescript
 /** @generated AUTO-GENERATED FILE - safe to overwrite */
-import { formatCurrency, formatDate } from "../formatters";
+import { formatCurrency, formatDate } from '../formatters';
 
-describe("formatters", () => {
-  describe("formatCurrency", () => {
-    it("is defined", () => {
+describe('formatters', () => {
+  describe('formatCurrency', () => {
+    it('is defined', () => {
       expect(formatCurrency).toBeDefined();
     });
 
-    it("handles valid input", () => {
+    it('handles valid input', () => {
       // TODO: Add test for valid input
     });
 
-    it("handles edge cases", () => {
+    it('handles edge cases', () => {
       // TODO: Add edge case tests
     });
   });
 
-  describe("formatDate", () => {
+  describe('formatDate', () => {
     // Similar structure...
   });
 });
@@ -218,13 +221,13 @@ The generator creates TODO placeholders. Replace them with proper selectors:
 
 ```typescript
 // ❌ Generated placeholder
-const button = screen.getByRole("button");
+const button = screen.getByRole('button');
 
 // ✅ Better - use accessible name
-const button = screen.getByRole("button", { name: /submit/i });
+const button = screen.getByRole('button', { name: /submit/i });
 
 // ✅ Or add data-testid for complex elements
-const chart = screen.getByTestId("expense-chart");
+const chart = screen.getByTestId('expense-chart');
 ```
 
 ### 3. Fill in Required Props
@@ -234,13 +237,15 @@ The generator tries to detect required props, but may need manual updates:
 ```typescript
 // Generated (may need adjustment)
 const defaultProps = {
-  title: "TODO",
-  onSubmit: () => { /* TODO */ },
+  title: 'TODO',
+  onSubmit: () => {
+    /* TODO */
+  },
 };
 
 // ✅ Update with realistic values
 const defaultProps = {
-  title: "Create Expense",
+  title: 'Create Expense',
   onSubmit: jest.fn(),
 };
 ```
@@ -344,6 +349,7 @@ npm run testgen:git
 **Cause**: Generated scaffolding provides baseline; complex branches need manual tests.
 
 **Fix**:
+
 1. Replace TODO placeholders with real props and assertions
 2. Add tests for loading/error/empty states
 3. Add interaction tests for all click/input handlers
@@ -411,7 +417,7 @@ expense-manager/
 │       ├── setupTests.ts            ← Jest setup
 │       └── index.ts
 ├── scripts/
-│   ├── auto-testgen.mjs            ← Test generator script
+│   ├── testgen/                    ← Modular test generator system
 │   └── dev.mjs                     ← Dev server + watcher
 ├── jest.config.js
 ├── package.json
@@ -422,15 +428,16 @@ expense-manager/
 
 ## Summary
 
-| Task | Command |
-|------|---------|
-| Start development | `npm start` |
-| Generate tests for changed files | `npm run testgen:git` |
-| Run all tests | `npm test` |
-| Run with coverage | `npm run test:coverage` |
-| Enforce 80% coverage | `npm run test:coverage:check` |
+| Task                             | Command                       |
+| -------------------------------- | ----------------------------- |
+| Start development                | `npm start`                   |
+| Generate tests for changed files | `npm run testgen:git`         |
+| Run all tests                    | `npm test`                    |
+| Run with coverage                | `npm run test:coverage`       |
+| Enforce 80% coverage             | `npm run test:coverage:check` |
 
 The generator removes initial friction by creating test scaffolding, but you'll still need to:
+
 1. Fill in TODO placeholders with real values
 2. Add branch coverage tests (loading/error/empty states)
 3. Add interaction tests with proper selectors
