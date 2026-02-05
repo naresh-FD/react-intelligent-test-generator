@@ -90,6 +90,7 @@ export class DeepComponentAnalyzer {
       stateVariables: [],
       effects: [],
       apiCalls: [],
+      functions: [],
       buttons: [],
       inputs: [],
       forms: [],
@@ -236,6 +237,52 @@ export class DeepComponentAnalyzer {
 
   analyzeBody(body) {
     const visit = (node) => {
+      // Detect function declarations inside component
+      if (this.ts.isFunctionDeclaration(node) && node.name) {
+        this.extractFunction(node, node.name.text);
+      }
+
+      // Detect arrow functions and function expressions assigned to variables
+      if (this.ts.isVariableStatement(node)) {
+        for (const decl of node.declarationList.declarations) {
+          if (this.ts.isIdentifier(decl.name) && decl.initializer) {
+            const funcName = decl.name.text;
+
+            // Skip if it looks like a component (starts with uppercase)
+            if (/^[A-Z]/.test(funcName)) {
+              continue;
+            }
+
+            // Direct arrow function: const handleX = () => {}
+            if (
+              this.ts.isArrowFunction(decl.initializer) ||
+              this.ts.isFunctionExpression(decl.initializer)
+            ) {
+              this.extractFunction(decl.initializer, funcName);
+            }
+
+            // React hooks wrapping functions: const handleX = useCallback(() => {}, [])
+            else if (this.ts.isCallExpression(decl.initializer)) {
+              const callExpr = decl.initializer;
+              const isReactHook =
+                this.ts.isIdentifier(callExpr.expression) &&
+                ['useCallback', 'useMemo'].includes(callExpr.expression.text);
+
+              if (isReactHook && callExpr.arguments.length > 0) {
+                const firstArg = callExpr.arguments[0];
+                if (this.ts.isArrowFunction(firstArg) || this.ts.isFunctionExpression(firstArg)) {
+                  this.extractFunction(
+                    firstArg,
+                    funcName,
+                    callExpr.expression.text === 'useCallback'
+                  );
+                }
+              }
+            }
+          }
+        }
+      }
+
       if (this.ts.isJsxElement(node) || this.ts.isJsxSelfClosingElement(node)) {
         this.analyzeJSXElement(node);
       }
@@ -267,6 +314,28 @@ export class DeepComponentAnalyzer {
     if (body) {
       visit(body);
     }
+  }
+
+  extractFunction(node, name, isCallback = false) {
+    const params =
+      node.parameters?.map((p) => {
+        const paramName = this.ts.isIdentifier(p.name) ? p.name.text : 'param';
+        const paramType = p.type ? this.typeNodeToString(p.type) : 'any';
+        return { name: paramName, type: paramType };
+      }) || [];
+
+    const isAsync =
+      node.modifiers?.some((m) => m.kind === this.ts.SyntaxKind.AsyncKeyword) || false;
+
+    const funcInfo = {
+      name,
+      parameters: params,
+      isAsync,
+      isHandler: /^(handle|on)[A-Z]/.test(name),
+      isCallback,
+    };
+
+    this.currentComponent.functions.push(funcInfo);
   }
 
   analyzeJSXElement(node) {
@@ -351,7 +420,8 @@ export class DeepComponentAnalyzer {
   }
 
   generateSelector(tagName, attributes, textContent) {
-    if (attributes.testId) return `[data-testid="${attributes.testId}"]`;
+    const testId = attributes.testId || attributes['data-testid'];
+    if (testId) return `[data-testid="${testId}"]`;
     if (attributes.id) return `#${attributes.id}`;
     if (attributes.className) return `.${attributes.className.split(' ')[0]}`;
     if (textContent) return textContent;
@@ -368,6 +438,8 @@ export class DeepComponentAnalyzer {
         type: attributes.type || 'button',
         disabled: attributes.disabled === 'true',
         onClick: attributes.onClick,
+        ariaLabel: attributes['aria-label'],
+        testId: attributes.testId || attributes['data-testid'],
         selector,
       });
     }

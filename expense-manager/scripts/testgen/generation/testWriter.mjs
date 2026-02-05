@@ -17,9 +17,15 @@ export class SmartTestGenerator {
       path.join(SRC_DIR, 'test-utils', 'renderWithProviders.tsx')
     );
 
-    const imports = this.generateImports(renderWithProvidersImport);
-    const mocks = this.generateMocks();
-    const tests = this.components.map((c) => this.generateComponentTests(c)).join('\n\n');
+    // Only generate tests for exported components
+    const exportedComponents = this.components.filter((c) => c.isExported || c.isDefault);
+
+    const imports = this.generateImportsForComponents(
+      exportedComponents,
+      renderWithProvidersImport
+    );
+    const mocks = this.generateMocksForComponents(exportedComponents);
+    const tests = exportedComponents.map((c) => this.generateComponentTests(c)).join('\n\n');
 
     return `${GENERATED_HEADER}
 ${imports}
@@ -29,9 +35,9 @@ ${tests}
 `;
   }
 
-  generateImports(renderWithProvidersImport) {
-    const defaultExports = this.components.filter((c) => c.isDefault);
-    const namedExports = this.components.filter((c) => !c.isDefault && c.isExported);
+  generateImportsForComponents(components, renderWithProvidersImport) {
+    const defaultExports = components.filter((c) => c.isDefault);
+    const namedExports = components.filter((c) => !c.isDefault && c.isExported);
 
     let componentImport = '';
     if (defaultExports.length > 0 && namedExports.length > 0) {
@@ -42,16 +48,22 @@ ${tests}
       componentImport = `import { ${namedExports.map((c) => c.name).join(', ')} } from "${this.moduleImport}";`;
     }
 
-    const needsWaitFor = this.components.some((c) => c.effects.length > 0 || c.apiCalls.length > 0);
-    const testingImports = ['screen'];
+    const needsScreen = components.some(
+      (c) => c.buttons.length > 0 || c.inputs.length > 0 || c.elements.length > 0
+    );
+    const needsWaitFor = components.some((c) => c.effects.length > 0 || c.apiCalls.length > 0);
+
+    const testingImports = [];
+    if (needsScreen) testingImports.push('screen');
     if (needsWaitFor) testingImports.push('waitFor');
 
-    const imports = [
-      `import * as React from "react";`,
-      `import { ${testingImports.join(', ')} } from "@testing-library/react";`,
-    ];
+    const imports = [`import * as React from "react";`];
 
-    if (this.hasCallbacks()) {
+    if (testingImports.length > 0) {
+      imports.push(`import { ${testingImports.join(', ')} } from "@testing-library/react";`);
+    }
+
+    if (this.hasCallbacksInComponents(components)) {
       imports.push(`import userEvent from "@testing-library/user-event";`);
     }
 
@@ -64,21 +76,26 @@ ${tests}
     return imports.join('\n');
   }
 
-  hasCallbacks() {
-    return this.components.some(
+  hasCallbacksInComponents(components) {
+    return components.some(
       (c) => c.props.some((p) => p.isCallback) || c.buttons.length > 0 || c.inputs.length > 0
     );
   }
 
-  generateMocks() {
+  generateMocksForComponents(components) {
     const mocks = [];
+    const seen = new Set();
 
-    for (const comp of this.components) {
+    for (const comp of components) {
       const callbackProps = comp.props.filter((p) => p.isCallback);
 
       if (callbackProps.length > 0) {
         for (const prop of callbackProps) {
-          mocks.push(`const mock${this.capitalize(prop.name)} = jest.fn();`);
+          const mockName = `mock${this.capitalize(prop.name)}`;
+          if (!seen.has(mockName)) {
+            seen.add(mockName);
+            mocks.push(`const ${mockName} = jest.fn();`);
+          }
         }
       }
     }
@@ -96,16 +113,23 @@ ${tests}
   generateComponentTests(comp) {
     const lines = [];
     const hasProps = comp.props && comp.props.length > 0;
+    const hasRequiredProps = comp.props?.some((p) => p.isRequired) || false;
 
     lines.push(`describe("${comp.name}", () => {`);
 
     if (hasProps) {
       lines.push(`  type Props = React.ComponentProps<typeof ${comp.name}>;`);
-      lines.push(
-        `  const defaultProps: Partial<Props> = ${this.generateDefaultPropsObject(comp)};`
-      );
-      lines.push('');
-      lines.push('  const renderUI = (props: Partial<Props> = {}) =>');
+      if (hasRequiredProps) {
+        lines.push(`  const defaultProps: Props = ${this.generateDefaultPropsObject(comp)};`);
+        lines.push('');
+        lines.push('  const renderUI = (props: Partial<Props> = {}) =>');
+      } else {
+        lines.push(
+          `  const defaultProps: Partial<Props> = ${this.generateDefaultPropsObject(comp)};`
+        );
+        lines.push('');
+        lines.push('  const renderUI = (props: Partial<Props> = {}) =>');
+      }
       lines.push(`    renderWithProviders(<${comp.name} {...defaultProps} {...props} />);`);
     } else {
       lines.push('  const renderUI = () =>');
@@ -121,7 +145,7 @@ ${tests}
     lines.push('');
     lines.push(`    it("should render with default props", () => {`);
     lines.push(`      const { container } = renderUI();`);
-    lines.push(`      expect(container.firstChild).toBeInTheDocument();`);
+    lines.push(`      expect(container).toBeInTheDocument();`);
     lines.push(`    });`);
 
     if (comp.buttons.length > 0) {
@@ -185,13 +209,74 @@ ${tests}
     if (comp.props.length > 0) {
       lines.push('  describe("Props", () => {');
       lines.push(`    it("should accept and render custom props", () => {`);
-      const customProps = comp.props.slice(0, 2);
-      const customPropsObj = {};
-      for (const prop of customProps) {
-        customPropsObj[prop.name] = this.getDefaultValueForType(prop.type);
+      const customProps = comp.props.filter((p) => p.name !== 'children').slice(0, 2);
+      if (customProps.length > 0) {
+        const customPropsObj = {};
+        for (const prop of customProps) {
+          customPropsObj[prop.name] = this.getDefaultValueForType(prop.type, prop.name);
+        }
+        lines.push(`      renderUI(${this.renderPropsObject(customPropsObj)});`);
+      } else {
+        lines.push(`      renderUI({ ...defaultProps });`);
       }
-      lines.push(`      renderUI(${JSON.stringify(customPropsObj)});`);
       lines.push(`    });`);
+      lines.push('  });');
+      lines.push('');
+    }
+
+    // Function tests
+    if (comp.functions.length > 0) {
+      lines.push('  describe("Functions", () => {');
+
+      for (const func of comp.functions) {
+        lines.push(`    describe("${func.name}", () => {`);
+
+        if (func.isHandler) {
+          // Generate handler function tests
+          lines.push(
+            `      it("should call ${func.name} correctly", ${func.isAsync ? 'async ' : ''}() => {`
+          );
+          lines.push(`        renderUI();`);
+
+          // Try to find associated element/button to trigger
+          const relatedButton = comp.buttons.find(
+            (b) =>
+              b.attributes?.onClick &&
+              (b.text?.toLowerCase().includes(func.name.replace(/^handle/, '').toLowerCase()) ||
+                func.name.toLowerCase().includes(b.text?.toLowerCase()))
+          );
+
+          if (relatedButton) {
+            const selector = this.getButtonSelector(relatedButton);
+            lines.push(`        const button = ${selector};`);
+            lines.push(`        ${func.isAsync ? 'await ' : ''}userEvent.click(button);`);
+          }
+
+          lines.push(`        // Add your assertions here`);
+          lines.push(`      });`);
+        } else {
+          // Regular function test
+          lines.push(
+            `      it("should execute ${func.name} correctly", ${func.isAsync ? 'async ' : ''}() => {`
+          );
+          lines.push(`        // Test ${func.name} functionality`);
+          if (func.parameters.length > 0) {
+            const paramList = func.parameters
+              .map((p) => {
+                const defaultVal = this.getDefaultValueForType(p.type);
+                return p.type === 'string' ? `"${defaultVal}"` : defaultVal;
+              })
+              .join(', ');
+            lines.push(`        // Call with: ${func.name}(${paramList})`);
+          }
+          lines.push(`        // Add your assertions here`);
+          lines.push(`      });`);
+        }
+
+        lines.push(`    });`);
+        lines.push('');
+      }
+
       lines.push('  });');
       lines.push('');
     }
@@ -224,15 +309,17 @@ ${tests}
     const props = [];
 
     for (const prop of comp.props) {
-      if (prop.isRequired && !prop.isCallback) {
-        const value = this.getDefaultValueForType(prop.type);
-        if (prop.type === 'string') {
+      if (prop.isCallback) {
+        props.push(`  ${prop.name}: jest.fn()`);
+      } else if (prop.isRequired) {
+        const value = this.getDefaultValueForType(prop.type, prop.name);
+        if (prop.name === 'children' || String(prop.type).toLowerCase().includes('reactnode')) {
+          props.push(`  ${prop.name}: ${value}`);
+        } else if (prop.type === 'string') {
           props.push(`  ${prop.name}: "${value}"`);
         } else {
           props.push(`  ${prop.name}: ${value}`);
         }
-      } else if (prop.isCallback) {
-        props.push(`  ${prop.name}: jest.fn()`);
       }
     }
 
@@ -244,26 +331,46 @@ ${tests}
   }
 
   getButtonSelector(btn) {
-    if (btn.selector && btn.selector !== 'button') {
-      return `screen.getByRole("button", { name: /${btn.text || 'button'}/i })`;
+    if (btn.testId) {
+      return `screen.getByTestId("${btn.testId}")`;
     }
-    return `screen.getByRole("button", { name: /${btn.text || 'button'}/i })`;
+    const name = btn.ariaLabel || btn.text;
+    if (name) {
+      return `screen.getByRole("button", { name: /${name}/i })`;
+    }
+    return `screen.getAllByRole("button")[0]`;
   }
 
   getInputSelector(input) {
+    if (input.label) {
+      return `screen.getByLabelText(/${input.label}/i)`;
+    }
     if (input.name) {
-      return `screen.getByRole("textbox", { name: /${input.label || input.name}/i })`;
+      return `screen.getByLabelText(/${input.name}/i)`;
     }
     if (input.placeholder) {
       return `screen.getByPlaceholderText(/${input.placeholder}/i)`;
     }
+
+    const type = String(input.type || '').toLowerCase();
+    if (type === 'number') return `screen.getByRole("spinbutton")`;
+    if (type === 'checkbox') return `screen.getByRole("checkbox")`;
+    if (type === 'radio') return `screen.getByRole("radio")`;
+
     return `screen.getByRole("textbox")`;
   }
 
-  getDefaultValueForType(type) {
-    if (!type) return 'undefined';
+  getDefaultValueForType(type, propName = '') {
+    const typeStr = type ? String(type).toLowerCase() : '';
 
-    const typeStr = String(type).toLowerCase();
+    // Handle children prop specifically
+    if (
+      propName === 'children' ||
+      typeStr.includes('reactnode') ||
+      typeStr.includes('react.reactnode')
+    ) {
+      return '<div>Test Content</div>';
+    }
 
     if (typeStr.includes('string')) return 'test-value';
     if (typeStr.includes('number')) return '42';
@@ -272,7 +379,50 @@ ${tests}
     if (typeStr.includes('=>')) return 'jest.fn()';
     if (typeStr.includes('object')) return '{}';
 
+    if (/^on[A-Z]/.test(propName)) return 'jest.fn()';
+    if (/^(is|has|show|can|should)[A-Z_]/.test(propName)) return 'true';
+    if (/id$/i.test(propName)) return '"test-id"';
+
     return 'undefined';
+  }
+
+  renderPropsObject(propsObj) {
+    const entries = Object.entries(propsObj);
+    if (entries.length === 0) return '{}';
+
+    const lines = entries.map(([key, value]) => {
+      if (value === undefined || value === null) {
+        return `  ${key}: ${value}`;
+      }
+
+      const valueStr = String(value);
+      const isQuotedString =
+        (valueStr.startsWith('"') && valueStr.endsWith('"')) ||
+        (valueStr.startsWith("'") && valueStr.endsWith("'"));
+      const isCodeLike =
+        valueStr === 'true' ||
+        valueStr === 'false' ||
+        valueStr === 'null' ||
+        valueStr === 'undefined' ||
+        valueStr === '[]' ||
+        valueStr === '{}' ||
+        valueStr.startsWith('<') ||
+        valueStr.includes('jest.fn') ||
+        isQuotedString;
+
+      if (isCodeLike) {
+        return `  ${key}: ${valueStr}`;
+      }
+
+      const isNumber = !Number.isNaN(Number(valueStr));
+      if (isNumber) {
+        return `  ${key}: ${valueStr}`;
+      }
+
+      return `  ${key}: "${valueStr}"`;
+    });
+
+    return `({\n${lines.join(',\n')}\n})`;
   }
 
   capitalize(str) {
