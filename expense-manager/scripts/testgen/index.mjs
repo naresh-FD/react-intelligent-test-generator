@@ -82,7 +82,7 @@ async function processGitUnstagedFiles() {
       .map((f) => path.join(ROOT_DIR, f));
 
     if (files.length === 0) {
-      console.log('⚠️  No unstaged source files found.');
+      console.log('⚠️  No unstaged source files found. Nothing to generate.');
       return;
     }
 
@@ -96,8 +96,11 @@ async function processGitUnstagedFiles() {
       }
     }
   } catch (error) {
-    console.error('Error getting git status:', error.message);
-    throw error;
+    // Git command failed - might not be in a git repo or git not installed
+    console.warn('⚠️  Could not get git status. Skipping git-unstaged generation.');
+    console.warn(`    Reason: ${error.message}`);
+    // Don't throw - this is not a fatal error, just skip
+    return;
   }
 }
 
