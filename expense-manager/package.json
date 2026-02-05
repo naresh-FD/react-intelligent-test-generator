@@ -19,15 +19,7 @@
     "test:coverage:check": "jest --coverage --coverageThreshold=\"{\\\"global\\\":{\\\"branches\\\":80,\\\"functions\\\":80,\\\"lines\\\":80,\\\"statements\\\":80}}\"",
     "test:generate": "node scripts/testgen/index.mjs all",
     "test:generate:file": "node scripts/testgen/index.mjs file",
-    "test:generate:git": "node scripts/testgen/index.mjs git-unstaged",
-    "testgen": "node scripts/auto-testgen.mjs",
-    "testgen:watch": "node scripts/auto-testgen.mjs watch",
-    "testgen:watch:coverage": "node scripts/auto-testgen.mjs watch --coverage",
-    "testgen:all": "node scripts/auto-testgen.mjs all",
-    "testgen:all:coverage": "node scripts/auto-testgen.mjs all --coverage",
-    "testgen:git": "node scripts/auto-testgen.mjs git-unstaged",
-    "testgen:git:coverage": "node scripts/auto-testgen.mjs git-unstaged --coverage",
-    "testgen:file": "node scripts/auto-testgen.mjs file"
+    "test:generate:git": "node scripts/testgen/index.mjs git-unstaged"
   },
   "keywords": [
     "expense",
