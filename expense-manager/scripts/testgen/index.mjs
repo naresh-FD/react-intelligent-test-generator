@@ -79,7 +79,12 @@ async function processGitUnstagedFiles() {
     const files = output
       .split('\n')
       .filter((f) => f && isSourceFile(f) && f.endsWith('.tsx'))
-      .map((f) => path.join(ROOT_DIR, f));
+      .map((f) => {
+        // Git returns paths relative to repo root, but we might be in a subdirectory
+        // If path starts with expense-manager/, strip it (we're already in that dir)
+        const cleanPath = f.replace(/^expense-manager[\/\\]/, '');
+        return path.join(ROOT_DIR, cleanPath);
+      });
 
     if (files.length === 0) {
       console.log('⚠️  No unstaged source files found. Nothing to generate.');
