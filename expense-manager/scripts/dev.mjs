@@ -79,10 +79,11 @@ const processes = [];
 // Generate tests for unstaged files (one-time at startup)
 if (!noTestgen) {
   try {
-    log('TEST', colors.yellow, 'Generating tests for unstaged files...');
-    execSync('node scripts/testgen/index.mjs git-unstaged', {
+    log('TEST', colors.yellow, 'Generating tests for git-unstaged files...');
+    execSync('npm run testgen:git', {
       cwd: ROOT_DIR,
       stdio: 'inherit',
+      shell: isWindows,
     });
   } catch (error) {
     // Non-fatal - just warn but continue
