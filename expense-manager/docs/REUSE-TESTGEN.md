@@ -133,6 +133,7 @@ Generate tests for a single file:
 
 ```bash
 npm run testgen:file -- src/path/Component.tsx
+npm run testgen:file -- src/path/Component.ts
 ```
 
 ---
@@ -141,6 +142,21 @@ npm run testgen:file -- src/path/Component.tsx
 
 - Tests are generated at __tests__/Component.test.tsx next to each TSX component.
 - A coverage table prints after npm run test and after npm run testgen.
+
+---
+
+## FAQ
+
+### Will the Copilot prompt create a fully executable, plug-and-play tool?
+
+Short answer: yes, it should be plug-and-play, as long as the target repo already has Jest + React Testing Library configured and you add the scripts and dependencies from this guide.
+
+Two things still depend on the target repo:
+
+- Jest config must support TSX and write JSON coverage output (coverage-summary.json + coverage-final.json).
+- The render helper must exist at src/test-utils/renderWithProviders.tsx (or you update the path in tools/react-testgen/src/generator/templates.ts).
+
+If those are in place, running the prompt + npm install + npm run testgen works end-to-end. If you share the target repo layout, we can confirm exactly what to adjust.
 
 ---
 

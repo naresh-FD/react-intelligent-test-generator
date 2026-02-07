@@ -37,13 +37,20 @@ async function run() {
 
     const files = args.file ? [resolveFilePath(args.file)] : scanSourceFiles();
 
-    for (const filePath of files) {
+    console.log(`Found ${files.length} file(s) to process.`);
+
+    for (const [index, filePath] of files.entries()) {
+        console.log(`\n[${index + 1}/${files.length}] Processing ${filePath}`);
         const sourceFile = getSourceFile(project, filePath);
         const components = analyzeSourceFile(sourceFile, project, checker);
 
-        if (components.length === 0) continue;
+        if (components.length === 0) {
+            console.log('  - No exported components found. Skipping.');
+            continue;
+        }
 
         const testFilePath = getTestFilePath(filePath);
+        console.log(`  - Writing test file: ${testFilePath}`);
 
         const pass1 = generateTests(components, {
             pass: 1,
@@ -53,14 +60,19 @@ async function run() {
 
         writeFile(testFilePath, pass1);
 
+        console.log('  - Running coverage (pass 1)...');
         const coverageResult = runJestCoverage(testFilePath);
         const lineCoverage = readLineCoverage(filePath);
 
         if (coverageResult.code !== 0 || lineCoverage === null) {
+            console.log('  - Coverage run failed or missing summary. Skipping pass 2.');
             continue;
         }
 
+        console.log(`  - Line coverage: ${lineCoverage}%`);
+
         if (lineCoverage < 50) {
+            console.log('  - Coverage < 50%, generating pass 2...');
             const pass2 = generateTests(components, {
                 pass: 2,
                 testFilePath,
@@ -68,7 +80,10 @@ async function run() {
             });
 
             writeFile(testFilePath, pass2);
+            console.log('  - Running coverage (pass 2)...');
             runJestCoverage(testFilePath);
+        } else {
+            console.log('  - Coverage >= 50%, pass 2 not needed.');
         }
     }
 
