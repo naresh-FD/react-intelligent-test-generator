@@ -12,6 +12,7 @@ This guide covers everything you need to know to use the automated test generati
 4. [Generated Test Structure](#generated-test-structure)
 5. [Best Practices](#best-practices)
 6. [Troubleshooting](#troubleshooting)
+7. [Reuse In Another Repo](#reuse-in-another-repo)
 
 ---
 
@@ -432,7 +433,92 @@ expense-manager/
 
 ---
 
+## Reuse In Another Repo
+
+Use this checklist to install the same TSX test generator in a different repo.
+
+### 1. Copy Files
+
+Copy the entire tool directory into the target repo:
+
+```
+tools/react-testgen/
+```
+
+### 2. Add Scripts
+
+Update the target repo [package.json](../package.json):
+
+```json
+"testgen": "ts-node tools/react-testgen/src/cli.ts",
+"testgen:file": "ts-node tools/react-testgen/src/cli.ts --file",
+"test": "jest --coverage && ts-node tools/react-testgen/src/coverage/report.ts"
+```
+
+### 3. Install Dev Dependencies
+
+Ensure these dev dependencies exist in the target repo:
+
+- `ts-morph`
+- `ts-node`
+- `typescript`
+- `@types/node`
+- `jest`
+- `@testing-library/react`
+- `@testing-library/jest-dom`
+- `@testing-library/user-event`
+
+### 4. Add Render Utilities
+
+The generator expects this test helper:
+
+```
+src/test-utils/renderWithProviders.tsx
+```
+
+If your repo already has a custom render helper, update the generator import path in:
+
+```
+tools/react-testgen/src/generator/templates.ts
+```
+
+### 5. Ensure Jest Coverage Output
+
+The tool reads:
+
+```
+coverage/coverage-summary.json
+coverage/coverage-final.json
+```
+
+Your Jest command must include:
+
+```
+--coverage --coverageReporters=json-summary --coverageReporters=json
+```
+
+### 6. Run It
+
+```bash
+npm run testgen
+npm run testgen:file -- src/path/Component.tsx
+```
+
+### 7. Verify Output
+
+- Tests are created at `__tests__/Component.test.tsx` next to each TSX component
+- Coverage table prints after `npm run test` and after `npm run testgen`
+
+If you want the coverage table to include `.ts` files too, update the filter in:
+
+```
+tools/react-testgen/src/coverage/report.ts
+```
+
+---
+
 ## Summary
+
 
 | Task                             | Command                              |
 | -------------------------------- | ------------------------------------ |
