@@ -1,0 +1,19 @@
+{
+  "name": "reacttestgen-ai",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "start": "npm --workspace examples/expense-manager run start",
+    "start:no-testgen": "npm --workspace examples/expense-manager run start:no-testgen",
+    "build": "npm --workspace examples/expense-manager run build",
+    "lint": "npm --workspace examples/expense-manager run lint",
+    "test": "npm --workspace examples/expense-manager run test",
+    "testgen": "npm --workspace examples/expense-manager run testgen",
+    "testgen:file": "npm --workspace examples/expense-manager run testgen:file",
+    "testgen:git": "npm --workspace examples/expense-manager run testgen:git",
+    "docs:generate": "node packages/testgen/scripts/docs/generate-docs.mjs"
+  }
+}
