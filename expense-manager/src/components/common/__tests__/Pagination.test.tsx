@@ -2,12 +2,17 @@
 
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import ExpenseList from "../ExpenseList";
+import Pagination from "../Pagination";
 
-describe("ExpenseList", () => {
+describe("Pagination", () => {
 
-  const renderUI = () =>
-  render(<ExpenseList />);
+  const defaultProps = {
+  pagination: undefined,
+  onPageChange: 1
+};
+
+  const renderUI = (props = {}) =>
+  render(<Pagination {...defaultProps} {...props} />);
 
   it("renders without crashing", () => {
     const { container } = renderUI();
@@ -17,9 +22,8 @@ describe("ExpenseList", () => {
   it("renders key elements", () => {
     const { container } = renderUI();
     expect(container).toBeInTheDocument();
-    expect(screen.getByRole("button")).toBeInTheDocument();
-    expect(screen.getByRole("button")).toBeInTheDocument();
-    expect(screen.getByLabelText(/Select all transactions/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Go to first page/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Go to previous page/i)).toBeInTheDocument();
   });
 
 });

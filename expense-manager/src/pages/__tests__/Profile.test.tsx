@@ -2,12 +2,12 @@
 
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import ExpenseList from "../ExpenseList";
+import Profile from "../Profile";
 
-describe("ExpenseList", () => {
+describe("Profile", () => {
 
   const renderUI = () =>
-  render(<ExpenseList />);
+  render(<Profile />);
 
   it("renders without crashing", () => {
     const { container } = renderUI();
@@ -17,9 +17,10 @@ describe("ExpenseList", () => {
   it("renders key elements", () => {
     const { container } = renderUI();
     expect(container).toBeInTheDocument();
+    expect(screen.getByLabelText(/Change avatar/i)).toBeInTheDocument();
     expect(screen.getByRole("button")).toBeInTheDocument();
-    expect(screen.getByRole("button")).toBeInTheDocument();
-    expect(screen.getByLabelText(/Select all transactions/i)).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
   });
 
 });

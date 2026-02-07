@@ -2,12 +2,12 @@
 
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import ExpenseList from "../ExpenseList";
+import Login from "../Login";
 
-describe("ExpenseList", () => {
+describe("Login", () => {
 
   const renderUI = () =>
-  render(<ExpenseList />);
+  render(<Login />);
 
   it("renders without crashing", () => {
     const { container } = renderUI();
@@ -17,9 +17,10 @@ describe("ExpenseList", () => {
   it("renders key elements", () => {
     const { container } = renderUI();
     expect(container).toBeInTheDocument();
+    expect(screen.getByLabelText(/showPassword \? 'Hide password' : 'Show password'/i)).toBeInTheDocument();
     expect(screen.getByRole("button")).toBeInTheDocument();
-    expect(screen.getByRole("button")).toBeInTheDocument();
-    expect(screen.getByLabelText(/Select all transactions/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Enter your email/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Enter your password/i)).toBeInTheDocument();
   });
 
 });

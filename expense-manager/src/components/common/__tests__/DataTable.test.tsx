@@ -2,12 +2,18 @@
 
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import ExpenseList from "../ExpenseList";
+import DataTable from "../DataTable";
 
-describe("ExpenseList", () => {
+describe("DataTable", () => {
 
-  const renderUI = () =>
-  render(<ExpenseList />);
+  const defaultProps = {
+  data: [],
+  columns: [],
+  keyExtractor: "test-value"
+};
+
+  const renderUI = (props = {}) =>
+  render(<DataTable {...defaultProps} {...props} />);
 
   it("renders without crashing", () => {
     const { container } = renderUI();
@@ -17,9 +23,8 @@ describe("ExpenseList", () => {
   it("renders key elements", () => {
     const { container } = renderUI();
     expect(container).toBeInTheDocument();
-    expect(screen.getByRole("button")).toBeInTheDocument();
-    expect(screen.getByRole("button")).toBeInTheDocument();
-    expect(screen.getByLabelText(/Select all transactions/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Select all rows/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/`Select row \$\{index \+ 1\}`/i)).toBeInTheDocument();
   });
 
 });

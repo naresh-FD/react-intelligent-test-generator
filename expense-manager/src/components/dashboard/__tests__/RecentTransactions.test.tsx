@@ -2,12 +2,16 @@
 
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import ExpenseList from "../ExpenseList";
+import RecentTransactions from "../RecentTransactions";
 
-describe("ExpenseList", () => {
+describe("RecentTransactions", () => {
 
-  const renderUI = () =>
-  render(<ExpenseList />);
+  const defaultProps = {
+  transactions: []
+};
+
+  const renderUI = (props = {}) =>
+  render(<RecentTransactions {...defaultProps} {...props} />);
 
   it("renders without crashing", () => {
     const { container } = renderUI();
@@ -18,8 +22,6 @@ describe("ExpenseList", () => {
     const { container } = renderUI();
     expect(container).toBeInTheDocument();
     expect(screen.getByRole("button")).toBeInTheDocument();
-    expect(screen.getByRole("button")).toBeInTheDocument();
-    expect(screen.getByLabelText(/Select all transactions/i)).toBeInTheDocument();
   });
 
 });

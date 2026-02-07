@@ -20,6 +20,8 @@
     "test:generate": "node scripts/testgen/index.mjs all",
     "test:generate:file": "node scripts/testgen/index.mjs file",
     "test:generate:git": "node scripts/testgen/index.mjs git-unstaged",
+    "testgen": "ts-node tools/react-testgen/src/cli.ts",
+    "testgen:file": "ts-node tools/react-testgen/src/cli.ts --file",
     "docs:generate": "node scripts/docs/generate-docs.mjs"
   },
   "keywords": [
@@ -55,6 +57,7 @@
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.5.0",
+    "@types/node": "^20.11.30",
     "@types/jest": "^29.5.0",
     "@types/react": "^19.2.10",
     "@types/react-dom": "^19.2.3",
@@ -84,6 +87,7 @@
     "prettier": "^3.8.1",
     "style-loader": "^4.0.0",
     "tailwindcss": "^3.4.0",
+    "ts-node": "^10.9.2",
     "ts-jest": "^29.1.0",
     "ts-loader": "^9.5.4",
     "ts-morph": "^22.0.0",
@@ -98,5 +102,8 @@
       "eslint --fix",
       "prettier --write"
     ]
+  },
+  "ts-node": {
+    "project": "tools/react-testgen/tsconfig.json"
   }
 }

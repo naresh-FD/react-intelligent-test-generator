@@ -2,12 +2,16 @@
 
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import ExpenseList from "../ExpenseList";
+import ExpenseFilters from "../ExpenseFilters";
 
-describe("ExpenseList", () => {
+describe("ExpenseFilters", () => {
 
-  const renderUI = () =>
-  render(<ExpenseList />);
+  const defaultProps = {
+  onSearch: "test-value"
+};
+
+  const renderUI = (props = {}) =>
+  render(<ExpenseFilters {...defaultProps} {...props} />);
 
   it("renders without crashing", () => {
     const { container } = renderUI();
@@ -17,9 +21,10 @@ describe("ExpenseList", () => {
   it("renders key elements", () => {
     const { container } = renderUI();
     expect(container).toBeInTheDocument();
+    expect(screen.getByLabelText(/Clear search/i)).toBeInTheDocument();
     expect(screen.getByRole("button")).toBeInTheDocument();
-    expect(screen.getByRole("button")).toBeInTheDocument();
-    expect(screen.getByLabelText(/Select all transactions/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Search transactions\.\.\./i)).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
   });
 
 });
