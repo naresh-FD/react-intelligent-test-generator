@@ -13,7 +13,7 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
     "type-check": "tsc --noEmit",
     "prepare": "husky install",
-    "test": "jest",
+    "test": "jest --coverage && ts-node tools/react-testgen/src/coverage/report.ts",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:coverage:check": "jest --coverage --coverageThreshold=\"{\\\"global\\\":{\\\"branches\\\":80,\\\"functions\\\":80,\\\"lines\\\":80,\\\"statements\\\":80}}\"",

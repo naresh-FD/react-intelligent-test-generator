@@ -22,10 +22,14 @@ export function buildImports(
     const componentImport = relativeImport(options.testFilePath, options.sourceFilePath);
 
     const imports: string[] = [];
-    const testingImports = ['render'];
+    const testUtilsImport = relativeImport(
+        options.testFilePath,
+        path.join(process.cwd(), 'src', 'test-utils', 'renderWithProviders.tsx')
+    );
+    const testingImports = ['renderWithProviders'];
     if (options.needsScreen) testingImports.push('screen');
 
-    imports.push(`import { ${testingImports.join(', ')} } from "@testing-library/react";`);
+    imports.push(`import { ${testingImports.join(', ')} } from "${testUtilsImport}";`);
 
     if (options.usesUserEvent) {
         imports.push('import userEvent from "@testing-library/user-event";');

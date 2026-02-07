@@ -49,7 +49,7 @@ function selectorQuery(selector: SelectorInfo): string {
         case 'text':
             return `screen.getByRole("button", { name: /${escapeRegExp(selector.value)}/i })`;
         case 'role':
-            return `screen.getByRole("${selector.role || selector.value}")`;
+            return `screen.getAllByRole("${selector.role || selector.value}")[0]`;
         default:
             return 'screen.getByRole("button")';
     }

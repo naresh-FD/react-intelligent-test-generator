@@ -33,6 +33,10 @@ export function buildVariantProps(component: ComponentInfo): string[] {
 export function mockValueForProp(prop: PropInfo): string {
     const type = prop.type.toLowerCase();
 
+    if (prop.name.toLowerCase() === 'pagination') {
+        return '{ page: 1, totalPages: 1, total: 0, limit: 10, hasNext: false, hasPrev: false }';
+    }
+
     if (prop.name === 'children' || type.includes('reactnode')) {
         return '<div />';
     }

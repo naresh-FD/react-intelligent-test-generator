@@ -12,6 +12,7 @@ import { writeFile } from './fs';
 import { generateTests } from './generator';
 import { runJestCoverage } from './coverage/runner';
 import { readLineCoverage } from './coverage/reader';
+import { printCoverageTable } from './coverage/report';
 
 interface CliOptions {
     file?: string;
@@ -70,6 +71,8 @@ async function run() {
             runJestCoverage(testFilePath);
         }
     }
+
+    printCoverageTable();
 }
 
 run().catch((error) => {

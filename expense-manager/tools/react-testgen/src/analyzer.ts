@@ -176,18 +176,22 @@ function analyzeJsxNodes(nodes: Node[]): { buttons: SelectorInfo[]; inputs: Sele
     const inputs: SelectorInfo[] = [];
 
     for (const node of nodes) {
+        if (isConditionalNode(node)) continue;
         const tagName = getTagName(node);
         if (!tagName) continue;
+
+        const isIntrinsic = tagName.toLowerCase() === tagName;
+        const lowerTag = tagName.toLowerCase();
 
         const attrs = getAttributes(node);
         const text = getTextContent(node);
 
-        const dataTestId = attrs['data-testid'] || attrs['dataTestId'];
-        const ariaLabel = attrs['aria-label'];
-        const placeholder = attrs['placeholder'];
-        const role = attrs['role'];
+        const dataTestId = normalizeAttr(attrs['data-testid'] || attrs['dataTestId']);
+        const ariaLabel = normalizeAttr(attrs['aria-label']);
+        const placeholder = normalizeAttr(attrs['placeholder']);
+        const role = normalizeAttr(attrs['role']);
 
-        if (tagName === 'button' || role === 'button') {
+        if ((isIntrinsic && lowerTag === 'button') || role === 'button') {
             if (dataTestId) {
                 buttons.push({ strategy: 'testid', value: dataTestId });
             } else if (ariaLabel) {
@@ -199,7 +203,7 @@ function analyzeJsxNodes(nodes: Node[]): { buttons: SelectorInfo[]; inputs: Sele
             }
         }
 
-        if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
+        if (isIntrinsic && (lowerTag === 'input' || lowerTag === 'textarea' || lowerTag === 'select')) {
             if (dataTestId) {
                 inputs.push({ strategy: 'testid', value: dataTestId });
             } else if (ariaLabel) {
@@ -217,10 +221,10 @@ function analyzeJsxNodes(nodes: Node[]): { buttons: SelectorInfo[]; inputs: Sele
 
 function getTagName(node: Node): string | null {
     if (Node.isJsxElement(node)) {
-        return node.getOpeningElement().getTagNameNode().getText().toLowerCase();
+        return node.getOpeningElement().getTagNameNode().getText();
     }
     if (Node.isJsxSelfClosingElement(node)) {
-        return node.getTagNameNode().getText().toLowerCase();
+        return node.getTagNameNode().getText();
     }
     return null;
 }
@@ -255,7 +259,7 @@ function getAttributeValue(attr: JsxAttribute): string {
         if (Node.isStringLiteral(expr) || Node.isNoSubstitutionTemplateLiteral(expr)) {
             return expr.getLiteralText();
         }
-        return expr.getText();
+        return '';
     }
 
     return initializer.getText();
@@ -277,4 +281,33 @@ function getTextContent(node: Node): string {
         .filter((t) => t.length > 0);
 
     return exprs.join(' ');
+}
+
+function normalizeAttr(value: string | undefined): string | undefined {
+    if (!value) return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function isConditionalNode(node: Node): boolean {
+    let current: Node | undefined = node;
+    while (current) {
+        const parent = current.getParent();
+        if (!parent) break;
+
+        if (Node.isConditionalExpression(parent)) return true;
+        if (Node.isBinaryExpression(parent) && parent.getOperatorToken().getKind() === SyntaxKind.AmpersandAmpersandToken) {
+            return true;
+        }
+        if (Node.isJsxExpression(parent)) {
+            const expr = parent.getExpression();
+            if (expr && Node.isConditionalExpression(expr)) return true;
+            if (expr && Node.isBinaryExpression(expr) && expr.getOperatorToken().getKind() === SyntaxKind.AmpersandAmpersandToken) {
+                return true;
+            }
+        }
+
+        current = parent;
+    }
+    return false;
 }
