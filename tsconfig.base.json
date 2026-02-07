@@ -16,19 +16,6 @@
     "noFallthroughCasesInSwitch": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "forceConsistentCasingInFileNames": true,
-    "baseUrl": "./src",
-    "paths": {
-      "@/*": ["./*"],
-      "@components/*": ["components/*"],
-      "@contexts/*": ["contexts/*"],
-      "@hooks/*": ["hooks/*"],
-      "@services/*": ["services/*"],
-      "@types/*": ["types/*"],
-      "@utils/*": ["utils/*"],
-      "@pages/*": ["pages/*"]
-    }
-  },
-  "include": ["src"],
-  "exclude": ["node_modules"]
+    "forceConsistentCasingInFileNames": true
+  }
 }

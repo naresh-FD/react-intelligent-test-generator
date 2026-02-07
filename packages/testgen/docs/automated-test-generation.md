@@ -66,13 +66,13 @@ Unlike tools that regenerate all tests on every run, this system:
 
 ## 2. Key Principles
 
-| Principle | Description |
-|-----------|-------------|
+| Principle                                 | Description                                                                                    |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | **Generate tests ONLY for changed files** | The system processes only files that appear in Git's unstaged changes, not the entire codebase |
-| **Never touch unrelated files** | Files outside the change set are completely ignored |
-| **Manual tests are never overwritten** | If a test file exists without the `@generated` header, it is skipped |
-| **Generated tests are clearly marked** | All generated files include `/** @generated AUTO-GENERATED FILE - safe to overwrite */` |
-| **Deterministic, non-AI generation** | Output is based purely on AST analysis; no machine learning or external API calls |
+| **Never touch unrelated files**           | Files outside the change set are completely ignored                                            |
+| **Manual tests are never overwritten**    | If a test file exists without the `@generated` header, it is skipped                           |
+| **Generated tests are clearly marked**    | All generated files include `/** @generated AUTO-GENERATED FILE - safe to overwrite */`        |
+| **Deterministic, non-AI generation**      | Output is based purely on AST analysis; no machine learning or external API calls              |
 
 ---
 
@@ -107,13 +107,13 @@ Unlike tools that regenerate all tests on every run, this system:
 
 ### Component Breakdown
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| Git Integration | `child_process` / shell | Identifies changed files via `git diff` |
-| AST Parser | `@babel/parser` | Parses TypeScript/JSX to extract exports |
-| Type Extraction | `ts-morph` | Reads TypeScript interfaces for prop types |
-| Formatter | `prettier` | Ensures consistent code style |
-| Test Runner | `jest` + `@testing-library/react` | Executes generated tests |
+| Component       | Technology                        | Purpose                                    |
+| --------------- | --------------------------------- | ------------------------------------------ |
+| Git Integration | `child_process` / shell           | Identifies changed files via `git diff`    |
+| AST Parser      | `@babel/parser`                   | Parses TypeScript/JSX to extract exports   |
+| Type Extraction | `ts-morph`                        | Reads TypeScript interfaces for prop types |
+| Formatter       | `prettier`                        | Ensures consistent code style              |
+| Test Runner     | `jest` + `@testing-library/react` | Executes generated tests                   |
 
 ---
 
@@ -180,6 +180,7 @@ npm run test:generate:git
 ```
 
 **Behavior:**
+
 - Reads `git diff --name-only` for unstaged changes
 - Processes only modified `.ts`, `.tsx`, `.js`, `.jsx` files
 - Skips files already in `__tests__/` directories
@@ -194,6 +195,7 @@ npm run test:generate
 ```
 
 **Behavior:**
+
 - Scans entire `src/` directory
 - Processes all eligible source files
 - Respects manual test protection (never overwrites)
@@ -208,6 +210,7 @@ npm run test:generate:file src/components/MyComponent.tsx
 ```
 
 **Behavior:**
+
 - Processes exactly one specified file
 - Useful for targeted regeneration
 - Bypasses Git diff checks
@@ -231,12 +234,12 @@ This ensures the generator only processes files the developer is actively workin
 
 ### Why Only Unstaged Files Are Processed
 
-| File State | Processed? | Rationale |
-|------------|------------|-----------|
-| Unstaged (modified) | Yes | Active development; tests should match |
-| Staged | No | Developer has prepared for commit; don't interfere |
-| Committed | No | Part of version history; regeneration could cause conflicts |
-| Untracked | Optional | New files may need initial test scaffolding |
+| File State          | Processed? | Rationale                                                   |
+| ------------------- | ---------- | ----------------------------------------------------------- |
+| Unstaged (modified) | Yes        | Active development; tests should match                      |
+| Staged              | No         | Developer has prepared for commit; don't interfere          |
+| Committed           | No         | Part of version history; regeneration could cause conflicts |
+| Untracked           | Optional   | New files may need initial test scaffolding                 |
 
 ### Benefits for Large Repositories
 
@@ -253,23 +256,25 @@ This ensures the generator only processes files the developer is actively workin
 
 Tests are created in a `__tests__/` subdirectory adjacent to the source file:
 
-| Source File | Generated Test File |
-|-------------|---------------------|
+| Source File                 | Generated Test File                        |
+| --------------------------- | ------------------------------------------ |
 | `src/components/Button.tsx` | `src/components/__tests__/Button.test.tsx` |
-| `src/hooks/useAuth.ts` | `src/hooks/__tests__/useAuth.test.ts` |
-| `src/utils/formatters.ts` | `src/utils/__tests__/formatters.test.ts` |
-| `src/pages/Dashboard.tsx` | `src/pages/__tests__/Dashboard.test.tsx` |
+| `src/hooks/useAuth.ts`      | `src/hooks/__tests__/useAuth.test.ts`      |
+| `src/utils/formatters.ts`   | `src/utils/__tests__/formatters.test.ts`   |
+| `src/pages/Dashboard.tsx`   | `src/pages/__tests__/Dashboard.test.tsx`   |
 
 ### 7.2 Component vs Utility Detection
 
 The generator distinguishes between React components and utility functions:
 
 **Component Indicators:**
+
 - Export name starts with uppercase letter (PascalCase)
 - Source contains JSX syntax (`<`, `/>`, `</`)
 - Standard function declarations or arrow functions
 
 **Utility Indicators:**
+
 - Export name starts with lowercase letter (camelCase)
 - No JSX detected
 - Pure function or constant export
@@ -298,13 +303,13 @@ export type { SomeType }                // Type re-export
 
 The following patterns are automatically excluded from test generation:
 
-| Pattern | Example | Reason |
-|---------|---------|--------|
-| Type aliases | `export type Props = {}` | Not runtime code |
-| Interfaces | `export interface Config {}` | Not runtime code |
-| Props suffix | `export type ButtonProps` | Convention for prop types |
-| Context suffix | `export const ThemeContext` | Context objects need special handling |
-| I-prefix interfaces | `export interface IUser` | Hungarian notation for interfaces |
+| Pattern             | Example                      | Reason                                |
+| ------------------- | ---------------------------- | ------------------------------------- |
+| Type aliases        | `export type Props = {}`     | Not runtime code                      |
+| Interfaces          | `export interface Config {}` | Not runtime code                      |
+| Props suffix        | `export type ButtonProps`    | Convention for prop types             |
+| Context suffix      | `export const ThemeContext`  | Context objects need special handling |
+| I-prefix interfaces | `export interface IUser`     | Hungarian notation for interfaces     |
 
 ---
 
@@ -348,8 +353,8 @@ describe('Snapshot', () => {
 describe('Props', () => {
   // TODO: Add required props
   const defaultProps = {
-    label: "TODO",           // Extracted from ButtonProps
-    onClick: () => {},       // Function placeholder
+    label: 'TODO', // Extracted from ButtonProps
+    onClick: () => {}, // Function placeholder
   };
 
   it('applies custom className', () => {
@@ -486,11 +491,12 @@ import { Button } from '../Button';
 import { renderWithProviders } from '../../../test-utils/renderWithProviders';
 
 // NOT generated (path aliases)
-import { Button } from '@/components/Button';  // Avoided
-import { renderWithProviders } from '@/test-utils';  // Avoided
+import { Button } from '@/components/Button'; // Avoided
+import { renderWithProviders } from '@/test-utils'; // Avoided
 ```
 
 **Rationale:**
+
 - Works regardless of TypeScript path alias configuration
 - Simpler Jest module resolution
 - Fewer configuration dependencies
@@ -549,6 +555,7 @@ function renderWithProviders(ui, options = {}) {
 ```
 
 **Why MemoryRouter:**
+
 - Does not interact with browser history API
 - Prevents Jest hanging from history listeners
 - Allows controlled route testing with `initialEntries`
@@ -577,12 +584,12 @@ function AllProviders({ children, queryClient }) {
 
 The wrapper handles common test environment issues:
 
-| Issue | Solution |
-|-------|----------|
-| Missing QueryClient | Creates test-specific client with `retry: false` |
-| Router context errors | Provides MemoryRouter wrapper |
-| Auth context missing | Includes AuthProvider with test defaults |
-| QueryClient memory leaks | Cleans up clients after each test |
+| Issue                    | Solution                                         |
+| ------------------------ | ------------------------------------------------ |
+| Missing QueryClient      | Creates test-specific client with `retry: false` |
+| Router context errors    | Provides MemoryRouter wrapper                    |
+| Auth context missing     | Includes AuthProvider with test defaults         |
+| QueryClient memory leaks | Cleans up clients after each test                |
 
 ---
 
@@ -613,6 +620,7 @@ coverageThreshold: {
 ```
 
 **Rationale:**
+
 - 80% is achievable with generated scaffolds + minimal manual additions
 - Forces developers to test critical paths
 - Allows some flexibility for truly untestable code
@@ -635,7 +643,7 @@ Generated tests cannot:
 # Example CI configuration
 test:
   script:
-    - npm run testgen:all    # Generate missing tests
+    - npm run testgen:all # Generate missing tests
     - npm test -- --coverage # Run with coverage enforcement
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -649,14 +657,14 @@ Generated tests should be committed to the repository, not generated in CI.
 
 This system explicitly does NOT aim to:
 
-| Non-Goal | Explanation |
-|----------|-------------|
-| **Replace real test design** | Generated tests are scaffolds; assertions must be human-authored |
-| **Be a full AI test writer** | No machine learning, LLMs, or external AI services |
-| **Provide snapshot-only testing** | Snapshots are one tool among many in generated tests |
-| **Generate integration tests** | Focus is on unit/component tests |
-| **Mock API responses** | MSW or similar mocking is left to developers |
-| **Test implementation details** | Generated tests focus on public API and behavior |
+| Non-Goal                          | Explanation                                                      |
+| --------------------------------- | ---------------------------------------------------------------- |
+| **Replace real test design**      | Generated tests are scaffolds; assertions must be human-authored |
+| **Be a full AI test writer**      | No machine learning, LLMs, or external AI services               |
+| **Provide snapshot-only testing** | Snapshots are one tool among many in generated tests             |
+| **Generate integration tests**    | Focus is on unit/component tests                                 |
+| **Mock API responses**            | MSW or similar mocking is left to developers                     |
+| **Test implementation details**   | Generated tests focus on public API and behavior                 |
 
 ---
 
@@ -696,16 +704,16 @@ This system explicitly does NOT aim to:
 
 ## 15. Limitations
 
-| Limitation | Impact | Mitigation |
-|------------|--------|------------|
-| **TODO placeholders must be completed manually** | Generated tests pass but don't verify behavior | Enforce code review for test quality |
-| **Complex logic needs hand-written tests** | Edge cases, error handling not auto-generated | Add manual tests for critical paths |
-| **AST/type extraction is best-effort** | Some prop types may not be detected | Review generated `defaultProps` |
-| **No mock data generation** | Developers must provide realistic test data | Create shared test fixtures |
-| **Dynamic components are harder to test** | Components with complex conditional rendering | Manual test augmentation required |
-| **Context-dependent components** | May need custom provider configuration | Use `renderWithProviders` options |
-| **forwardRef components not detected** | Components using `forwardRef` are skipped | Write tests manually for these components |
-| **Async/Loading components** | Generated tests may fail if component shows loading state initially | Use `waitFor` or mock data providers to render final state |
+| Limitation                                       | Impact                                                              | Mitigation                                                 |
+| ------------------------------------------------ | ------------------------------------------------------------------- | ---------------------------------------------------------- |
+| **TODO placeholders must be completed manually** | Generated tests pass but don't verify behavior                      | Enforce code review for test quality                       |
+| **Complex logic needs hand-written tests**       | Edge cases, error handling not auto-generated                       | Add manual tests for critical paths                        |
+| **AST/type extraction is best-effort**           | Some prop types may not be detected                                 | Review generated `defaultProps`                            |
+| **No mock data generation**                      | Developers must provide realistic test data                         | Create shared test fixtures                                |
+| **Dynamic components are harder to test**        | Components with complex conditional rendering                       | Manual test augmentation required                          |
+| **Context-dependent components**                 | May need custom provider configuration                              | Use `renderWithProviders` options                          |
+| **forwardRef components not detected**           | Components using `forwardRef` are skipped                           | Write tests manually for these components                  |
+| **Async/Loading components**                     | Generated tests may fail if component shows loading state initially | Use `waitFor` or mock data providers to render final state |
 
 ---
 
@@ -713,23 +721,23 @@ This system explicitly does NOT aim to:
 
 ### Ideal Use Cases
 
-| Scenario | Recommendation |
-|----------|----------------|
-| **Greenfield projects** | Use from day one for consistent patterns |
-| **New component creation** | Generate immediately after creating component |
-| **Refactoring existing components** | Regenerate tests to match new structure |
-| **Increasing coverage quickly** | Run `testgen:all` for baseline coverage |
-| **Onboarding new developers** | Generated tests serve as documentation |
+| Scenario                            | Recommendation                                |
+| ----------------------------------- | --------------------------------------------- |
+| **Greenfield projects**             | Use from day one for consistent patterns      |
+| **New component creation**          | Generate immediately after creating component |
+| **Refactoring existing components** | Regenerate tests to match new structure       |
+| **Increasing coverage quickly**     | Run `testgen:all` for baseline coverage       |
+| **Onboarding new developers**       | Generated tests serve as documentation        |
 
 ### Suboptimal Use Cases
 
-| Scenario | Recommendation |
-|----------|----------------|
-| **Legacy codebase with existing tests** | Risk of conflicts; use file mode selectively |
-| **Highly dynamic components** | Portal-based, animation-heavy components need manual tests |
-| **Critical business logic** | Write tests manually with full assertions |
-| **Components with complex state machines** | Generated tests won't cover state transitions |
-| **Performance-sensitive rendering** | Profiling tests require manual setup |
+| Scenario                                   | Recommendation                                             |
+| ------------------------------------------ | ---------------------------------------------------------- |
+| **Legacy codebase with existing tests**    | Risk of conflicts; use file mode selectively               |
+| **Highly dynamic components**              | Portal-based, animation-heavy components need manual tests |
+| **Critical business logic**                | Write tests manually with full assertions                  |
+| **Components with complex state machines** | Generated tests won't cover state transitions              |
+| **Performance-sensitive rendering**        | Profiling tests require manual setup                       |
 
 ### When to Skip Generation
 
@@ -957,18 +965,18 @@ it('handles click events', async () => {
 
 ### How It Balances Automation and Control
 
-| Aspect | Automated | Human-Controlled |
-|--------|-----------|------------------|
-| Test file creation | Yes | - |
-| Import resolution | Yes | - |
-| Basic render tests | Yes | - |
-| Snapshot setup | Yes | - |
-| Prop extraction | Yes (best-effort) | Review required |
-| Meaningful assertions | - | Yes |
-| Mock data creation | - | Yes |
-| Edge case testing | - | Yes |
-| Error handling tests | - | Yes |
-| Accessibility validation | - | Yes |
+| Aspect                   | Automated         | Human-Controlled |
+| ------------------------ | ----------------- | ---------------- |
+| Test file creation       | Yes               | -                |
+| Import resolution        | Yes               | -                |
+| Basic render tests       | Yes               | -                |
+| Snapshot setup           | Yes               | -                |
+| Prop extraction          | Yes (best-effort) | Review required  |
+| Meaningful assertions    | -                 | Yes              |
+| Mock data creation       | -                 | Yes              |
+| Edge case testing        | -                 | Yes              |
+| Error handling tests     | -                 | Yes              |
+| Accessibility validation | -                 | Yes              |
 
 ### Final Recommendation
 
@@ -990,15 +998,15 @@ npm run test:generate:file <path>   # Process single file
 
 ### Configuration Files
 
-| File | Purpose |
-|------|---------|
-| `scripts/testgen/index.mjs` | Main generator entry point |
-| `scripts/testgen/analysis/tsxAnalyzer.mjs` | Component AST analyzer |
-| `scripts/testgen/generation/testWriter.mjs` | Test code generator |
-| `scripts/testgen/config.mjs` | Generator configuration |
-| `src/test-utils/renderWithProviders.tsx` | Test wrapper utility |
-| `src/test-utils/setupTests.ts` | Jest environment setup |
-| `jest.config.js` | Jest configuration |
+| File                                        | Purpose                    |
+| ------------------------------------------- | -------------------------- |
+| `scripts/testgen/index.mjs`                 | Main generator entry point |
+| `scripts/testgen/analysis/tsxAnalyzer.mjs`  | Component AST analyzer     |
+| `scripts/testgen/generation/testWriter.mjs` | Test code generator        |
+| `scripts/testgen/config.mjs`                | Generator configuration    |
+| `src/test-utils/renderWithProviders.tsx`    | Test wrapper utility       |
+| `src/test-utils/setupTests.ts`              | Jest environment setup     |
+| `jest.config.js`                            | Jest configuration         |
 
 ### Generated File Markers
 
