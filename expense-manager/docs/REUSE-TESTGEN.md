@@ -15,6 +15,8 @@ Rules:
 - Do NOT use any AI model or any external API.
 - Must be deterministic: same input produces same tests.
 - Must parse TSX using ts-morph (TypeScript AST) and derive selectors/assertions from actual JSX (data-testid, aria-label, button text, placeholder).
+- Must generate deterministic “happy-path + branch” tests in pass-2 for conditional JSX driven by props (e.g., showX, isLoading, hasData).
+- Must render components using renderWithProviders from src/test-utils/renderWithProviders.tsx (or configurable path).
 - Must generate tests next to component at __tests__/Component.test.tsx by default.
 - Must implement coverage loop using real Jest coverage output: run jest for the generated test file with --coverage --coverageReporters=json-summary --coverageReporters=json and read coverage/coverage-final.json to compute per-file line coverage for the component file. If < 50% and pass < 2, regenerate pass-2 with mock variants and rerun.
 - Avoid fake coverage estimation and avoid placeholder randomness.
@@ -22,6 +24,7 @@ Rules:
 - Provide CLI commands:
 	- npm run testgen -> generate for all src/**/*.tsx excluding tests
 	- npm run testgen:file src/path/Comp.tsx -> generate for one file
+- Print progress in terminal (per file and per coverage pass).
 - Write code under tools/react-testgen/ exactly with the file structure described below.
 
 Create these files exactly and fill them with production-grade TypeScript code:
@@ -50,6 +53,7 @@ After generating code:
 	"testgen:file": "ts-node tools/react-testgen/src/cli.ts --file"
 - Update "test" to: "jest --coverage && ts-node tools/react-testgen/src/coverage/report.ts"
 - Add brief README comments in cli.ts about usage.
+- Print a coverage table after npm run testgen finishes.
 - Ensure imports are correct and code compiles.
 ```
 
@@ -133,7 +137,6 @@ Generate tests for a single file:
 
 ```bash
 npm run testgen:file -- src/path/Component.tsx
-npm run testgen:file -- src/path/Component.ts
 ```
 
 ---
