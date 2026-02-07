@@ -2,7 +2,7 @@ import { ComponentInfo } from '../analyzer';
 import { buildHeader, buildImports, buildDescribeStart, buildDescribeEnd, buildTestBlock, buildAsyncTestBlock, joinBlocks, buildFileContent } from './templates';
 import { buildDefaultProps } from './mocks';
 import { buildRenderHelper } from './render';
-import { buildRenderAssertions, buildInteractionTests } from './interactions';
+import { buildRenderAssertions, buildInteractionTests, buildConditionalRenderTests } from './interactions';
 import { buildVariantRenders } from './variants';
 
 export interface GenerateOptions {
@@ -53,6 +53,11 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
         }
 
         if (options.pass === 2) {
+            const conditionalTests = buildConditionalRenderTests(component);
+            conditionalTests.forEach((testCase) => {
+                blocks.push(buildTestBlock(testCase.title, testCase.body));
+            });
+
             const variants = buildVariantRenders(component);
             if (variants.length > 0) {
                 blocks.push(buildTestBlock('renders variant props', variants));

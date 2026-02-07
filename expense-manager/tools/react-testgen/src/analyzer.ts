@@ -21,12 +21,18 @@ export interface SelectorInfo {
     role?: string;
 }
 
+export interface ConditionalElementInfo {
+    selector: SelectorInfo;
+    requiredProps: string[];
+}
+
 export interface ComponentInfo {
     name: string;
     exportType: 'default' | 'named';
     props: PropInfo[];
     buttons: SelectorInfo[];
     inputs: SelectorInfo[];
+    conditionalElements: ConditionalElementInfo[];
 }
 
 export function analyzeSourceFile(
@@ -59,7 +65,7 @@ export function analyzeSourceFile(
             ...candidate.getDescendantsOfKind(SyntaxKind.JsxSelfClosingElement),
         ];
 
-        const { buttons, inputs } = analyzeJsxNodes(jsxNodes);
+        const { buttons, inputs, conditionalElements } = analyzeJsxNodes(jsxNodes, props);
 
         components.push({
             name,
@@ -67,6 +73,7 @@ export function analyzeSourceFile(
             props,
             buttons,
             inputs,
+            conditionalElements,
         });
     }
 
@@ -171,12 +178,16 @@ function extractProps(candidate: Node, checker: TypeChecker): PropInfo[] {
     return props;
 }
 
-function analyzeJsxNodes(nodes: Node[]): { buttons: SelectorInfo[]; inputs: SelectorInfo[] } {
+function analyzeJsxNodes(
+    nodes: Node[],
+    props: PropInfo[]
+): { buttons: SelectorInfo[]; inputs: SelectorInfo[]; conditionalElements: ConditionalElementInfo[] } {
     const buttons: SelectorInfo[] = [];
     const inputs: SelectorInfo[] = [];
+    const conditionalElements: ConditionalElementInfo[] = [];
+    const propNames = new Set(props.map((prop) => prop.name));
 
     for (const node of nodes) {
-        if (isConditionalNode(node)) continue;
         const tagName = getTagName(node);
         if (!tagName) continue;
 
@@ -190,6 +201,18 @@ function analyzeJsxNodes(nodes: Node[]): { buttons: SelectorInfo[]; inputs: Sele
         const ariaLabel = normalizeAttr(attrs['aria-label']);
         const placeholder = normalizeAttr(attrs['placeholder']);
         const role = normalizeAttr(attrs['role']);
+
+        const conditionalProps = getConditionalProps(node, propNames);
+        if (conditionalProps.length > 0) {
+            const selector = buildElementSelector({ dataTestId, ariaLabel, placeholder, role, text });
+            if (selector) {
+                conditionalElements.push({
+                    selector,
+                    requiredProps: conditionalProps,
+                });
+            }
+            continue;
+        }
 
         if ((isIntrinsic && lowerTag === 'button') || role === 'button') {
             if (dataTestId) {
@@ -216,7 +239,7 @@ function analyzeJsxNodes(nodes: Node[]): { buttons: SelectorInfo[]; inputs: Sele
         }
     }
 
-    return { buttons, inputs };
+    return { buttons, inputs, conditionalElements };
 }
 
 function getTagName(node: Node): string | null {
@@ -287,6 +310,75 @@ function normalizeAttr(value: string | undefined): string | undefined {
     if (!value) return undefined;
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function buildElementSelector(params: {
+    dataTestId?: string;
+    ariaLabel?: string;
+    placeholder?: string;
+    role?: string;
+    text?: string;
+}): SelectorInfo | null {
+    if (params.dataTestId) return { strategy: 'testid', value: params.dataTestId };
+    if (params.ariaLabel) return { strategy: 'label', value: params.ariaLabel };
+    if (params.text) return { strategy: 'text', value: params.text };
+    if (params.placeholder) return { strategy: 'placeholder', value: params.placeholder };
+    if (params.role) return { strategy: 'role', value: params.role, role: params.role };
+    return null;
+}
+
+function getConditionalProps(node: Node, propNames: Set<string>): string[] {
+    const condition = getConditionExpression(node);
+    if (!condition) return [];
+
+    const found = new Set<string>();
+    collectPropNames(condition, propNames, found);
+
+    return Array.from(found);
+}
+
+function getConditionExpression(node: Node): Node | undefined {
+    let current: Node | undefined = node;
+    while (current) {
+        const parent = current.getParent();
+        if (!parent) return undefined;
+
+        if (Node.isConditionalExpression(parent)) return parent.getCondition();
+        if (Node.isBinaryExpression(parent) && parent.getOperatorToken().getKind() === SyntaxKind.AmpersandAmpersandToken) {
+            return parent.getLeft();
+        }
+        if (Node.isJsxExpression(parent)) {
+            const expr = parent.getExpression();
+            if (expr && Node.isConditionalExpression(expr)) return expr.getCondition();
+            if (expr && Node.isBinaryExpression(expr) && expr.getOperatorToken().getKind() === SyntaxKind.AmpersandAmpersandToken) {
+                return expr.getLeft();
+            }
+        }
+
+        current = parent;
+    }
+    return undefined;
+}
+
+function collectPropNames(condition: Node, propNames: Set<string>, found: Set<string>): void {
+    if (Node.isIdentifier(condition)) {
+        const name = condition.getText();
+        if (propNames.has(name)) found.add(name);
+    }
+
+    condition.forEachDescendant((desc) => {
+        if (Node.isIdentifier(desc)) {
+            const name = desc.getText();
+            if (propNames.has(name)) found.add(name);
+        }
+        if (Node.isPropertyAccessExpression(desc)) {
+            const expr = desc.getExpression();
+            if (Node.isIdentifier(expr) && expr.getText() === 'props') {
+                const name = desc.getName();
+                if (propNames.has(name)) found.add(name);
+            }
+        }
+    });
 }
 
 function isConditionalNode(node: Node): boolean {
