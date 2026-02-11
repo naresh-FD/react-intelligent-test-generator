@@ -180,7 +180,7 @@ describe("Button", () => {
 - ✅ Never overwrites manual tests (tests without the `@generated` header)
 - ✅ Only processes files you've changed (in git mode)
 - ✅ Skips index files and re-exports
-- ✅ Files with `@generated` header can be safely regenerated
+- ✅ Files with `@generated` header will be overwritten by the tool
 - ✅ Marked generated files clearly
 
 ### Developer Friendly
