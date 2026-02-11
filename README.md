@@ -1,0 +1,301 @@
+# React Intelligent Test Generator
+
+An automated test generation system for React 19 components that intelligently creates comprehensive test scaffolding, saving development time and ensuring consistent test coverage.
+
+## 🚀 What Can This Tool Do?
+
+### Core Capabilities
+
+#### 1. **Automatic Test Generation**
+- Automatically generates test files for React components and utility functions
+- Creates tests in `__tests__/` directories alongside your source files
+- Detects exports using Babel AST parsing for accurate component identification
+
+#### 2. **Intelligent Component Detection**
+- Identifies React components by analyzing:
+  - Function names starting with uppercase letters
+  - JSX syntax usage
+  - Export patterns (default and named exports)
+- Distinguishes between components, hooks, and utility functions
+
+#### 3. **Comprehensive Test Structure**
+Generated tests include structured test suites for:
+- **Rendering Tests**: Basic render validation and prop handling
+- **Snapshot Tests**: Visual regression testing
+- **Props Tests**: Required and optional prop validation
+- **User Interaction Tests**: Click handlers, form inputs, and user events
+- **Accessibility Tests**: ARIA labels and semantic HTML validation
+
+#### 4. **Watch Mode Development**
+- File watcher that automatically generates tests when you save component files
+- Integrated with webpack dev server for seamless development
+- Only regenerates tests for changed files
+
+#### 5. **Git Integration**
+- Generate tests only for unstaged files with `npm run testgen:git`
+- Safely generate tests for your changes before committing
+- Prevents accidental test generation for unchanged code
+
+#### 6. **Smart Safety Features**
+- **Never overwrites manual tests** - Only regenerates files marked with `@generated` header
+- **Skips irrelevant files** - Ignores `index.ts`, test files, and build directories
+- **Preserves your work** - Manual tests are completely safe
+
+#### 7. **TypeScript Support**
+- Full TypeScript support with type extraction
+- Detects required props from TypeScript interfaces
+- Generates type-safe test code
+
+#### 8. **Provider-Aware Testing**
+- Includes `renderWithProviders` utility
+- Automatically wraps components with necessary context providers
+- Supports React Router, React Query, and custom providers
+
+#### 9. **Coverage Reporting**
+- Integrated coverage reporting after test runs
+- Visual coverage tables showing file-level metrics
+- Enforce coverage thresholds (e.g., 80%)
+
+## 📋 Available Commands
+
+### Development
+```bash
+npm start                    # Run dev server + test generator watcher
+npm run start:no-testgen    # Run dev server only (no test generation)
+```
+
+### Test Generation
+```bash
+npm run testgen              # Generate tests for ALL source files
+npm run testgen:git          # Generate tests for git unstaged files only (safest)
+npm run testgen:file <path>  # Generate test for a single file
+```
+
+### Testing
+```bash
+npm test                     # Run all tests
+npm run test:watch           # Run tests in watch mode
+npm run test:coverage        # Run with coverage report
+npm run test:coverage:check  # Enforce 80% coverage threshold
+```
+
+### Build & Lint
+```bash
+npm run build                # Build the project
+npm run lint                 # Run ESLint
+```
+
+## 🎯 How It Works
+
+### 1. Component File Detection
+The tool analyzes your source code to find:
+- React components (uppercase function names with JSX)
+- Custom hooks (functions starting with `use`)
+- Utility functions and helpers
+- TypeScript interfaces and types
+
+### 2. AST Parsing
+Uses Babel parser to:
+- Extract all exports from files
+- Detect component props and their types
+- Identify JSX elements and interactive elements
+
+### 3. Test Template Generation
+Creates structured tests with:
+- Import statements with correct relative paths
+- Default props setup with type inference
+- Organized describe blocks for different test categories
+- TODO placeholders for developer customization
+
+### 4. File System Integration
+- Creates `__tests__/` directories automatically
+- Names test files to match source files (e.g., `Button.tsx` → `Button.test.tsx`)
+- Respects `.gitignore` and skips `node_modules`, `dist`, etc.
+
+## 🔍 Example: What Gets Generated
+
+For a component like this:
+```tsx
+// src/components/Button.tsx
+interface ButtonProps {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}
+
+export default function Button({ label, onClick, disabled }: ButtonProps) {
+  return (
+    <button onClick={onClick} disabled={disabled}>
+      {label}
+    </button>
+  );
+}
+```
+
+The tool generates:
+```tsx
+// src/components/__tests__/Button.test.tsx
+/** @generated AUTO-GENERATED FILE - safe to overwrite */
+import * as React from "react";
+import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { renderWithProviders } from "../../../test-utils/renderWithProviders";
+import Button from "../Button";
+
+describe("Button", () => {
+  const defaultProps = {
+    label: "TODO",
+    onClick: () => { /* TODO */ },
+  };
+
+  describe("Rendering", () => {
+    it("renders without crashing", () => {
+      renderWithProviders(<Button {...defaultProps} />);
+    });
+    // ... more tests
+  });
+
+  describe("User Interactions", () => {
+    it("handles click events", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<Button {...defaultProps} />);
+      // TODO: Add interaction test
+    });
+  });
+
+  describe("Accessibility", () => {
+    it("has proper accessibility attributes", () => {
+      renderWithProviders(<Button {...defaultProps} />);
+      // TODO: Add accessibility checks
+    });
+  });
+});
+```
+
+## ✨ Key Features
+
+### Safety First
+- ✅ Never overwrites manual tests
+- ✅ Only processes files you've changed (in git mode)
+- ✅ Skips index files and re-exports
+- ✅ Marked generated files clearly
+
+### Developer Friendly
+- ✅ TODO comments guide you on what to fill in
+- ✅ Proper import paths automatically calculated
+- ✅ Props detection with TypeScript type information
+- ✅ Consistent test structure across the codebase
+
+### Integration Ready
+- ✅ Works with existing Jest configuration
+- ✅ Compatible with Testing Library best practices
+- ✅ Supports React Query, Router, and other providers
+- ✅ Prettier formatting applied automatically
+
+## 📚 Documentation
+
+Detailed guides are available in `/packages/testgen/docs/`:
+- [Getting Started Guide](./packages/testgen/docs/GETTING-STARTED-TESTGEN.md) - Complete setup and usage
+- [Automated Test Generation](./packages/testgen/docs/automated-test-generation.md) - Technical details
+- [Reuse in Another Repo](./packages/testgen/docs/REUSE-TESTGEN.md) - Installation guide
+
+## 🔧 Project Structure
+
+```
+react-intelligent-test-generator/
+├── packages/
+│   └── testgen/               # Test generation engine
+│       ├── src/               # Core generator logic
+│       ├── scripts/           # CLI and utilities
+│       └── docs/              # Documentation
+├── examples/
+│   └── expense-manager/       # Example React app with test generation
+│       ├── src/
+│       │   ├── components/    # React components
+│       │   ├── hooks/         # Custom hooks
+│       │   ├── services/      # Business logic
+│       │   ├── utils/         # Utility functions
+│       │   └── test-utils/    # Test helpers
+│       └── scripts/
+│           └── testgen/       # Test generation implementation
+└── README.md                  # This file
+```
+
+## 🚦 Quick Start
+
+### 1. Install Dependencies
+```bash
+npm install
+```
+
+### 2. Start Development
+```bash
+npm start
+```
+This runs the dev server AND watches for file changes to generate tests automatically.
+
+### 3. Edit a Component
+Make changes to any `.tsx` or `.ts` file in the `src/` directory.
+
+### 4. See the Magic
+- Tests are automatically generated in the `__tests__/` directory
+- Run `npm test` to execute them
+- Fill in TODO placeholders to complete the tests
+
+### 5. Before Committing
+```bash
+npm run testgen:git          # Generate tests for your changes
+npm test                     # Verify tests pass
+npm run test:coverage:check  # Ensure 80% coverage
+```
+
+## 🎓 Best Practices
+
+1. **Use Git Mode for Safety**: `npm run testgen:git` only generates tests for your changes
+2. **Fill in TODO Placeholders**: Replace placeholder values with realistic test data
+3. **Add Branch Coverage**: Generated tests provide baseline; add tests for edge cases
+4. **Use Proper Selectors**: Replace generic queries with specific accessible names
+5. **Test User Interactions**: Add real interaction tests for all handlers
+6. **Check Coverage**: Run `npm run test:coverage:check` before committing
+
+## 🛠️ Technologies
+
+- **TypeScript** - Type-safe code generation
+- **Babel Parser** - AST parsing for export detection
+- **ts-morph** - TypeScript type extraction
+- **Jest** - Test runner
+- **Testing Library** - React component testing
+- **Chokidar** - File watching
+- **Prettier** - Code formatting
+
+## 📊 Coverage Goals
+
+The tool helps achieve:
+- **80%+ code coverage** as enforced by coverage checks
+- **Consistent test structure** across all components
+- **Baseline test scaffolding** that you enhance with specific assertions
+
+## 🤝 Contributing
+
+This tool is designed to be extended. You can:
+- Customize test templates in `packages/testgen/src/generator/templates.ts`
+- Add new test patterns for specific component types
+- Extend the AST parser for additional detection rules
+- Integrate with CI/CD pipelines
+
+## 📝 License
+
+MIT
+
+---
+
+## Summary: What This Tool Does For You
+
+✨ **Saves Time**: No more writing boilerplate test structure manually  
+🎯 **Ensures Consistency**: All tests follow the same proven structure  
+🔒 **Safe**: Never overwrites your manual tests  
+📈 **Improves Coverage**: Generates comprehensive test scaffolding  
+🚀 **Developer Friendly**: Integrates seamlessly with your workflow  
+🧪 **Testing Library Best Practices**: Uses modern testing patterns  
+
+**Bottom Line**: Focus on writing meaningful test assertions while the tool handles the repetitive scaffolding and structure. Write components, save files, and tests appear automatically!
