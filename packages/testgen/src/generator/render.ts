@@ -1,11 +1,15 @@
 import { ComponentInfo } from '../analyzer';
+import { getRenderFunctionName } from './templates';
 
-export function buildRenderHelper(component: ComponentInfo): string {
-    const renderFn = component.usesRouter ? 'render' : 'renderWithProviders';
+export function buildRenderHelper(component: ComponentInfo, sourceFilePath?: string): string {
+    const renderFn = sourceFilePath
+        ? getRenderFunctionName(component, sourceFilePath)
+        : (component.usesRouter ? 'render' : 'renderWithProviders');
+
     const renderOptions: string[] = [];
-    if (!component.usesRouter && component.usesAuthHook) {
+    if (renderFn === 'renderWithProviders' && component.usesAuthHook) {
         renderOptions.push('withAuthProvider: false');
-        const authState = deriveAuthState(component.name);
+        const authState = deriveAuthState(component);
         renderOptions.push(`authState: ${authState}`);
     }
     const optionsSuffix = renderOptions.length > 0 ? `, { ${renderOptions.join(', ')} }` : '';
@@ -19,11 +23,13 @@ export function buildRenderHelper(component: ComponentInfo): string {
     return ['const renderUI = () =>', `  ${renderFn}(<${component.name} />${optionsSuffix});`].join('\n');
 }
 
-function deriveAuthState(componentName: string): string {
-    if (/PublicRoute/i.test(componentName)) {
+function deriveAuthState(component: ComponentInfo): string {
+    const name = component.name;
+    // Check for common auth-related route patterns generically
+    if (/public/i.test(name) || /login/i.test(name) || /register/i.test(name) || /signup/i.test(name)) {
         return '{ isAuthenticated: false, isLoading: false }';
     }
-    if (/ProtectedRoute/i.test(componentName)) {
+    if (/protected/i.test(name) || /private/i.test(name) || /auth/i.test(name) || /dashboard/i.test(name)) {
         return '{ isAuthenticated: true, isLoading: false }';
     }
     return '{ isAuthenticated: false, isLoading: false }';

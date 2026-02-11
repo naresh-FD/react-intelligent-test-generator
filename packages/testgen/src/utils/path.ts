@@ -4,20 +4,23 @@ import { exists, listFilesRecursive } from '../fs';
 
 export function isTestFile(filePath: string): boolean {
     const normalized = filePath.replace(/\\/g, '/');
-    return normalized.includes(`/${TESTS_DIR_NAME}/`) || normalized.endsWith('.test.tsx');
+    return normalized.includes(`/${TESTS_DIR_NAME}/`) || normalized.endsWith('.test.tsx') || normalized.endsWith('.test.ts');
 }
 
 export function scanSourceFiles(): string[] {
     const files = listFilesRecursive(SRC_DIR);
     return files.filter(
-        (file) => file.endsWith('.tsx') && !isTestFile(file)
+        (file) => (file.endsWith('.tsx') || file.endsWith('.ts')) && !isTestFile(file)
     );
 }
 
 export function getTestFilePath(sourceFilePath: string): string {
     const dir = path.dirname(sourceFilePath);
-    const base = path.basename(sourceFilePath, path.extname(sourceFilePath));
-    return path.join(dir, TESTS_DIR_NAME, `${base}.test.tsx`);
+    const ext = path.extname(sourceFilePath);
+    const base = path.basename(sourceFilePath, ext);
+    // Use .test.tsx for .tsx files, .test.ts for .ts files
+    const testExt = ext === '.ts' ? '.test.ts' : '.test.tsx';
+    return path.join(dir, TESTS_DIR_NAME, `${base}${testExt}`);
 }
 
 export function relativeImport(fromFile: string, toFile: string): string {
@@ -27,7 +30,11 @@ export function relativeImport(fromFile: string, toFile: string): string {
     return rel.replace(/\.tsx?$/, '');
 }
 
-export function resolveRenderWithProvidersPath(sourceFilePath: string): string {
+/**
+ * Searches for a renderWithProviders utility file.
+ * Returns null if not found (caller should fall back to plain render).
+ */
+export function resolveRenderWithProvidersPath(sourceFilePath: string): string | null {
     let current = path.dirname(sourceFilePath);
     while (true) {
         if (path.basename(current) === 'src') {
@@ -47,5 +54,6 @@ export function resolveRenderWithProvidersPath(sourceFilePath: string): string {
         current = parent;
     }
 
-    return path.join(SRC_DIR, 'test-utils', 'renderWithProviders.tsx');
+    // Return null instead of a potentially non-existent path
+    return null;
 }

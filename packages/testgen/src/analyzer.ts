@@ -26,15 +26,40 @@ export interface ConditionalElementInfo {
     requiredProps: string[];
 }
 
+export interface HookUsage {
+    name: string;
+    importSource?: string;
+}
+
+export interface ContextUsage {
+    name: string;
+    importSource?: string;
+}
+
+export interface FormElementInfo {
+    tag: 'select' | 'form' | 'textarea';
+    selector: SelectorInfo;
+    options?: string[];  // for select elements
+}
+
 export interface ComponentInfo {
     name: string;
     exportType: 'default' | 'named';
     props: PropInfo[];
     buttons: SelectorInfo[];
     inputs: SelectorInfo[];
+    selects: FormElementInfo[];
+    forms: FormElementInfo[];
     conditionalElements: ConditionalElementInfo[];
     usesRouter: boolean;
     usesAuthHook: boolean;
+    hooks: HookUsage[];
+    contexts: ContextUsage[];
+    usesUseEffect: boolean;
+    usesUseState: boolean;
+    hasForwardRef: boolean;
+    usesNavigation: boolean;
+    links: SelectorInfo[];
 }
 
 export function analyzeSourceFile(
@@ -67,7 +92,7 @@ export function analyzeSourceFile(
             ...candidate.getDescendantsOfKind(SyntaxKind.JsxSelfClosingElement),
         ];
 
-        const { buttons, inputs, conditionalElements } = analyzeJsxNodes(jsxNodes, props);
+        const { buttons, inputs, conditionalElements, selects, forms, links } = analyzeJsxNodes(jsxNodes, props);
         const usesRouter = jsxNodes.some((node) => {
             const tagName = getTagName(node);
             return !!tagName && isRouterTag(tagName);
@@ -75,15 +100,32 @@ export function analyzeSourceFile(
         const usesAuthHook =
             fileUsesNamedImport(sourceFile, 'useAuth') || fileUsesIdentifierCall(sourceFile, 'useAuth');
 
+        const hooks = detectHooks(candidate, sourceFile);
+        const contexts = detectContexts(sourceFile);
+        const usesUseEffect = fileUsesIdentifierCall(sourceFile, 'useEffect');
+        const usesUseState = fileUsesIdentifierCall(sourceFile, 'useState');
+        const hasForwardRef = candidate.getText().includes('forwardRef');
+        const usesNavigation = fileUsesIdentifierCall(sourceFile, 'useNavigate') ||
+            fileUsesIdentifierCall(sourceFile, 'useHistory');
+
         components.push({
             name,
             exportType,
             props,
             buttons,
             inputs,
+            selects,
+            forms,
+            links,
             conditionalElements,
             usesRouter,
             usesAuthHook,
+            hooks,
+            contexts,
+            usesUseEffect,
+            usesUseState,
+            hasForwardRef,
+            usesNavigation,
         });
     }
 
@@ -114,8 +156,28 @@ function getComponentCandidates(sourceFile: SourceFile): Node[] {
         if (!isComponentName(name)) continue;
         const initializer = variable.getInitializer();
         if (!initializer) continue;
+
+        // Direct arrow function or function expression
         if (Node.isArrowFunction(initializer) || Node.isFunctionExpression(initializer)) {
             if (hasJsx(initializer)) candidates.push(variable);
+            continue;
+        }
+
+        // React.memo() / memo() / forwardRef() / React.forwardRef() wrapped components
+        if (Node.isCallExpression(initializer)) {
+            const callee = initializer.getExpression().getText();
+            if (callee === 'memo' || callee === 'React.memo' ||
+                callee === 'forwardRef' || callee === 'React.forwardRef') {
+                const args = initializer.getArguments();
+                if (args.length > 0 && hasJsx(args[0])) {
+                    candidates.push(variable);
+                    continue;
+                }
+            }
+            // HOC patterns: withRouter(Comp), connect(...)(Comp)
+            if (hasJsx(initializer)) {
+                candidates.push(variable);
+            }
         }
     }
 
@@ -191,9 +253,19 @@ function extractProps(candidate: Node, checker: TypeChecker): PropInfo[] {
 function analyzeJsxNodes(
     nodes: Node[],
     props: PropInfo[]
-): { buttons: SelectorInfo[]; inputs: SelectorInfo[]; conditionalElements: ConditionalElementInfo[] } {
+): {
+    buttons: SelectorInfo[];
+    inputs: SelectorInfo[];
+    selects: FormElementInfo[];
+    forms: FormElementInfo[];
+    links: SelectorInfo[];
+    conditionalElements: ConditionalElementInfo[];
+} {
     const buttons: SelectorInfo[] = [];
     const inputs: SelectorInfo[] = [];
+    const selects: FormElementInfo[] = [];
+    const forms: FormElementInfo[] = [];
+    const links: SelectorInfo[] = [];
     const conditionalElements: ConditionalElementInfo[] = [];
     const propNames = new Set(props.map((prop) => prop.name));
 
@@ -222,11 +294,14 @@ function analyzeJsxNodes(
                     requiredProps: conditionalProps,
                 });
             }
-            // Skip elements rendered only under internal state/derived conditions.
             continue;
         }
 
-        if ((isIntrinsic && lowerTag === 'button') || role === 'button') {
+        const isButton = (isIntrinsic && lowerTag === 'button') ||
+            role === 'button' ||
+            isButtonLikeComponent(tagName);
+
+        if (isButton) {
             if (dataTestId) {
                 buttons.push({ strategy: 'testid', value: dataTestId });
             } else if (ariaLabel) {
@@ -238,7 +313,18 @@ function analyzeJsxNodes(
             }
         }
 
-        if (isIntrinsic && (lowerTag === 'input' || lowerTag === 'textarea' || lowerTag === 'select')) {
+        const isSelect = (isIntrinsic && lowerTag === 'select') ||
+            isSelectLikeComponent(tagName);
+
+        if (isSelect) {
+            const selector = dataTestId
+                ? { strategy: 'testid' as const, value: dataTestId }
+                : ariaLabel
+                    ? { strategy: 'label' as const, value: ariaLabel }
+                    : { strategy: 'role' as const, value: 'combobox', role: 'combobox' };
+            selects.push({ tag: 'select', selector });
+        } else if ((isIntrinsic && (lowerTag === 'input' || lowerTag === 'textarea')) ||
+                   isInputLikeComponent(tagName)) {
             if (dataTestId) {
                 inputs.push({ strategy: 'testid', value: dataTestId });
             } else if (ariaLabel) {
@@ -249,9 +335,30 @@ function analyzeJsxNodes(
                 inputs.push({ strategy: 'role', value: 'textbox', role: 'textbox' });
             }
         }
+
+        if ((isIntrinsic && lowerTag === 'form') || tagName === 'Form') {
+            const selector = dataTestId
+                ? { strategy: 'testid' as const, value: dataTestId }
+                : ariaLabel
+                    ? { strategy: 'label' as const, value: ariaLabel }
+                    : { strategy: 'role' as const, value: 'form', role: 'form' };
+            forms.push({ tag: 'form', selector });
+        }
+
+        if ((isIntrinsic && lowerTag === 'a') || tagName === 'Link' || tagName === 'NavLink') {
+            if (dataTestId) {
+                links.push({ strategy: 'testid', value: dataTestId });
+            } else if (ariaLabel) {
+                links.push({ strategy: 'label', value: ariaLabel });
+            } else if (text) {
+                links.push({ strategy: 'text', value: text });
+            } else {
+                links.push({ strategy: 'role', value: 'link', role: 'link' });
+            }
+        }
     }
 
-    return { buttons, inputs, conditionalElements };
+    return { buttons, inputs, selects, forms, links, conditionalElements };
 }
 
 function getTagName(node: Node): string | null {
@@ -339,12 +446,85 @@ function buildElementSelector(params: {
     return null;
 }
 
+function detectHooks(candidate: Node, sourceFile: SourceFile): HookUsage[] {
+    const hooks: HookUsage[] = [];
+    const seen = new Set<string>();
+
+    const calls = candidate.getDescendantsOfKind(SyntaxKind.CallExpression);
+    for (const call of calls) {
+        const expr = call.getExpression();
+        const name = expr.getText();
+        if (/^use[A-Z]/.test(name) && !seen.has(name)) {
+            seen.add(name);
+            const importSource = getImportSourceForIdentifier(sourceFile, name);
+            hooks.push({ name, importSource });
+        }
+    }
+
+    return hooks;
+}
+
+function detectContexts(sourceFile: SourceFile): ContextUsage[] {
+    const contexts: ContextUsage[] = [];
+    const seen = new Set<string>();
+
+    const calls = sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression);
+    for (const call of calls) {
+        const expr = call.getExpression();
+        if (expr.getText() === 'useContext') {
+            const args = call.getArguments();
+            if (args.length > 0) {
+                const contextName = args[0].getText();
+                if (!seen.has(contextName)) {
+                    seen.add(contextName);
+                    const importSource = getImportSourceForIdentifier(sourceFile, contextName);
+                    contexts.push({ name: contextName, importSource });
+                }
+            }
+        }
+    }
+
+    return contexts;
+}
+
+function getImportSourceForIdentifier(sourceFile: SourceFile, identifier: string): string | undefined {
+    for (const decl of sourceFile.getImportDeclarations()) {
+        const namedImports = decl.getNamedImports();
+        for (const named of namedImports) {
+            if (named.getName() === identifier) {
+                return decl.getModuleSpecifierValue();
+            }
+        }
+        const defaultImport = decl.getDefaultImport();
+        if (defaultImport && defaultImport.getText() === identifier) {
+            return decl.getModuleSpecifierValue();
+        }
+    }
+    return undefined;
+}
+
+/** Detects custom component library button elements (MUI, Chakra, Ant, etc.) */
+function isButtonLikeComponent(tagName: string): boolean {
+    return /^(Button|IconButton|Fab|ButtonBase|ToggleButton|LoadingButton|SubmitButton)$/.test(tagName);
+}
+
+/** Detects custom component library input elements */
+function isInputLikeComponent(tagName: string): boolean {
+    return /^(Input|TextField|TextInput|TextArea|NumberInput|SearchInput|InputBase|FormInput)$/.test(tagName);
+}
+
+/** Detects custom component library select elements */
+function isSelectLikeComponent(tagName: string): boolean {
+    return /^(Select|Dropdown|Autocomplete|Combobox|Listbox|SelectField|FormSelect)$/.test(tagName);
+}
+
 function isRouterTag(tagName: string): boolean {
     return (
         tagName === 'BrowserRouter' ||
         tagName === 'Router' ||
         tagName === 'MemoryRouter' ||
-        tagName === 'HashRouter'
+        tagName === 'HashRouter' ||
+        tagName === 'RouterProvider'
     );
 }
 
