@@ -24,16 +24,21 @@ export function buildImports(
     const needsPlainRender = components.some((c) => c.usesRouter);
     const needsProviders = components.some((c) => !c.usesRouter);
 
-    if (needsPlainRender) {
+    // Check if renderWithProviders actually exists in this project
+    const renderWithProvidersPath = resolveRenderWithProvidersPath(options.sourceFilePath);
+    const hasRenderWithProviders = renderWithProvidersPath !== null;
+
+    if (needsPlainRender || !hasRenderWithProviders) {
+        // Use plain render from RTL (either for router components, or when renderWithProviders doesn't exist)
         const rtlImports = ['render'];
         if (options.needsScreen) rtlImports.push('screen');
         imports.push(`import { ${rtlImports.join(', ')} } from "@testing-library/react";`);
     }
 
-    if (needsProviders) {
+    if (needsProviders && hasRenderWithProviders) {
         const testUtilsImport = relativeImport(
             options.testFilePath,
-            resolveRenderWithProvidersPath(options.sourceFilePath)
+            renderWithProvidersPath
         );
         const testingImports = ['renderWithProviders'];
         if (!needsPlainRender && options.needsScreen) testingImports.push('screen');
@@ -57,6 +62,15 @@ export function buildImports(
     }
 
     return imports.join('\n');
+}
+
+/**
+ * Determines which render function to use based on project structure.
+ */
+export function getRenderFunctionName(component: ComponentInfo, sourceFilePath: string): string {
+    if (component.usesRouter) return 'render';
+    const hasProviders = resolveRenderWithProvidersPath(sourceFilePath) !== null;
+    return hasProviders ? 'renderWithProviders' : 'render';
 }
 
 export function buildDescribeStart(component: ComponentInfo): string {

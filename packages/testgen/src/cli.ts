@@ -13,6 +13,9 @@ import { analyzeSourceFile } from './analyzer';
 import { scanSourceFiles, getTestFilePath, isTestFile } from './utils/path';
 import { writeFile } from './fs';
 import { generateTests } from './generator';
+import { generateBarrelTest } from './generator/barrel';
+import { generateUtilityTest } from './generator/utility';
+import { generateContextTest } from './generator/context';
 
 interface CliOptions {
     file?: string;
@@ -76,18 +79,57 @@ async function run() {
     for (const [index, filePath] of files.entries()) {
         console.log(`\n[${index + 1}/${files.length}] Processing ${filePath}`);
         const sourceFile = getSourceFile(project, filePath);
-        const components = analyzeSourceFile(sourceFile, project, checker);
 
-        if (components.length === 0) {
-            console.log('  - No exported components found. Skipping.');
+        // Check if this is a barrel/index file (only re-exports, no components)
+        const isBarrel = isBarrelFile(filePath, sourceFile.getText());
+        if (isBarrel) {
+            const testFilePath = getTestFilePath(filePath);
+            console.log(`  - Barrel file detected. Writing test: ${testFilePath}`);
+            const barrelTest = generateBarrelTest(sourceFile, testFilePath, filePath);
+            if (barrelTest) {
+                writeFile(testFilePath, barrelTest);
+                console.log('  - Barrel test file generated/updated.');
+            } else {
+                console.log('  - No named exports found in barrel. Skipping.');
+            }
             continue;
         }
 
         const testFilePath = getTestFilePath(filePath);
+
+        // Context files get special handling (Provider + hook testing)
+        const isContextFile = isContextProviderFile(filePath, sourceFile.getText());
+        if (isContextFile) {
+            console.log('  - Context provider file detected. Generating context tests...');
+            const contextTest = generateContextTest(sourceFile, checker, testFilePath, filePath);
+            if (contextTest) {
+                console.log(`  - Writing context test file: ${testFilePath}`);
+                writeFile(testFilePath, contextTest);
+                console.log('  - Context test file generated/updated.');
+                continue;
+            }
+        }
+
+        const components = analyzeSourceFile(sourceFile, project, checker);
+
+        if (components.length === 0) {
+            // Try utility/function test generation for non-component files
+            console.log('  - No React components found. Trying utility test generation...');
+            const utilityTest = generateUtilityTest(sourceFile, checker, testFilePath, filePath);
+            if (utilityTest) {
+                console.log(`  - Writing utility test file: ${testFilePath}`);
+                writeFile(testFilePath, utilityTest);
+                console.log('  - Utility test file generated/updated.');
+            } else {
+                console.log('  - No exported functions found. Skipping.');
+            }
+            continue;
+        }
+
         console.log(`  - Writing test file: ${testFilePath}`);
 
         const generatedTest = generateTests(components, {
-            pass: 1,
+            pass: 2,
             testFilePath,
             sourceFilePath: filePath,
         });
@@ -95,6 +137,31 @@ async function run() {
         writeFile(testFilePath, generatedTest);
         console.log('  - Test file generated/updated.');
     }
+}
+
+function isContextProviderFile(filePath: string, content: string): boolean {
+    const basename = path.basename(filePath).toLowerCase();
+    // Detect context files by name or content patterns
+    if (basename.includes('context')) return true;
+    // Check for createContext usage and Provider export
+    return content.includes('createContext') && (
+        content.includes('Provider') || content.includes('useContext')
+    );
+}
+
+function isBarrelFile(filePath: string, content: string): boolean {
+    const basename = path.basename(filePath);
+    // index.ts or index.tsx files that primarily re-export
+    if (!/^index\.(ts|tsx)$/.test(basename)) return false;
+
+    const lines = content.split('\n').filter((l) => l.trim().length > 0);
+    if (lines.length === 0) return false;
+
+    // Check if most lines are export/import statements
+    const exportLines = lines.filter(
+        (l) => /^\s*(export\s|import\s)/.test(l)
+    );
+    return exportLines.length >= lines.length * 0.7;
 }
 
 function getGitUnstagedFiles(): string[] {
@@ -110,7 +177,7 @@ function getGitUnstagedFiles(): string[] {
             .filter((line) => line.length > 0)
             .map((line) => (path.isAbsolute(line) ? line : path.join(process.cwd(), line)))
             .filter((filePath) => fs.existsSync(filePath))
-            .filter((filePath) => filePath.endsWith('.tsx'))
+            .filter((filePath) => filePath.endsWith('.tsx') || filePath.endsWith('.ts'))
             .filter((filePath) => !isTestFile(filePath));
     } catch {
         return [];
