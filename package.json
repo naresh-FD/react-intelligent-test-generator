@@ -14,6 +14,7 @@
     "testgen": "npm --workspace examples/expense-manager run testgen",
     "testgen:file": "npm --workspace examples/expense-manager run testgen:file",
     "testgen:git": "npm --workspace examples/expense-manager run testgen:git",
-    "docs:generate": "node packages/testgen/scripts/docs/generate-docs.mjs"
+    "docs:generate": "node packages/testgen/scripts/docs/generate-docs.mjs",
+    "testgen:all": "npm --workspace examples/expense-manager run testgen:all"
   }
 }

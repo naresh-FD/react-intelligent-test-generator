@@ -1,6 +1,7 @@
 /*
 Usage:
-  npm run testgen
+  npm run testgen             # uses unstaged git changes by default
+  npm run testgen:all         # scans all source files
   npm run testgen:file -- src/path/Component.tsx
 */
 
@@ -12,13 +13,11 @@ import { analyzeSourceFile } from './analyzer';
 import { scanSourceFiles, getTestFilePath, isTestFile } from './utils/path';
 import { writeFile } from './fs';
 import { generateTests } from './generator';
-import { runJestCoverage } from './coverage/runner';
-import { readLineCoverage } from './coverage/reader';
-import { printCoverageTable } from './coverage/report';
 
 interface CliOptions {
     file?: string;
     gitUnstaged?: boolean;
+    all?: boolean;
 }
 
 function parseArgs(argv: string[]): CliOptions {
@@ -30,6 +29,9 @@ function parseArgs(argv: string[]): CliOptions {
     if (argv.includes('--git-unstaged')) {
         options.gitUnstaged = true;
     }
+    if (argv.includes('--all')) {
+        options.all = true;
+    }
     return options;
 }
 
@@ -37,17 +39,39 @@ function resolveFilePath(fileArg: string): string {
     return path.isAbsolute(fileArg) ? fileArg : path.join(process.cwd(), fileArg);
 }
 
+function resolveTargetFiles(args: CliOptions): string[] {
+    if (args.file) {
+        return [resolveFilePath(args.file)];
+    }
+
+    if (args.all) {
+        return scanSourceFiles();
+    }
+
+    const unstagedFiles = getGitUnstagedFiles();
+
+    if (unstagedFiles.length > 0) {
+        return unstagedFiles;
+    }
+
+    if (args.gitUnstaged) {
+        return [];
+    }
+
+    return scanSourceFiles();
+}
+
 async function run() {
     const args = parseArgs(process.argv.slice(2));
     const { project, checker } = createParser();
-
-    const files = args.file
-        ? [resolveFilePath(args.file)]
-        : args.gitUnstaged
-            ? getGitUnstagedFiles()
-            : scanSourceFiles();
+    const files = resolveTargetFiles(args);
 
     console.log(`Found ${files.length} file(s) to process.`);
+
+    if (files.length === 0) {
+        console.log('No matching source files found.');
+        return;
+    }
 
     for (const [index, filePath] of files.entries()) {
         console.log(`\n[${index + 1}/${files.length}] Processing ${filePath}`);
@@ -62,42 +86,15 @@ async function run() {
         const testFilePath = getTestFilePath(filePath);
         console.log(`  - Writing test file: ${testFilePath}`);
 
-        const pass1 = generateTests(components, {
+        const generatedTest = generateTests(components, {
             pass: 1,
             testFilePath,
             sourceFilePath: filePath,
         });
 
-        writeFile(testFilePath, pass1);
-
-        console.log('  - Running coverage (pass 1)...');
-        const coverageResult = runJestCoverage(testFilePath);
-        const lineCoverage = readLineCoverage(filePath);
-
-        if (coverageResult.code !== 0 || lineCoverage === null) {
-            console.log('  - Coverage run failed or missing summary. Skipping pass 2.');
-            continue;
-        }
-
-        console.log(`  - Line coverage: ${lineCoverage}%`);
-
-        if (lineCoverage < 50) {
-            console.log('  - Coverage < 50%, generating pass 2...');
-            const pass2 = generateTests(components, {
-                pass: 2,
-                testFilePath,
-                sourceFilePath: filePath,
-            });
-
-            writeFile(testFilePath, pass2);
-            console.log('  - Running coverage (pass 2)...');
-            runJestCoverage(testFilePath);
-        } else {
-            console.log('  - Coverage >= 50%, pass 2 not needed.');
-        }
+        writeFile(testFilePath, generatedTest);
+        console.log('  - Test file generated/updated.');
     }
-
-    printCoverageTable();
 }
 
 function getGitUnstagedFiles(): string[] {
