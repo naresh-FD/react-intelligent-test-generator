@@ -33,6 +33,8 @@ export interface ComponentInfo {
     buttons: SelectorInfo[];
     inputs: SelectorInfo[];
     conditionalElements: ConditionalElementInfo[];
+    usesRouter: boolean;
+    usesAuthHook: boolean;
 }
 
 export function analyzeSourceFile(
@@ -66,6 +68,12 @@ export function analyzeSourceFile(
         ];
 
         const { buttons, inputs, conditionalElements } = analyzeJsxNodes(jsxNodes, props);
+        const usesRouter = jsxNodes.some((node) => {
+            const tagName = getTagName(node);
+            return !!tagName && isRouterTag(tagName);
+        });
+        const usesAuthHook =
+            fileUsesNamedImport(sourceFile, 'useAuth') || fileUsesIdentifierCall(sourceFile, 'useAuth');
 
         components.push({
             name,
@@ -74,6 +82,8 @@ export function analyzeSourceFile(
             buttons,
             inputs,
             conditionalElements,
+            usesRouter,
+            usesAuthHook,
         });
     }
 
@@ -203,14 +213,16 @@ function analyzeJsxNodes(
         const role = normalizeAttr(attrs['role']);
 
         const conditionalProps = getConditionalProps(node, propNames);
-        if (conditionalProps.length > 0) {
+        const isConditional = isConditionalNode(node);
+        if (isConditional) {
             const selector = buildElementSelector({ dataTestId, ariaLabel, placeholder, role, text });
-            if (selector) {
+            if (selector && conditionalProps.length > 0) {
                 conditionalElements.push({
                     selector,
                     requiredProps: conditionalProps,
                 });
             }
+            // Skip elements rendered only under internal state/derived conditions.
             continue;
         }
 
@@ -325,6 +337,27 @@ function buildElementSelector(params: {
     if (params.placeholder) return { strategy: 'placeholder', value: params.placeholder };
     if (params.role) return { strategy: 'role', value: params.role, role: params.role };
     return null;
+}
+
+function isRouterTag(tagName: string): boolean {
+    return (
+        tagName === 'BrowserRouter' ||
+        tagName === 'Router' ||
+        tagName === 'MemoryRouter' ||
+        tagName === 'HashRouter'
+    );
+}
+
+function fileUsesNamedImport(sourceFile: SourceFile, importName: string): boolean {
+    return sourceFile.getImportDeclarations().some((decl) =>
+        decl.getNamedImports().some((named) => named.getName() === importName)
+    );
+}
+
+function fileUsesIdentifierCall(sourceFile: SourceFile, identifier: string): boolean {
+    return sourceFile
+        .getDescendantsOfKind(SyntaxKind.CallExpression)
+        .some((call) => call.getExpression().getText() === identifier);
 }
 
 function getConditionalProps(node: Node, propNames: Set<string>): string[] {
