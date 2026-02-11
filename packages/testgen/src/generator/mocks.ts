@@ -41,10 +41,10 @@ export function mockValueForProp(prop: PropInfo): string {
         return '<div />';
     }
 
+    if (type.includes('=>') || prop.isCallback) return 'jest.fn()';
     if (type.includes('string')) return '"test-value"';
     if (type.includes('number')) return '1';
     if (type.includes('boolean')) return 'true';
-    if (type.includes('=>') || prop.isCallback) return 'jest.fn()';
     if (type.includes('[]')) return '[]';
     if (type.includes('object')) return '{}';
 

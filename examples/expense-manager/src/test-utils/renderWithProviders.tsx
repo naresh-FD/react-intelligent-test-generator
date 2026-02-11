@@ -10,6 +10,8 @@ import {
   CategoryProvider,
   BudgetProvider,
 } from '@/contexts';
+import AuthContext from '@/contexts/AuthContext';
+import type { AuthState } from '@/types';
 
 /**
  * Options for renderWithProviders
@@ -41,6 +43,17 @@ export interface RenderWithProvidersOptions extends Omit<RenderOptions, 'wrapper
    * Preloaded state for providers (for future use)
    */
   preloadedState?: Record<string, unknown>;
+
+  /**
+   * Whether to include the real AuthProvider
+   * @default true
+   */
+  withAuthProvider?: boolean;
+
+  /**
+   * Override auth state when AuthProvider is disabled
+   */
+  authState?: Partial<AuthState>;
 }
 
 /**
@@ -78,21 +91,58 @@ afterEach(() => {
 function AllProviders({
   children,
   queryClient,
+  withAuthProvider,
+  authState,
 }: {
   children: React.ReactNode;
   queryClient: QueryClient;
+  withAuthProvider: boolean;
+  authState?: Partial<AuthState>;
 }) {
+  const defaultAuthState: AuthState = {
+    user: null,
+    tokens: null,
+    isAuthenticated: false,
+    isLoading: false,
+    error: null,
+  };
+
+  const authActions = {
+    login: async () => {},
+    register: async () => {},
+    logout: async () => {},
+    updateProfile: async () => {},
+    changePassword: async () => {},
+    clearError: () => {},
+  };
+
+  const authValue = {
+    ...defaultAuthState,
+    ...authState,
+    ...authActions,
+  };
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <NotificationProvider>
-          <AuthProvider>
-            <CategoryProvider>
-              <ExpenseProvider>
-                <BudgetProvider>{children}</BudgetProvider>
-              </ExpenseProvider>
-            </CategoryProvider>
-          </AuthProvider>
+          {withAuthProvider ? (
+            <AuthProvider>
+              <CategoryProvider>
+                <ExpenseProvider>
+                  <BudgetProvider>{children}</BudgetProvider>
+                </ExpenseProvider>
+              </CategoryProvider>
+            </AuthProvider>
+          ) : (
+            <AuthContext.Provider value={authValue}>
+              <CategoryProvider>
+                <ExpenseProvider>
+                  <BudgetProvider>{children}</BudgetProvider>
+                </ExpenseProvider>
+              </CategoryProvider>
+            </AuthContext.Provider>
+          )}
         </NotificationProvider>
       </ThemeProvider>
     </QueryClientProvider>
@@ -123,6 +173,8 @@ export function renderWithProviders(
     withRouter = true,
     useMemoryRouter = true,
     queryClient = createTestQueryClient(),
+    withAuthProvider = true,
+    authState,
     ...renderOptions
   } = options;
 
@@ -130,7 +182,15 @@ export function renderWithProviders(
   activeQueryClients.add(queryClient);
 
   function Wrapper({ children }: { children: React.ReactNode }) {
-    const wrapped = <AllProviders queryClient={queryClient}>{children}</AllProviders>;
+    const wrapped = (
+      <AllProviders
+        queryClient={queryClient}
+        withAuthProvider={withAuthProvider}
+        authState={authState}
+      >
+        {children}
+      </AllProviders>
+    );
 
     if (!withRouter) {
       return wrapped;

@@ -1,5 +1,4 @@
-import path from 'path';
-import { relativeImport } from '../utils/path';
+import { relativeImport, resolveRenderWithProvidersPath } from '../utils/path';
 import { ComponentInfo } from '../analyzer';
 
 export interface TemplateOptions {
@@ -22,14 +21,24 @@ export function buildImports(
     const componentImport = relativeImport(options.testFilePath, options.sourceFilePath);
 
     const imports: string[] = [];
-    const testUtilsImport = relativeImport(
-        options.testFilePath,
-        path.join(process.cwd(), 'src', 'test-utils', 'renderWithProviders.tsx')
-    );
-    const testingImports = ['renderWithProviders'];
-    if (options.needsScreen) testingImports.push('screen');
+    const needsPlainRender = components.some((c) => c.usesRouter);
+    const needsProviders = components.some((c) => !c.usesRouter);
 
-    imports.push(`import { ${testingImports.join(', ')} } from "${testUtilsImport}";`);
+    if (needsPlainRender) {
+        const rtlImports = ['render'];
+        if (options.needsScreen) rtlImports.push('screen');
+        imports.push(`import { ${rtlImports.join(', ')} } from "@testing-library/react";`);
+    }
+
+    if (needsProviders) {
+        const testUtilsImport = relativeImport(
+            options.testFilePath,
+            resolveRenderWithProvidersPath(options.sourceFilePath)
+        );
+        const testingImports = ['renderWithProviders'];
+        if (!needsPlainRender && options.needsScreen) testingImports.push('screen');
+        imports.push(`import { ${testingImports.join(', ')} } from "${testUtilsImport}";`);
+    }
 
     if (options.usesUserEvent) {
         imports.push('import userEvent from "@testing-library/user-event";');
