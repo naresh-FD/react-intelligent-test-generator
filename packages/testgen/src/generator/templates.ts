@@ -1,4 +1,4 @@
-import { relativeImport, resolveRenderWithProvidersPath } from '../utils/path';
+import { relativeImport, resolveRenderHelper } from '../utils/path';
 import { ComponentInfo } from '../analyzer';
 
 export interface TemplateOptions {
@@ -24,23 +24,24 @@ export function buildImports(
     const needsPlainRender = components.some((c) => c.usesRouter);
     const needsProviders = components.some((c) => !c.usesRouter);
 
-    // Check if renderWithProviders actually exists in this project
-    const renderWithProvidersPath = resolveRenderWithProvidersPath(options.sourceFilePath);
-    const hasRenderWithProviders = renderWithProvidersPath !== null;
+    // Check if a custom render helper exists in this project
+    const renderHelper = resolveRenderHelper(options.sourceFilePath);
+    const hasCustomRender = renderHelper !== null;
 
-    if (needsPlainRender || !hasRenderWithProviders) {
-        // Use plain render from RTL (either for router components, or when renderWithProviders doesn't exist)
+    if (needsPlainRender || !hasCustomRender) {
+        // Use plain render from RTL (either for router components, or when custom render doesn't exist)
         const rtlImports = ['render'];
         if (options.needsScreen) rtlImports.push('screen');
         imports.push(`import { ${rtlImports.join(', ')} } from "@testing-library/react";`);
     }
 
-    if (needsProviders && hasRenderWithProviders) {
+    if (needsProviders && hasCustomRender) {
         const testUtilsImport = relativeImport(
             options.testFilePath,
-            renderWithProvidersPath
+            renderHelper.path
         );
-        const testingImports = ['renderWithProviders'];
+        const renderFnName = renderHelper.exportName;
+        const testingImports = [renderFnName];
         if (!needsPlainRender && options.needsScreen) testingImports.push('screen');
         imports.push(`import { ${testingImports.join(', ')} } from "${testUtilsImport}";`);
     }
@@ -66,11 +67,12 @@ export function buildImports(
 
 /**
  * Determines which render function to use based on project structure.
+ * Returns the actual export name from the detected render helper.
  */
 export function getRenderFunctionName(component: ComponentInfo, sourceFilePath: string): string {
     if (component.usesRouter) return 'render';
-    const hasProviders = resolveRenderWithProvidersPath(sourceFilePath) !== null;
-    return hasProviders ? 'renderWithProviders' : 'render';
+    const helper = resolveRenderHelper(sourceFilePath);
+    return helper ? helper.exportName : 'render';
 }
 
 export function buildDescribeStart(component: ComponentInfo): string {

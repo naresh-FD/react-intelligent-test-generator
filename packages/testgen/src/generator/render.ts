@@ -4,10 +4,11 @@ import { getRenderFunctionName } from './templates';
 export function buildRenderHelper(component: ComponentInfo, sourceFilePath?: string): string {
     const renderFn = sourceFilePath
         ? getRenderFunctionName(component, sourceFilePath)
-        : (component.usesRouter ? 'render' : 'renderWithProviders');
+        : (component.usesRouter ? 'render' : 'render');
 
     const renderOptions: string[] = [];
-    if (renderFn === 'renderWithProviders' && component.usesAuthHook) {
+    // Only add auth options for known custom render functions (not plain 'render')
+    if (renderFn !== 'render' && component.usesAuthHook) {
         renderOptions.push('withAuthProvider: false');
         const authState = deriveAuthState(component);
         renderOptions.push(`authState: ${authState}`);
