@@ -48,3 +48,4 @@ coverage/
 # Husky
 .husky/_
 *.zip
+.claude
