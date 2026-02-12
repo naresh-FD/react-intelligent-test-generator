@@ -17,10 +17,11 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:coverage:check": "jest --coverage --coverageThreshold=\"{\\\"global\\\":{\\\"branches\\\":80,\\\"functions\\\":80,\\\"lines\\\":80,\\\"statements\\\":80}}\"",
-    "testgen": "ts-node packages/testgen/src/cli.ts",
-    "testgen:file": "ts-node packages/testgen/src/cli.ts --file",
-    "testgen:git": "ts-node packages/testgen/src/cli.ts --git-unstaged",
-    "docs:generate": "node scripts/docs/generate-docs.mjs"
+    "testgen": "ts-node ../../packages/testgen/src/cli.ts --git-unstaged",
+    "testgen:file": "ts-node ../../packages/testgen/src/cli.ts --file",
+    "testgen:git": "ts-node ../../packages/testgen/src/cli.ts --git-unstaged",
+    "docs:generate": "node scripts/docs/generate-docs.mjs",
+    "testgen:all": "ts-node ../../packages/testgen/src/cli.ts --all"
   },
   "keywords": [
     "expense",

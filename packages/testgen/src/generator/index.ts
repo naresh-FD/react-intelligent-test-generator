@@ -1,5 +1,5 @@
 import { ComponentInfo } from '../analyzer';
-import { buildHeader, buildImports, buildDescribeStart, buildDescribeEnd, buildTestBlock, buildAsyncTestBlock, joinBlocks, buildFileContent } from './templates';
+import { buildHeader, buildImports, buildDescribeStart, buildDescribeEnd, buildTestBlock, buildAsyncTestBlock, joinBlocks, buildFileContent, resolveRenderFunction } from './templates';
 import { buildDefaultProps } from './mocks';
 import { buildRenderHelper } from './render';
 import { buildRenderAssertions, buildInteractionTests, buildConditionalRenderTests } from './interactions';
@@ -15,6 +15,8 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
     const usesUserEvent = components.some((c) => c.buttons.length > 0 || c.inputs.length > 0);
     const needsScreen = usesUserEvent || components.some((c) => c.buttons.length > 0 || c.inputs.length > 0);
 
+    const renderStrategy = resolveRenderFunction(options.testFilePath);
+
     const parts: string[] = [];
     parts.push(buildHeader());
     parts.push(buildImports(components, {
@@ -22,6 +24,8 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
         sourceFilePath: options.sourceFilePath,
         usesUserEvent,
         needsScreen,
+        renderFunction: renderStrategy.name,
+        renderImportLine: renderStrategy.importLine,
     }));
 
     for (const component of components) {
@@ -32,7 +36,7 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
             blocks.push(`  ${buildDefaultProps(component)}`);
         }
 
-        blocks.push(`  ${buildRenderHelper(component)}`);
+        blocks.push(`  ${buildRenderHelper(component, renderStrategy.name)}`);
 
         const renderAssertions = buildRenderAssertions(component);
         blocks.push(

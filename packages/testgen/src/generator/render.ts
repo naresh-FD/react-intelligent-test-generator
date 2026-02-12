@@ -1,12 +1,12 @@
 import { ComponentInfo } from '../analyzer';
 
-export function buildRenderHelper(component: ComponentInfo): string {
+export function buildRenderHelper(component: ComponentInfo, renderFunction: string): string {
     if (component.props.length > 0) {
         return [
             'const renderUI = (props = {}) =>',
-            `  renderWithProviders(<${component.name} {...defaultProps} {...props} />);`,
+            `  ${renderFunction}(<${component.name} {...defaultProps} {...props} />);`,
         ].join('\n');
     }
 
-    return ['const renderUI = () =>', `  renderWithProviders(<${component.name} />);`].join('\n');
+    return ['const renderUI = () =>', `  ${renderFunction}(<${component.name} />);`].join('\n');
 }

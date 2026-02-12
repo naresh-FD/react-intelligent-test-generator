@@ -1,4 +1,5 @@
 import path from 'path';
+import fs from 'fs';
 import { relativeImport } from '../utils/path';
 import { ComponentInfo } from '../analyzer';
 
@@ -7,6 +8,37 @@ export interface TemplateOptions {
     sourceFilePath: string;
     usesUserEvent: boolean;
     needsScreen: boolean;
+    renderFunction: string;
+    renderImportLine?: string;
+}
+
+interface RenderHelperCandidate {
+    file: string;
+    exportName: string;
+}
+
+const RENDER_HELPER_CANDIDATES: RenderHelperCandidate[] = [
+    { file: 'src/test-utils/renderWithProviders.tsx', exportName: 'renderWithProviders' },
+    { file: 'src/test-utils/renderWithProviders.ts', exportName: 'renderWithProviders' },
+    { file: 'src/util/testHelpers.tsx', exportName: 'renderWithProviders' },
+    { file: 'src/util/testHelpers.ts', exportName: 'renderWithProviders' },
+    { file: 'src/utils/testHelpers.tsx', exportName: 'renderWithProviders' },
+    { file: 'src/utils/testHelpers.ts', exportName: 'renderWithProviders' },
+];
+
+export function resolveRenderFunction(testFilePath: string): { name: string; importLine?: string } {
+    for (const candidate of RENDER_HELPER_CANDIDATES) {
+        const absolute = path.join(process.cwd(), candidate.file);
+        if (!fs.existsSync(absolute)) continue;
+
+        const helperImport = relativeImport(testFilePath, absolute);
+        return {
+            name: candidate.exportName,
+            importLine: `import { ${candidate.exportName} } from "${helperImport}";`,
+        };
+    }
+
+    return { name: 'render' };
 }
 
 export function buildHeader(): string {
@@ -22,14 +54,23 @@ export function buildImports(
     const componentImport = relativeImport(options.testFilePath, options.sourceFilePath);
 
     const imports: string[] = [];
-    const testUtilsImport = relativeImport(
-        options.testFilePath,
-        path.join(process.cwd(), 'src', 'test-utils', 'renderWithProviders.tsx')
-    );
-    const testingImports = ['renderWithProviders'];
-    if (options.needsScreen) testingImports.push('screen');
+    const rtlImports = new Set<string>();
 
-    imports.push(`import { ${testingImports.join(', ')} } from "${testUtilsImport}";`);
+    if (options.needsScreen) {
+        rtlImports.add('screen');
+    }
+
+    if (options.renderFunction === 'render') {
+        rtlImports.add('render');
+    }
+
+    if (rtlImports.size > 0) {
+        imports.push(`import { ${Array.from(rtlImports).join(', ')} } from "@testing-library/react";`);
+    }
+
+    if (options.renderFunction !== 'render' && options.renderImportLine) {
+        imports.push(options.renderImportLine);
+    }
 
     if (options.usesUserEvent) {
         imports.push('import userEvent from "@testing-library/user-event";');
