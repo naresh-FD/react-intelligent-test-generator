@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import { relativeImport } from '../utils/path';
+import { listFilesRecursive } from '../fs';
 import { ComponentInfo } from '../analyzer';
 
 export interface TemplateOptions {
@@ -26,15 +27,74 @@ const RENDER_HELPER_CANDIDATES: RenderHelperCandidate[] = [
     { file: 'src/utils/testHelpers.ts', exportName: 'renderWithProviders' },
 ];
 
-export function resolveRenderFunction(testFilePath: string): { name: string; importLine?: string } {
-    for (const candidate of RENDER_HELPER_CANDIDATES) {
-        const absolute = path.join(process.cwd(), candidate.file);
-        if (!fs.existsSync(absolute)) continue;
+let discoveredRenderHelpers: RenderHelperCandidate[] | null = null;
 
-        const helperImport = relativeImport(testFilePath, absolute);
+function discoverRenderHelperCandidates(): RenderHelperCandidate[] {
+    if (discoveredRenderHelpers) {
+        return discoveredRenderHelpers;
+    }
+
+    const srcRoot = path.join(process.cwd(), 'src');
+    const dynamicHelpers: RenderHelperCandidate[] = [];
+
+    if (fs.existsSync(srcRoot)) {
+        const sourceFiles = listFilesRecursive(srcRoot).filter((file) => /\.(ts|tsx)$/.test(file));
+
+        for (const sourceFile of sourceFiles) {
+            const content = fs.readFileSync(sourceFile, 'utf8');
+            const hasNamedExport = /export\s+(const|function)\s+renderWithProviders\b/.test(content);
+            const hasReExport = /export\s*\{[^}]*\brenderWithProviders\b[^}]*\}/.test(content);
+
+            if (!hasNamedExport && !hasReExport) {
+                continue;
+            }
+
+            dynamicHelpers.push({
+                file: path.relative(process.cwd(), sourceFile).replace(/\\/g, '/'),
+                exportName: 'renderWithProviders',
+            });
+        }
+    }
+
+    const seen = new Set<string>();
+    discoveredRenderHelpers = [...RENDER_HELPER_CANDIDATES, ...dynamicHelpers].filter((candidate) => {
+        const key = `${candidate.file}:${candidate.exportName}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+
+    return discoveredRenderHelpers;
+}
+
+function pathDistance(fromFile: string, toFile: string): number {
+    const fromParts = path.dirname(fromFile).split(path.sep).filter(Boolean);
+    const toParts = path.dirname(toFile).split(path.sep).filter(Boolean);
+
+    let i = 0;
+    while (i < fromParts.length && i < toParts.length && fromParts[i] === toParts[i]) {
+        i += 1;
+    }
+
+    return (fromParts.length - i) + (toParts.length - i);
+}
+
+export function resolveRenderFunction(testFilePath: string): { name: string; importLine?: string } {
+    const candidates = discoverRenderHelperCandidates();
+
+    const resolved = candidates
+        .map((candidate) => ({
+            ...candidate,
+            absolute: path.join(process.cwd(), candidate.file),
+        }))
+        .filter((candidate) => fs.existsSync(candidate.absolute))
+        .sort((a, b) => pathDistance(testFilePath, a.absolute) - pathDistance(testFilePath, b.absolute))[0];
+
+    if (resolved) {
+        const helperImport = relativeImport(testFilePath, resolved.absolute);
         return {
-            name: candidate.exportName,
-            importLine: `import { ${candidate.exportName} } from "${helperImport}";`,
+            name: resolved.exportName,
+            importLine: `import { ${resolved.exportName} } from "${helperImport}";`,
         };
     }
 

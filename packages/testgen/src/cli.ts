@@ -86,6 +86,8 @@ async function run() {
         const testFilePath = getTestFilePath(filePath);
         console.log(`  - Writing test file: ${testFilePath}`);
 
+        // NOTE: CLI currently focuses on deterministic generation/updating of test files only.
+        // Coverage enforcement is handled by Jest thresholds in consuming projects.
         const generatedTest = generateTests(components, {
             pass: 1,
             testFilePath,
