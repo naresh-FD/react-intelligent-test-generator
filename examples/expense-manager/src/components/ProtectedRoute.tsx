@@ -4,10 +4,10 @@ import { LoadingOverlay } from '@/components/common/Spinner';
 import { ROUTES } from '@/utils/constants';
 
 interface ProtectedRouteProps {
-  children: React.ReactNode;
+  readonly children: React.ReactNode;
 }
 
-export function ProtectedRoute({ children }: ProtectedRouteProps) {
+export function ProtectedRoute({ children }: Readonly<ProtectedRouteProps>) {
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
 
@@ -22,7 +22,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   return <>{children}</>;
 }
 
-export function PublicRoute({ children }: ProtectedRouteProps) {
+export function PublicRoute({ children }: Readonly<ProtectedRouteProps>) {
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
 

@@ -1,5 +1,4 @@
-import path from 'path';
-import { relativeImport } from '../utils/path';
+import { relativeImport, resolveRenderHelper } from '../utils/path';
 import { ComponentInfo } from '../analyzer';
 
 export interface TemplateOptions {
@@ -22,14 +21,30 @@ export function buildImports(
     const componentImport = relativeImport(options.testFilePath, options.sourceFilePath);
 
     const imports: string[] = [];
-    const testUtilsImport = relativeImport(
-        options.testFilePath,
-        path.join(process.cwd(), 'src', 'test-utils', 'renderWithProviders.tsx')
-    );
-    const testingImports = ['renderWithProviders'];
-    if (options.needsScreen) testingImports.push('screen');
+    const needsPlainRender = components.some((c) => c.usesRouter);
+    const needsProviders = components.some((c) => !c.usesRouter);
 
-    imports.push(`import { ${testingImports.join(', ')} } from "${testUtilsImport}";`);
+    // Check if a custom render helper exists in this project
+    const renderHelper = resolveRenderHelper(options.sourceFilePath);
+    const hasCustomRender = renderHelper !== null;
+
+    if (needsPlainRender || !hasCustomRender) {
+        // Use plain render from RTL (either for router components, or when custom render doesn't exist)
+        const rtlImports = ['render'];
+        if (options.needsScreen) rtlImports.push('screen');
+        imports.push(`import { ${rtlImports.join(', ')} } from "@testing-library/react";`);
+    }
+
+    if (needsProviders && hasCustomRender) {
+        const testUtilsImport = relativeImport(
+            options.testFilePath,
+            renderHelper.path
+        );
+        const renderFnName = renderHelper.exportName;
+        const testingImports = [renderFnName];
+        if (!needsPlainRender && options.needsScreen) testingImports.push('screen');
+        imports.push(`import { ${testingImports.join(', ')} } from "${testUtilsImport}";`);
+    }
 
     if (options.usesUserEvent) {
         imports.push('import userEvent from "@testing-library/user-event";');
@@ -50,6 +65,16 @@ export function buildImports(
     return imports.join('\n');
 }
 
+/**
+ * Determines which render function to use based on project structure.
+ * Returns the actual export name from the detected render helper.
+ */
+export function getRenderFunctionName(component: ComponentInfo, sourceFilePath: string): string {
+    if (component.usesRouter) return 'render';
+    const helper = resolveRenderHelper(sourceFilePath);
+    return helper ? helper.exportName : 'render';
+}
+
 export function buildDescribeStart(component: ComponentInfo): string {
     return `describe("${component.name}", () => {`;
 }
@@ -59,7 +84,8 @@ export function buildDescribeEnd(): string {
 }
 
 export function buildTestBlock(title: string, bodyLines: string[]): string {
-    const lines = [`  it("${title}", () => {`];
+    const safeTitle = title.replace(/"/g, '\\"');
+    const lines = [`  it("${safeTitle}", () => {`];
     for (const line of bodyLines) {
         lines.push(`    ${line}`);
     }
@@ -68,7 +94,8 @@ export function buildTestBlock(title: string, bodyLines: string[]): string {
 }
 
 export function buildAsyncTestBlock(title: string, bodyLines: string[]): string {
-    const lines = [`  it("${title}", async () => {`];
+    const safeTitle = title.replace(/"/g, '\\"');
+    const lines = [`  it("${safeTitle}", async () => {`];
     for (const line of bodyLines) {
         lines.push(`    ${line}`);
     }
