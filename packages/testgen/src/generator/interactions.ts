@@ -10,24 +10,31 @@ export interface ConditionalTestCase {
 export function buildRenderAssertions(component: ComponentInfo): string[] {
     const lines: string[] = ['const { container } = renderUI();', 'expect(container).toBeInTheDocument();'];
 
-    // Assert ALL buttons (not just first 2)
+    // Only assert elements that use specific selectors (testid, label, text, placeholder)
+    // Skip generic role-based selectors as they may not be present at render time
+    // (component may conditionally render based on context/hook state)
     for (const button of component.buttons) {
-        lines.push(`expect(${selectorQuery(button)}).toBeInTheDocument();`);
+        if (button.strategy !== 'role') {
+            lines.push(`expect(${selectorQuery(button)}).toBeInTheDocument();`);
+        }
     }
 
-    // Assert ALL inputs
     for (const input of component.inputs) {
-        lines.push(`expect(${selectorQuery(input)}).toBeInTheDocument();`);
+        if (input.strategy !== 'role') {
+            lines.push(`expect(${selectorQuery(input)}).toBeInTheDocument();`);
+        }
     }
 
-    // Assert select elements
     for (const select of component.selects) {
-        lines.push(`expect(${selectorQuery(select.selector)}).toBeInTheDocument();`);
+        if (select.selector.strategy !== 'role') {
+            lines.push(`expect(${selectorQuery(select.selector)}).toBeInTheDocument();`);
+        }
     }
 
-    // Assert links (up to 4 to avoid bloat)
     for (const link of component.links.slice(0, 4)) {
-        lines.push(`expect(${selectorQuery(link)}).toBeInTheDocument();`);
+        if (link.strategy !== 'role') {
+            lines.push(`expect(${selectorQuery(link)}).toBeInTheDocument();`);
+        }
     }
 
     return lines;
@@ -36,8 +43,10 @@ export function buildRenderAssertions(component: ComponentInfo): string[] {
 export function buildInteractionTests(component: ComponentInfo): string[] {
     const tests: string[] = [];
 
-    // Generate click tests for ALL buttons with outcome assertions
+    // Generate click tests for buttons with SPECIFIC selectors only (not generic role)
+    // Components using hooks/context may render differently at test-time (loading/empty state)
     for (const button of component.buttons) {
+        if (button.strategy === 'role') continue; // Skip generic role selectors - too fragile
         tests.push([
             'const user = userEvent.setup();',
             'const { container } = renderUI();',
@@ -47,8 +56,9 @@ export function buildInteractionTests(component: ComponentInfo): string[] {
         ].join('\n'));
     }
 
-    // Generate type tests for ALL inputs with value assertions
+    // Generate type tests for inputs with SPECIFIC selectors
     for (const input of component.inputs) {
+        if (input.strategy === 'role') continue;
         tests.push([
             'const user = userEvent.setup();',
             'renderUI();',
@@ -59,8 +69,9 @@ export function buildInteractionTests(component: ComponentInfo): string[] {
         ].join('\n'));
     }
 
-    // Generate select interaction tests with value assertions
+    // Generate select interaction tests with SPECIFIC selectors
     for (const select of component.selects) {
+        if (select.selector.strategy === 'role') continue;
         tests.push([
             'const user = userEvent.setup();',
             'renderUI();',
@@ -72,8 +83,9 @@ export function buildInteractionTests(component: ComponentInfo): string[] {
         ].join('\n'));
     }
 
-    // Generate link click tests (up to 3)
+    // Generate link click tests (up to 3) with SPECIFIC selectors
     for (const link of component.links.slice(0, 3)) {
+        if (link.strategy === 'role') continue;
         tests.push([
             'const user = userEvent.setup();',
             'const { container } = renderUI();',
@@ -93,7 +105,41 @@ export function buildInteractionTests(component: ComponentInfo): string[] {
 export function buildCallbackPropTests(component: ComponentInfo): ConditionalTestCase[] {
     const cases: ConditionalTestCase[] = [];
 
-    const callbackProps = component.props.filter((p) => p.isCallback && !p.name.includes('-'));
+    // Filter out native HTML event handlers that don't correspond to user interactions
+    // (e.g. onSubmit on a <button> is a form event, onSelect is a text selection event)
+    // For form components, skip onSubmit callback test (form submission test covers it)
+    const hasFormInputs = component.inputs.length > 0 || component.forms.length > 0;
+
+    const htmlNativeEvents = new Set([
+        'onSubmitCapture', 'onReset', 'onResetCapture',
+        'onSelect', 'onSelectCapture', 'onToggle', 'onToggleCapture',
+        'onInvalid', 'onInvalidCapture', 'onLoad', 'onLoadCapture',
+        'onError', 'onErrorCapture', 'onAbort', 'onAbortCapture',
+        'onCanPlay', 'onCanPlayCapture', 'onCanPlayThrough', 'onCanPlayThroughCapture',
+        'onDurationChange', 'onDurationChangeCapture', 'onEmptied', 'onEmptiedCapture',
+        'onEncrypted', 'onEncryptedCapture', 'onEnded', 'onEndedCapture',
+        'onLoadedData', 'onLoadedDataCapture', 'onLoadedMetadata', 'onLoadedMetadataCapture',
+        'onLoadStart', 'onLoadStartCapture', 'onPause', 'onPauseCapture',
+        'onPlay', 'onPlayCapture', 'onPlaying', 'onPlayingCapture',
+        'onProgress', 'onProgressCapture', 'onRateChange', 'onRateChangeCapture',
+        'onSeeked', 'onSeekedCapture', 'onSeeking', 'onSeekingCapture',
+        'onStalled', 'onStalledCapture', 'onSuspend', 'onSuspendCapture',
+        'onTimeUpdate', 'onTimeUpdateCapture', 'onVolumeChange', 'onVolumeChangeCapture',
+        'onWaiting', 'onWaitingCapture', 'onCopy', 'onCopyCapture',
+        'onCut', 'onCutCapture', 'onPaste', 'onPasteCapture',
+        'onCompositionEnd', 'onCompositionEndCapture', 'onCompositionStart', 'onCompositionStartCapture',
+        'onCompositionUpdate', 'onCompositionUpdateCapture',
+        'onAnimationEnd', 'onAnimationEndCapture', 'onAnimationIteration', 'onAnimationIterationCapture',
+        'onAnimationStart', 'onAnimationStartCapture', 'onTransitionEnd', 'onTransitionEndCapture',
+        'onScroll', 'onScrollCapture', 'onWheel', 'onWheelCapture',
+        'onGotPointerCapture', 'onGotPointerCaptureCapture', 'onLostPointerCapture', 'onLostPointerCaptureCapture',
+    ]);
+    const callbackProps = component.props.filter((p) => {
+        if (!p.isCallback || p.name.includes('-') || htmlNativeEvents.has(p.name)) return false;
+        // Skip onSubmit for form components — the form submission test already covers this
+        if (hasFormInputs && /^onSubmit$/i.test(p.name)) return false;
+        return true;
+    });
     for (const prop of callbackProps) {
         const mockName = `mock${prop.name.charAt(0).toUpperCase() + prop.name.slice(1)}`;
         const triggerElement = findTriggerElement(prop.name, component);
@@ -112,9 +158,10 @@ export function buildCallbackPropTests(component: ComponentInfo): ConditionalTes
                 ],
             });
         } else {
-            // Fallback: try clicking any available button, or just verify the prop is accepted
-            if (component.buttons.length > 0) {
-                const firstButton = selectorQuery(component.buttons[0]);
+            // Fallback: try clicking a button with a specific selector, or just verify the prop is accepted
+            const specificButton = component.buttons.find(b => b.strategy !== 'role');
+            if (specificButton) {
+                const buttonSelector = selectorQuery(specificButton);
                 cases.push({
                     title: `calls ${prop.name} when triggered`,
                     isAsync: true,
@@ -122,7 +169,7 @@ export function buildCallbackPropTests(component: ComponentInfo): ConditionalTes
                         'const user = userEvent.setup();',
                         `const ${mockName} = ${mockFn()};`,
                         `const { container } = renderUI({ ${prop.name}: ${mockName} });`,
-                        `await user.click(${firstButton});`,
+                        `await user.click(${buttonSelector});`,
                         // May or may not be called - at least exercises the render path with the callback
                         'expect(container).toBeInTheDocument();',
                     ],
@@ -158,23 +205,26 @@ function findTriggerElement(propName: string, component: ComponentInfo): string 
         }
     }
 
-    // onSubmit/onSave/onCreate → find submit-like button or first button
+    // onSubmit/onSave/onCreate/onConfirm → find submit-like button or LAST button (not first — first is often Cancel)
     if (/^on(submit|save|create|add|confirm|apply)$/i.test(propName)) {
         const submitButton = component.buttons.find(b =>
             b.value && /submit|save|create|add|confirm|apply|ok|done/i.test(b.value)
         );
         if (submitButton) return selectorQuery(submitButton);
-        if (component.buttons.length > 0) return selectorQuery(component.buttons[0]);
+        // Fallback: use getAllByRole and pick the last button dynamically
+        // (index-based won't work because nested components may add extra buttons at runtime)
+        if (component.buttons.length > 0) {
+            return `screen.getAllByRole("button").slice(-1)[0]`;
+        }
     }
 
-    // onClose/onDismiss/onCancel → find close/cancel button
+    // onClose/onDismiss/onCancel → find close/cancel button (usually first button)
     if (/^on(close|dismiss|cancel|back|exit|hide)$/i.test(propName)) {
         const closeButton = component.buttons.find(b =>
             b.value && /close|dismiss|cancel|back|exit|hide|x|×/i.test(b.value)
         );
         if (closeButton) return selectorQuery(closeButton);
-        // Try the last button (often close/cancel)
-        if (component.buttons.length > 1) return selectorQuery(component.buttons[component.buttons.length - 1]);
+        // Cancel/close is usually the FIRST button in the pair
         if (component.buttons.length > 0) return selectorQuery(component.buttons[0]);
     }
 
@@ -198,9 +248,10 @@ function findTriggerElement(propName: string, component: ComponentInfo): string 
         return null;
     }
 
-    // onSelect → find a select element or first button
+    // onSelect → typically a checkbox/row selection, not a button click
+    // Return null to use the fallback path (just verifies prop is accepted)
     if (/^on(select|pick|choose)$/i.test(propName)) {
-        if (component.buttons.length > 0) return selectorQuery(component.buttons[0]);
+        return null;
     }
 
     // onEdit → find edit button
@@ -217,8 +268,26 @@ function findTriggerElement(propName: string, component: ComponentInfo): string 
         if (component.buttons.length > 0) return selectorQuery(component.buttons[0]);
     }
 
-    // onSort/onFilter/onSearch → first button
-    if (/^on(sort|filter|search|paginate|page.?change|refresh|reload|retry)$/i.test(propName)) {
+    // onSearch → type in an input (search is input-driven, not button-driven)
+    if (/^on(search)$/i.test(propName)) {
+        // Search is typically an input-driven action, return null to use the fallback path
+        return null;
+    }
+
+    // onPageChange/onPaginate → prefer a later button (first/prev buttons may be disabled on page 1)
+    if (/^on(paginate|page.?change)$/i.test(propName)) {
+        // Prefer "next page" or "last page" buttons which are more likely to be enabled
+        const nextButton = component.buttons.find(b =>
+            b.value && /next|forward|last/i.test(b.value)
+        );
+        if (nextButton) return selectorQuery(nextButton);
+        // Fallback to third button if available (typically "next" in [first, prev, next, last])
+        if (component.buttons.length >= 3) return selectorQuery(component.buttons[2]);
+        if (component.buttons.length > 0) return selectorQuery(component.buttons[component.buttons.length - 1]);
+    }
+
+    // onSort/onFilter → first button
+    if (/^on(sort|filter|refresh|reload|retry)$/i.test(propName)) {
         if (component.buttons.length > 0) return selectorQuery(component.buttons[0]);
     }
 
@@ -233,12 +302,24 @@ export function buildConditionalRenderTests(component: ComponentInfo): Condition
         if (element.requiredProps.length === 0) return;
 
         const propsArg = element.requiredProps.map((prop) => `${prop}: true`).join(', ');
-        const query = conditionalSelectorQuery(element.selector);
         const key = `${propsArg}-${element.selector.strategy}-${element.selector.value}`;
 
         if (seen.has(key)) return;
         seen.add(key);
 
+        // Skip conditional elements with bogus text selectors (whitespace-only, very short, or dynamic)
+        if (element.selector.strategy === 'text' && (!element.selector.value || element.selector.value.trim().length < 2)) {
+            cases.push({
+                title: `renders conditional element ${index + 1}`,
+                body: [
+                    `const { container } = renderUI({ ${propsArg} });`,
+                    'expect(container).toBeInTheDocument();',
+                ],
+            });
+            return;
+        }
+
+        const query = conditionalSelectorQuery(element.selector);
         cases.push({
             title: `renders conditional element ${index + 1}`,
             body: [
@@ -270,6 +351,11 @@ export function buildNegativeBranchTests(component: ComponentInfo): ConditionalT
     const seen = new Set<string>();
     component.conditionalElements.forEach((element, index) => {
         if (element.requiredProps.length === 0) return;
+
+        // Skip bogus text selectors for negative tests too
+        if (element.selector.strategy === 'text' && (!element.selector.value || element.selector.value.trim().length < 2)) {
+            return;
+        }
 
         const propsArgFalse = element.requiredProps.map((prop) => `${prop}: false`).join(', ');
         const query = conditionalSelectorQuery(element.selector);

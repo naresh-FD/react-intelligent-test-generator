@@ -80,6 +80,12 @@ async function run() {
         console.log(`\n[${index + 1}/${files.length}] Processing ${filePath}`);
         const sourceFile = getSourceFile(project, filePath);
 
+        // Skip test utility files (renderWithProviders, test helpers, etc.)
+        if (isTestUtilityFile(filePath)) {
+            console.log('  - Test utility file detected. Skipping (not a file to generate tests for).');
+            continue;
+        }
+
         // Check if this is a barrel/index file (only re-exports, no components)
         const isBarrel = isBarrelFile(filePath, sourceFile.getText());
         if (isBarrel) {
@@ -162,6 +168,21 @@ function isContextProviderFile(filePath: string, content: string): boolean {
     return content.includes('createContext') && (
         content.includes('Provider') || content.includes('useContext')
     );
+}
+
+function isTestUtilityFile(filePath: string): boolean {
+    const normalized = filePath.replace(/\\/g, '/');
+    // Skip files in test-utils, test-helpers directories, or files named like test utilities
+    if (normalized.includes('/test-utils/') || normalized.includes('/test-helpers/') ||
+        normalized.includes('/testUtils/') || normalized.includes('/testHelpers/') ||
+        normalized.includes('/testing/') || normalized.includes('/__test-utils__/')) {
+        return true;
+    }
+    const basename = path.basename(filePath).toLowerCase();
+    if (/^(renderwithproviders|customrender|test-?helpers?|test-?utils?|setup-?tests?|jest-?setup|vitest-?setup|test-?wrapper)/i.test(basename.replace(/\.(tsx?|jsx?)$/, ''))) {
+        return true;
+    }
+    return false;
 }
 
 function isBarrelFile(filePath: string, content: string): boolean {

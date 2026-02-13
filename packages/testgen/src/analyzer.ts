@@ -213,6 +213,23 @@ function extractProps(candidate: Node, checker: TypeChecker): PropInfo[] {
                 if (initializer && Node.isFunctionExpression(initializer)) {
                     return initializer.getParameters();
                 }
+                // Handle memo(), React.memo(), forwardRef(), React.forwardRef() wrappers
+                if (initializer && Node.isCallExpression(initializer)) {
+                    const callee = initializer.getExpression().getText();
+                    if (callee === 'memo' || callee === 'React.memo' ||
+                        callee === 'forwardRef' || callee === 'React.forwardRef') {
+                        const args = initializer.getArguments();
+                        if (args.length > 0) {
+                            const innerFn = args[0];
+                            if (Node.isArrowFunction(innerFn)) {
+                                return innerFn.getParameters();
+                            }
+                            if (Node.isFunctionExpression(innerFn)) {
+                                return innerFn.getParameters();
+                            }
+                        }
+                    }
+                }
                 return [];
             })()
             : [];

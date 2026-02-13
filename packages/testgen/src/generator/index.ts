@@ -13,7 +13,11 @@ export interface GenerateOptions {
 
 export function generateTests(components: ComponentInfo[], options: GenerateOptions): string {
     const usesUserEvent = components.some((c) => c.buttons.length > 0 || c.inputs.length > 0 || c.selects.length > 0 || c.links.length > 0);
-    const needsScreen = usesUserEvent || components.some((c) => c.buttons.length > 0 || c.inputs.length > 0 || c.selects.length > 0 || c.links.length > 0);
+    const needsScreen = usesUserEvent || components.some((c) =>
+        c.buttons.length > 0 || c.inputs.length > 0 || c.selects.length > 0 || c.links.length > 0 ||
+        c.conditionalElements.length > 0 ||
+        c.props.some(p => /^(is)?(loading|pending|fetching|submitting|processing|busy|error|failed|invalid|disabled|readOnly|locked|readonly)/i.test(p.name))
+    );
 
     const parts: string[] = [];
     parts.push(buildHeader());

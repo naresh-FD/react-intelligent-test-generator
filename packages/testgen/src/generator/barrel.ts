@@ -42,9 +42,18 @@ function getReExports(sourceFile: SourceFile): string[] {
     // Named re-exports: export { Foo } from './foo'
     // and named exports: export { Foo }
     for (const decl of sourceFile.getExportDeclarations()) {
+        // Skip type-only exports: export type { Foo } from './foo'
+        if (decl.isTypeOnly()) continue;
         for (const named of decl.getNamedExports()) {
+            // Skip type-only named exports
+            if (named.isTypeOnly()) continue;
             const name = named.getAliasNode()?.getText() || named.getName();
             if (name && name !== 'default') {
+                // Filter out names that look like TypeScript interfaces/types
+                // (PascalCase ending in Props, State, Config, Options, Type, etc.)
+                if (/^[A-Z].*(?:Props|State|Config|Options|Type|Interface|Context|Ref|Event|Handler|Callback|Args|Params|Result|Response|Data)$/.test(name)) {
+                    continue;
+                }
                 exports.push(name);
             }
         }

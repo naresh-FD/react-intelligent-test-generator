@@ -137,9 +137,9 @@ export function mockValueForProp(prop: PropInfo): string {
     const type = prop.type.toLowerCase();
     const name = prop.name;
 
-    // Pagination-like props (generic shape)
+    // Pagination-like props (generic shape) - ensure totalPages > 1 so component renders
     if (/pagination/i.test(name)) {
-        return '{ page: 1, totalPages: 1 }';
+        return '{ page: 1, totalPages: 5, total: 50, limit: 10, hasNext: true, hasPrev: false }';
     }
 
     if (name === 'children' || type.includes('reactnode') || type.includes('react.reactnode')) {
@@ -182,6 +182,17 @@ export function mockValueForProp(prop: PropInfo): string {
     // Complex object types
     if (type.includes('{') || type.includes('object') || type.includes('record')) return '{}';
 
+    // Name-based fallbacks for complex domain objects
+    if (/^expense$/i.test(name)) return '{ id: "1", description: "Test Expense", categoryId: "cat-1", amount: 100, type: "expense", date: "2024-01-01", isRecurring: false }';
+    if (/^expenses$/i.test(name)) return '[]';
+    if (/^category$/i.test(name)) return '{ id: "cat-1", name: "Food", color: "#000", type: "expense", icon: "utensils" }';
+    if (/^categories$/i.test(name)) return '[]';
+    if (/^budget$/i.test(name)) return '{ id: "1", categoryId: "cat-1", amount: 1000, spent: 0, period: "monthly" }';
+    if (/^budgets$/i.test(name)) return '[]';
+    if (/^user$/i.test(name)) return '{ id: "1", email: "test@example.com", name: "Test User" }';
+    if (/^transaction$/i.test(name)) return '{ id: "1", description: "Test", amount: 100, type: "expense", date: "2024-01-01" }';
+    if (/^transactions$/i.test(name)) return '[]';
+
     // Name-based fallbacks
     if (/id$/i.test(name)) return '"test-id"';
     if (/name$/i.test(name)) return '"Test Name"';
@@ -197,7 +208,8 @@ export function mockValueForProp(prop: PropInfo): string {
     if (/image$/i.test(name) || /src$/i.test(name) || /avatar$/i.test(name)) return '"https://example.com/image.png"';
     if (/count$/i.test(name) || /total$/i.test(name) || /index$/i.test(name)) return '0';
     if (/amount$/i.test(name) || /price$/i.test(name) || /value$/i.test(name)) return '100';
-    if (/data$/i.test(name) || /items$/i.test(name) || /list$/i.test(name) || /rows$/i.test(name) || /options$/i.test(name)) return '[]';
+    if (/data$/i.test(name) || /items$/i.test(name) || /list$/i.test(name) || /rows$/i.test(name)) return '[]';
+    if (/^options$/i.test(name)) return '[{ label: "Option 1", value: "option1" }]';
     if (/columns$/i.test(name)) return '[]';
 
     return 'undefined';
