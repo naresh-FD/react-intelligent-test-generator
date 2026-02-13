@@ -2,8 +2,8 @@ import { ComponentInfo } from '../analyzer';
 import { buildHeader, buildImports, buildDescribeStart, buildDescribeEnd, buildTestBlock, buildAsyncTestBlock, joinBlocks, buildFileContent } from './templates';
 import { buildDefaultProps } from './mocks';
 import { buildRenderHelper } from './render';
-import { buildRenderAssertions, buildInteractionTests, buildConditionalRenderTests, buildNegativeBranchTests, buildCallbackPropTests, buildOptionalPropTests } from './interactions';
-import { buildVariantRenders } from './variants';
+import { buildRenderAssertions, buildInteractionTests, buildConditionalRenderTests, buildNegativeBranchTests, buildCallbackPropTests, buildOptionalPropTests, buildStateTests, buildFormSubmissionTest } from './interactions';
+import { buildVariantTestCases } from './variants';
 
 export interface GenerateOptions {
     pass: 1 | 2;
@@ -70,17 +70,33 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
             blocks.push(buildTestBlock(testCase.title, testCase.body));
         });
 
-        // Callback prop tests
+        // Callback prop tests (now actually invoke callbacks)
         const callbackTests = buildCallbackPropTests(component);
         callbackTests.forEach((testCase) => {
+            if (testCase.isAsync) {
+                blocks.push(buildAsyncTestBlock(testCase.title, testCase.body));
+            } else {
+                blocks.push(buildTestBlock(testCase.title, testCase.body));
+            }
+        });
+
+        // State tests (loading, error, empty, disabled)
+        const stateTests = buildStateTests(component);
+        stateTests.forEach((testCase) => {
             blocks.push(buildTestBlock(testCase.title, testCase.body));
         });
 
-        // Variant renders (boolean, enum, optional prop combinations)
-        const variants = buildVariantRenders(component);
-        if (variants.length > 0) {
-            blocks.push(buildTestBlock('renders variant props', variants));
+        // Form submission test
+        const formTest = buildFormSubmissionTest(component);
+        if (formTest) {
+            blocks.push(buildAsyncTestBlock(formTest.title, formTest.body));
         }
+
+        // Variant renders - individual test blocks (boolean, enum, optional prop combinations, state variants)
+        const variantCases = buildVariantTestCases(component);
+        variantCases.forEach((variant) => {
+            blocks.push(buildTestBlock(variant.title, variant.body));
+        });
 
         // Interaction tests (click, type, select)
         const interactions = buildInteractionTests(component);

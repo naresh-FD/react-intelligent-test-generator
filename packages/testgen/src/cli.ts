@@ -110,16 +110,21 @@ async function run() {
             }
         }
 
+        // Detect service/API files for enhanced mock injection
+        const fileContent = sourceFile.getText();
+        const isService = isServiceFile(filePath, fileContent);
+
         const components = analyzeSourceFile(sourceFile, project, checker);
 
         if (components.length === 0) {
             // Try utility/function test generation for non-component files
-            console.log('  - No React components found. Trying utility test generation...');
-            const utilityTest = generateUtilityTest(sourceFile, checker, testFilePath, filePath);
+            const fileType = isService ? 'service' as const : 'utility' as const;
+            console.log(`  - No React components found. Generating ${fileType} tests...`);
+            const utilityTest = generateUtilityTest(sourceFile, checker, testFilePath, filePath, fileType);
             if (utilityTest) {
-                console.log(`  - Writing utility test file: ${testFilePath}`);
+                console.log(`  - Writing ${fileType} test file: ${testFilePath}`);
                 writeFile(testFilePath, utilityTest);
-                console.log('  - Utility test file generated/updated.');
+                console.log(`  - ${fileType} test file generated/updated.`);
             } else {
                 console.log('  - No exported functions found. Skipping.');
             }
@@ -137,6 +142,16 @@ async function run() {
         writeFile(testFilePath, generatedTest);
         console.log('  - Test file generated/updated.');
     }
+}
+
+function isServiceFile(filePath: string, content: string): boolean {
+    const basename = path.basename(filePath).toLowerCase();
+    // Detect by file name patterns
+    if (/service|api|client|repository|gateway|adapter/i.test(basename)) return true;
+    // Detect by content patterns: axios/fetch imports + async methods
+    const hasHttpClient = content.includes('axios') || content.includes('fetch(') || content.includes('ky.') || content.includes('got.');
+    const hasAsyncMethods = (content.match(/async\s/g) || []).length >= 2;
+    return hasHttpClient && hasAsyncMethods;
 }
 
 function isContextProviderFile(filePath: string, content: string): boolean {

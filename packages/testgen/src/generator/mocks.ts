@@ -1,8 +1,23 @@
 import { ComponentInfo, PropInfo } from '../analyzer';
 import { mockFn } from '../utils/framework';
 
+/**
+ * Quote prop names that are not valid JS identifiers (e.g. aria-*, data-*)
+ */
+function safePropKey(name: string): string {
+    return /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name) ? name : `"${name}"`;
+}
+
+/**
+ * Filter out HTML-inherited attributes (aria-*, data-*, etc.) that are not
+ * interesting for component-specific coverage testing.
+ */
+function isComponentProp(prop: PropInfo): boolean {
+    return !prop.name.includes('-');
+}
+
 export function buildDefaultProps(component: ComponentInfo): string {
-    const requiredProps = component.props.filter((p) => p.isRequired);
+    const requiredProps = component.props.filter((p) => p.isRequired && isComponentProp(p));
     if (requiredProps.length === 0) return 'const defaultProps = {};';
 
     const lines = requiredProps.map((prop) => {
@@ -13,39 +28,96 @@ export function buildDefaultProps(component: ComponentInfo): string {
     return `const defaultProps = {\n${lines.join(',\n')}\n};`;
 }
 
-export function buildVariantProps(component: ComponentInfo): string[] {
-    const variants: string[] = [];
+export interface VariantInfo {
+    label: string;
+    propsExpr: string;
+}
 
-    const booleanProps = component.props.filter((p) => p.isBoolean);
+export function buildVariantProps(component: ComponentInfo): VariantInfo[] {
+    const variants: VariantInfo[] = [];
+
+    const booleanProps = component.props.filter((p) => p.isBoolean && isComponentProp(p));
     for (const prop of booleanProps) {
-        variants.push(`{ ...defaultProps, ${prop.name}: true }`);
-        variants.push(`{ ...defaultProps, ${prop.name}: false }`);
+        variants.push({ label: `${prop.name} true`, propsExpr: `{ ...defaultProps, ${safePropKey(prop.name)}: true }` });
+        variants.push({ label: `${prop.name} false`, propsExpr: `{ ...defaultProps, ${safePropKey(prop.name)}: false }` });
     }
 
-    const callbackProps = component.props.filter((p) => p.isCallback);
+    const callbackProps = component.props.filter((p) => p.isCallback && isComponentProp(p));
     if (callbackProps.length > 0) {
-        const callbacks = callbackProps.map((p) => `${p.name}: ${mockFn()}`).join(', ');
-        variants.push(`{ ...defaultProps, ${callbacks} }`);
+        const callbacks = callbackProps.map((p) => `${safePropKey(p.name)}: ${mockFn()}`).join(', ');
+        variants.push({ label: 'with callbacks', propsExpr: `{ ...defaultProps, ${callbacks} }` });
     }
 
     // Generate variants for string/enum union props (e.g. variant: "primary" | "secondary")
-    const enumProps = component.props.filter((p) => isEnumLikeType(p.type));
+    const enumProps = component.props.filter((p) => isEnumLikeType(p.type) && isComponentProp(p));
     for (const prop of enumProps) {
         const values = extractEnumValues(prop.type);
         for (const val of values.slice(0, 4)) {
-            variants.push(`{ ...defaultProps, ${prop.name}: ${val} }`);
+            // Strip quotes from label to avoid breaking test title strings
+            const cleanVal = val.replace(/^["']|["']$/g, '');
+            variants.push({ label: `${prop.name} ${cleanVal}`, propsExpr: `{ ...defaultProps, ${prop.name}: ${val} }` });
         }
     }
 
     // Generate variants for optional props (include them to cover the "provided" branch)
     const optionalNonCallback = component.props.filter(
-        (p) => !p.isRequired && !p.isCallback && !p.isBoolean && !isEnumLikeType(p.type)
+        (p) => !p.isRequired && !p.isCallback && !p.isBoolean && !isEnumLikeType(p.type) && isComponentProp(p)
     );
     for (const prop of optionalNonCallback.slice(0, 4)) {
         const value = mockValueForProp(prop);
         if (value !== 'undefined') {
-            variants.push(`{ ...defaultProps, ${prop.name}: ${value} }`);
+            variants.push({ label: `with ${prop.name}`, propsExpr: `{ ...defaultProps, ${prop.name}: ${value} }` });
         }
+    }
+
+    // Loading state variant
+    const loadingProps = component.props.filter(p =>
+        /^(is)?(loading|pending|fetching|submitting|processing|busy)/i.test(p.name) &&
+        (p.isBoolean || p.type?.toLowerCase().includes('boolean'))
+    );
+    if (loadingProps.length > 0) {
+        variants.push({
+            label: 'loading state',
+            propsExpr: `{ ...defaultProps, ${loadingProps.map(p => `${p.name}: true`).join(', ')} }`,
+        });
+    }
+
+    // Error state variant
+    const errorBoolProps = component.props.filter(p =>
+        /^(is)?(error|failed|invalid)/i.test(p.name) && (p.isBoolean || p.type?.toLowerCase().includes('boolean'))
+    );
+    const errorStringProps = component.props.filter(p =>
+        /^(error|errorMessage|errorText|failureReason|errMsg)/i.test(p.name) && !p.isBoolean
+    );
+    if (errorBoolProps.length > 0 || errorStringProps.length > 0) {
+        const overrides = [
+            ...errorBoolProps.map(p => `${p.name}: true`),
+            ...errorStringProps.map(p => `${p.name}: "Test error"`),
+        ];
+        variants.push({ label: 'error state', propsExpr: `{ ...defaultProps, ${overrides.join(', ')} }` });
+    }
+
+    // Empty data variant (arrays set to [])
+    const arrayProps = component.props.filter(p =>
+        p.type?.includes('[]') || p.type?.includes('Array') ||
+        /^(items|data|list|rows|options|results|records|entries|expenses|categories|users|products|orders|notifications|messages|transactions|comments|posts|tasks|events)/i.test(p.name)
+    );
+    if (arrayProps.length > 0 && !arrayProps.every(p => p.isRequired)) {
+        variants.push({
+            label: 'empty data',
+            propsExpr: `{ ...defaultProps, ${arrayProps.map(p => `${p.name}: []`).join(', ')} }`,
+        });
+    }
+
+    // Disabled state variant
+    const disabledProps = component.props.filter(p =>
+        /^(is)?(disabled|readOnly|locked|readonly)/i.test(p.name) && (p.isBoolean || p.type?.toLowerCase().includes('boolean'))
+    );
+    if (disabledProps.length > 0) {
+        variants.push({
+            label: 'disabled state',
+            propsExpr: `{ ...defaultProps, ${disabledProps.map(p => `${p.name}: true`).join(', ')} }`,
+        });
     }
 
     return variants;
@@ -93,8 +165,8 @@ export function mockValueForProp(prop: PropInfo): string {
         return values.length > 0 ? values[0] : '"default"';
     }
 
-    // Date types
-    if (type.includes('date')) return 'new Date("2024-01-01")';
+    // Date types - only match actual Date type, not interfaces containing "date" in their name
+    if (type === 'date' || type === 'Date') return 'new Date("2024-01-01")';
 
     // Array of objects
     if (type.includes('[]') && type.includes('{')) {

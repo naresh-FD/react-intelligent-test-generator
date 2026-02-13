@@ -84,7 +84,8 @@ export function buildDescribeEnd(): string {
 }
 
 export function buildTestBlock(title: string, bodyLines: string[]): string {
-    const lines = [`  it("${title}", () => {`];
+    const safeTitle = title.replace(/"/g, '\\"');
+    const lines = [`  it("${safeTitle}", () => {`];
     for (const line of bodyLines) {
         lines.push(`    ${line}`);
     }
@@ -93,7 +94,8 @@ export function buildTestBlock(title: string, bodyLines: string[]): string {
 }
 
 export function buildAsyncTestBlock(title: string, bodyLines: string[]): string {
-    const lines = [`  it("${title}", async () => {`];
+    const safeTitle = title.replace(/"/g, '\\"');
+    const lines = [`  it("${safeTitle}", async () => {`];
     for (const line of bodyLines) {
         lines.push(`    ${line}`);
     }
