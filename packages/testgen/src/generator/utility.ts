@@ -647,20 +647,22 @@ function generateHookTests(lines: string[], func: ExportedFunction, sourceFile: 
             lines.push(`${indent}  });`);
             lines.push('');
 
-            lines.push(`${indent}  it("can call ${method} with act", () => {`);
-            lines.push(`${indent}    const { result } = renderHook(${argsString}${wrapperOpt});`);
-            lines.push(`${indent}    act(() => {`);
-            lines.push(`${indent}      result.current.${method}();`);
-            lines.push(`${indent}    });`);
-            lines.push(`${indent}    expect(result.current).toBeDefined();`);
-            lines.push(`${indent}  });`);
-            lines.push('');
+            if (isSafeHookMethodToInvoke(method)) {
+                lines.push(`${indent}  it("can call ${method} with act", () => {`);
+                lines.push(`${indent}    const { result } = renderHook(${argsString}${wrapperOpt});`);
+                lines.push(`${indent}    act(() => {`);
+                lines.push(`${indent}      result.current.${method}();`);
+                lines.push(`${indent}    });`);
+                lines.push(`${indent}    expect(result.current).toBeDefined();`);
+                lines.push(`${indent}  });`);
+                lines.push('');
+            }
         }
 
         for (const state of returnShape.stateProps) {
             lines.push(`${indent}  it("provides ${state} state", () => {`);
             lines.push(`${indent}    const { result } = renderHook(${argsString}${wrapperOpt});`);
-            lines.push(`${indent}    expect(result.current.${state}).toBeDefined();`);
+            lines.push(`${indent}    expect(result.current).toHaveProperty("${state}");`);
             lines.push(`${indent}  });`);
             lines.push('');
         }
@@ -769,6 +771,10 @@ function detectHookReturnShape(func: ExportedFunction, sourceFile: SourceFile): 
     }
 
     return shape;
+}
+
+function isSafeHookMethodToInvoke(methodName: string): boolean {
+    return /^(set|toggle|reset|clear|open|close|show|hide|select|deselect)/i.test(methodName);
 }
 
 function detectSwitchCases(func: ExportedFunction, sourceFile: SourceFile): SwitchCaseInfo[] {
@@ -947,6 +953,9 @@ function extractParams(
 function mockValueForParam(param: ParamInfo, alternate = false): string {
     const type = param.type.toLowerCase();
     const name = param.name.toLowerCase();
+
+    // Common hook options bag pattern; disable fetches by default in tests when possible.
+    if (/^options?$/.test(name)) return '{ enabled: false }';
 
     if (type.includes('=>') || type.includes('function')) return mockFn();
     // Name-based function detection for generic types that don't resolve to arrow syntax

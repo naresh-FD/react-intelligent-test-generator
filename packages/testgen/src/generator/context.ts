@@ -151,7 +151,7 @@ export function generateContextTest(
         for (const state of hookReturnState) {
             lines.push(`  it("provides ${state} state", () => {`);
             lines.push(`    const { result } = renderHook(() => ${ctxExports.hookName}(), ${wrapperOption});`);
-            lines.push(`    expect(result.current.${state}).toBeDefined();`);
+            lines.push(`    expect(result.current).toHaveProperty("${state}");`);
             lines.push(`  });`);
             lines.push('');
         }

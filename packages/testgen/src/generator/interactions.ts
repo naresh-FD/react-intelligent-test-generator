@@ -111,7 +111,7 @@ export function buildCallbackPropTests(component: ComponentInfo): ConditionalTes
     const hasFormInputs = component.inputs.length > 0 || component.forms.length > 0;
 
     const htmlNativeEvents = new Set([
-        'onSubmitCapture', 'onReset', 'onResetCapture',
+        'onSubmit', 'onSubmitCapture', 'onReset', 'onResetCapture',
         'onSelect', 'onSelectCapture', 'onToggle', 'onToggleCapture',
         'onInvalid', 'onInvalidCapture', 'onLoad', 'onLoadCapture',
         'onError', 'onErrorCapture', 'onAbort', 'onAbortCapture',
