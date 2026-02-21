@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useState,
-  useCallback,
-  useEffect,
-  type ReactNode,
-} from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { expenseService } from '@/services';
 import { useNotification } from './NotificationContext';
@@ -46,12 +39,7 @@ export function BudgetProvider({ children }: BudgetProviderProps) {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [alerts, setAlerts] = useState<BudgetAlert[]>([]);
 
-  const {
-    data,
-    isLoading,
-    error,
-    refetch,
-  } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: [QUERY_KEYS.BUDGETS],
     queryFn: () => expenseService.getBudgets(),
     staleTime: 5 * 60 * 1000,
@@ -59,6 +47,7 @@ export function BudgetProvider({ children }: BudgetProviderProps) {
 
   useEffect(() => {
     if (data) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setBudgets(data);
     }
   }, [data]);
@@ -100,6 +89,7 @@ export function BudgetProvider({ children }: BudgetProviderProps) {
 
   useEffect(() => {
     if (budgets.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       checkBudgetAlerts();
     }
   }, [budgets, checkBudgetAlerts]);

@@ -24,6 +24,9 @@ lerna-debug.log*
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
 .idea/
 *.suo
 *.ntvs*
@@ -40,6 +43,9 @@ Thumbs.db
 # Testing
 coverage/
 .nyc_output/
+
+# Testgen verify output (temporary jest results + coverage snapshots)
+.testgen-results/
 
 # Misc
 *.local

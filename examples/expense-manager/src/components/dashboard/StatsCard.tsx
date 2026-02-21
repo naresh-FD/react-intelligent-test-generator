@@ -78,7 +78,12 @@ export function StatsCard({
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <div className={cn('flex h-10 w-10 items-center justify-center rounded-full', styles.iconBg)}>
+            <div
+              className={cn(
+                'flex h-10 w-10 items-center justify-center rounded-full',
+                styles.iconBg
+              )}
+            >
               <span className={styles.iconColor}>{icon}</span>
             </div>
           </div>

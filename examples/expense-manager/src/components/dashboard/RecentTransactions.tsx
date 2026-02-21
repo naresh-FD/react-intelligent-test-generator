@@ -92,9 +92,7 @@ export function RecentTransactions({
                     <p className="font-medium truncate">
                       {transaction.description || category?.name || 'Transaction'}
                     </p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatDate(transaction.date)}
-                    </p>
+                    <p className="text-sm text-muted-foreground">{formatDate(transaction.date)}</p>
                   </div>
 
                   <div className="text-right shrink-0">

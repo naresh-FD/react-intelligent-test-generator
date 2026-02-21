@@ -56,7 +56,12 @@ export function Pagination({
   if (totalPages <= 1) return null;
 
   return (
-    <div className={cn('flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between', className)}>
+    <div
+      className={cn(
+        'flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between',
+        className
+      )}
+    >
       {showPageInfo && (
         <p className="text-sm text-muted-foreground">
           Showing <span className="font-medium">{startItem}</span> to{' '}

@@ -73,6 +73,9 @@ npm run test:coverage:check # Run with 80% coverage threshold
 | `npm run test:generate:git`          | Generate tests for git unstaged files only (safest) |
 | `npm run test:generate`              | Generate tests for ALL source files                 |
 | `npm run test:generate:file <path>`  | Generate test for a single file                     |
+| `npm run testgen -- --dry-run`       | Print package/file resolution plan only             |
+| `npm run testgen -- --package <pkg>` | Generate for one configured package                 |
+| `npm run testgen -- --mode changed-since --changed-since origin/main --package <pkg>` | CI incremental generation |
 
 ### Testing
 
@@ -514,6 +517,54 @@ If you want the coverage table to include `.ts` files too, update the filter in:
 ```
 tools/react-testgen/src/coverage/report.ts
 ```
+
+---
+
+## Monorepo Onboarding
+
+The generator now supports repo-level package targeting using `react-testgen.config.json` in the repo root.
+
+### 1. Add Root Config
+
+Create:
+
+```
+react-testgen.config.json
+```
+
+Define `defaults` once, then add package entries:
+
+- `name`: logical package name used by `--package`
+- `root`: package root path relative to repo root
+- `include`/`exclude`: per-package source matching rules
+- `framework`: `auto`, `jest`, or `vitest`
+- `renderHelper`: `auto` or explicit helper path
+
+### 2. Use Incremental Rollout
+
+Start with changed-file generation:
+
+```bash
+npm run testgen -- --package expense-manager --mode git-unstaged
+```
+
+Then add CI changed-since mode:
+
+```bash
+npm run testgen -- --mode changed-since --changed-since origin/main --package expense-manager
+```
+
+### 3. Validate Before Writing
+
+Use dry-run to inspect resolved package/framework/file plan:
+
+```bash
+npm run testgen -- --dry-run --package expense-manager
+```
+
+### 4. Keep Legacy Scripts
+
+Existing scripts (`testgen`, `testgen:file`, `testgen:all`) remain valid and are mapped to the new CLI modes.
 
 ---
 

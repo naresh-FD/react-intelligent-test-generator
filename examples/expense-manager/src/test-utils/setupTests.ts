@@ -1,7 +1,7 @@
-import "@testing-library/jest-dom";
+import '@testing-library/jest-dom';
 
 // Mock window.matchMedia for components that use media queries
-Object.defineProperty(window, "matchMedia", {
+Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: jest.fn().mockImplementation((query) => ({
     matches: false,
@@ -36,12 +36,12 @@ const originalWarn = console.warn;
 beforeAll(() => {
   console.error = (...args: Parameters<typeof console.error>) => {
     // Filter out known React warnings that are not relevant for tests
-    const message = args[0]?.toString() || "";
+    const message = args[0]?.toString() || '';
     if (
-      message.includes("Warning: ReactDOM.render") ||
-      message.includes("Warning: An update to") ||
-      message.includes("act(...)") ||
-      message.includes("Not implemented: HTMLFormElement.prototype.submit")
+      message.includes('Warning: ReactDOM.render') ||
+      message.includes('Warning: An update to') ||
+      message.includes('act(...)') ||
+      message.includes('Not implemented: HTMLFormElement.prototype.submit')
     ) {
       return;
     }
@@ -49,12 +49,12 @@ beforeAll(() => {
   };
 
   console.warn = (...args: Parameters<typeof console.warn>) => {
-    const message = args[0]?.toString() || "";
+    const message = args[0]?.toString() || '';
     if (
-      message.includes("componentWillReceiveProps has been renamed") ||
-      message.includes("React Router Future Flag Warning") ||
-      message.includes("width(0) and height(0) of chart") ||
-      message.includes("width(-1) and height(-1) of chart")
+      message.includes('componentWillReceiveProps has been renamed') ||
+      message.includes('React Router Future Flag Warning') ||
+      message.includes('width(0) and height(0) of chart') ||
+      message.includes('width(-1) and height(-1) of chart')
     ) {
       return;
     }

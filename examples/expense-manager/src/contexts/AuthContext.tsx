@@ -120,7 +120,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
           type: 'AUTH_FAILURE',
           payload: { error: error instanceof Error ? error.message : 'Login failed' },
         });
-        throw error;
       }
     },
     [navigate]
@@ -138,7 +137,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
           type: 'AUTH_FAILURE',
           payload: { error: error instanceof Error ? error.message : 'Registration failed' },
         });
-        throw error;
       }
     },
     [navigate]
@@ -154,12 +152,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [navigate]);
 
   const updateProfile = useCallback(async (data: UpdateProfileData) => {
-    try {
-      const user = await authService.updateProfile(data);
-      dispatch({ type: 'UPDATE_USER', payload: { user } });
-    } catch (error) {
-      throw error;
-    }
+    const user = await authService.updateProfile(data);
+    dispatch({ type: 'UPDATE_USER', payload: { user } });
   }, []);
 
   const changePassword = useCallback(async (data: ChangePasswordData) => {

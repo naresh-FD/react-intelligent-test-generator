@@ -1,16 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import {
-  Menu,
-  X,
-  Sun,
-  Moon,
-  Bell,
-  LogOut,
-  User,
-  Settings,
-  ChevronDown,
-} from 'lucide-react';
+import { Menu, X, Sun, Moon, Bell, LogOut, User, Settings, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -31,7 +21,10 @@ export function Header({ onMenuClick, isSidebarOpen }: HeaderProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const location = useLocation();
 
-  const profileMenuRef = useClickOutside<HTMLDivElement>(() => setIsProfileOpen(false), isProfileOpen);
+  const profileMenuRef = useClickOutside<HTMLDivElement>(
+    () => setIsProfileOpen(false),
+    isProfileOpen
+  );
 
   const handleLogout = async () => {
     setIsProfileOpen(false);
@@ -56,9 +49,7 @@ export function Header({ onMenuClick, isSidebarOpen }: HeaderProps) {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
               E
             </div>
-            <span className="hidden text-lg font-semibold sm:inline-block">
-              {APP_NAME}
-            </span>
+            <span className="hidden text-lg font-semibold sm:inline-block">{APP_NAME}</span>
           </Link>
         </div>
 
@@ -69,11 +60,7 @@ export function Header({ onMenuClick, isSidebarOpen }: HeaderProps) {
             onClick={toggleTheme}
             aria-label={`Switch to ${resolvedTheme === 'light' ? 'dark' : 'light'} mode`}
           >
-            {resolvedTheme === 'light' ? (
-              <Moon className="h-5 w-5" />
-            ) : (
-              <Sun className="h-5 w-5" />
-            )}
+            {resolvedTheme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
           </Button>
 
           <Button variant="ghost" size="icon" aria-label="Notifications">
@@ -91,9 +78,7 @@ export function Header({ onMenuClick, isSidebarOpen }: HeaderProps) {
               aria-haspopup="true"
             >
               <Avatar src={user?.avatar} name={user?.name} size="sm" />
-              <span className="hidden text-sm font-medium md:inline-block">
-                {user?.name}
-              </span>
+              <span className="hidden text-sm font-medium md:inline-block">{user?.name}</span>
               <ChevronDown
                 className={cn(
                   'hidden h-4 w-4 text-muted-foreground transition-transform md:block',

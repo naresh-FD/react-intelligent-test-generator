@@ -15,6 +15,30 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/common/Ca
 import { Button } from '@/components/common/Button';
 import { Skeleton } from '@/components/common/Skeleton';
 import { formatCurrency, formatCompactCurrency } from '@/utils/formatters';
+
+// Hoisted outside component — no closure deps, stable reference across renders
+function CustomTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: ReadonlyArray<{ name: string; value: number; color: string }>;
+  label?: string | number;
+}) {
+  if (!active || !payload) return null;
+  return (
+    <div className="rounded-lg border border-border bg-background p-3 shadow-lg">
+      <p className="mb-2 font-medium">{label}</p>
+      {payload.map((entry, index) => (
+        <p key={index} className="text-sm" style={{ color: entry.color }}>
+          {entry.name}: {formatCurrency(entry.value)}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 interface ChartDataPoint {
   name: string;
   income: number;
@@ -36,21 +60,6 @@ export function ExpenseChart({
   title = 'Financial Overview',
 }: ExpenseChartProps) {
   const [chartType, setChartType] = useState<ChartType>('area');
-
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (!active || !payload) return null;
-
-    return (
-      <div className="rounded-lg border border-border bg-background p-3 shadow-lg">
-        <p className="mb-2 font-medium">{label}</p>
-        {payload.map((entry: any, index: number) => (
-          <p key={index} className="text-sm" style={{ color: entry.color }}>
-            {entry.name}: {formatCurrency(entry.value)}
-          </p>
-        ))}
-      </div>
-    );
-  };
 
   if (isLoading) {
     return (
@@ -117,7 +126,7 @@ export function ExpenseChart({
                   tickFormatter={(value) => formatCompactCurrency(value)}
                   className="text-muted-foreground"
                 />
-                <Tooltip content={<CustomTooltip />} />
+                <Tooltip content={CustomTooltip} />
                 <Legend />
                 <Area
                   type="monotone"
@@ -153,7 +162,7 @@ export function ExpenseChart({
                   tickFormatter={(value) => formatCompactCurrency(value)}
                   className="text-muted-foreground"
                 />
-                <Tooltip content={<CustomTooltip />} />
+                <Tooltip content={CustomTooltip} />
                 <Legend />
                 <Bar dataKey="income" fill="#22c55e" radius={[4, 4, 0, 0]} name="Income" />
                 <Bar dataKey="expenses" fill="#ef4444" radius={[4, 4, 0, 0]} name="Expenses" />

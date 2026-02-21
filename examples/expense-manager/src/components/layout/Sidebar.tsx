@@ -1,12 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import {
-  LayoutDashboard,
-  Receipt,
-  PieChart,
-  Tags,
-  Target,
-  Settings,
-} from 'lucide-react';
+import { LayoutDashboard, Receipt, PieChart, Tags, Target, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/utils/helpers';
 import { ROUTES } from '@/utils/constants';
@@ -30,9 +23,7 @@ const navItems: NavItem[] = [
   { label: 'Categories', path: '/categories', icon: Tags },
 ];
 
-const bottomNavItems: NavItem[] = [
-  { label: 'Settings', path: ROUTES.SETTINGS, icon: Settings },
-];
+const bottomNavItems: NavItem[] = [{ label: 'Settings', path: ROUTES.SETTINGS, icon: Settings }];
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();

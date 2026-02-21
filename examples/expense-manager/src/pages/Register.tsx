@@ -35,15 +35,10 @@ export function Register() {
   };
 
   return (
-    <AuthLayout
-      title="Create an account"
-      subtitle="Start tracking your expenses today"
-    >
+    <AuthLayout title="Create an account" subtitle="Start tracking your expenses today">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         {error && (
-          <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-            {error}
-          </div>
+          <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
         )}
 
         <Input
@@ -77,11 +72,7 @@ export function Register() {
               tabIndex={-1}
               aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
-              {showPassword ? (
-                <EyeOff className="h-4 w-4" />
-              ) : (
-                <Eye className="h-4 w-4" />
-              )}
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           }
           error={errors.password?.message}
@@ -102,11 +93,7 @@ export function Register() {
               tabIndex={-1}
               aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
             >
-              {showConfirmPassword ? (
-                <EyeOff className="h-4 w-4" />
-              ) : (
-                <Eye className="h-4 w-4" />
-              )}
+              {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           }
           error={errors.confirmPassword?.message}
@@ -114,11 +101,7 @@ export function Register() {
         />
 
         <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="mt-0.5 h-4 w-4 rounded border-border"
-            required
-          />
+          <input type="checkbox" className="mt-0.5 h-4 w-4 rounded border-border" required />
           <span className="text-muted-foreground">
             I agree to the{' '}
             <a href="#" className="text-primary hover:underline">
@@ -131,11 +114,7 @@ export function Register() {
           </span>
         </label>
 
-        <Button
-          type="submit"
-          className="w-full"
-          isLoading={isLoading || isSubmitting}
-        >
+        <Button type="submit" className="w-full" isLoading={isLoading || isSubmitting}>
           Create account
         </Button>
 

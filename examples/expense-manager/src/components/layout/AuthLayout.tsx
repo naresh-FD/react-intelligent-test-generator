@@ -17,9 +17,7 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-foreground text-primary font-bold text-xl">
             E
           </div>
-          <span className="text-2xl font-bold text-primary-foreground">
-            {APP_NAME}
-          </span>
+          <span className="text-2xl font-bold text-primary-foreground">{APP_NAME}</span>
         </Link>
 
         <div className="space-y-6">
@@ -27,8 +25,8 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
             Take control of your finances
           </h1>
           <p className="text-lg text-primary-foreground/80">
-            Track your income and expenses, set budgets, and achieve your financial goals
-            with our intuitive expense management platform.
+            Track your income and expenses, set budgets, and achieve your financial goals with our
+            intuitive expense management platform.
           </p>
           <div className="flex gap-8">
             <div>
@@ -65,9 +63,7 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
 
           <div className="mb-8">
             <h2 className="text-2xl font-bold">{title}</h2>
-            {subtitle && (
-              <p className="mt-2 text-muted-foreground">{subtitle}</p>
-            )}
+            {subtitle && <p className="mt-2 text-muted-foreground">{subtitle}</p>}
           </div>
 
           {children}

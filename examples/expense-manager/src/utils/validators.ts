@@ -69,10 +69,7 @@ export const expenseSchema = z.object({
     .max(999999999, 'Amount is too large'),
   categoryId: z.string().min(1, 'Please select a category'),
   type: z.enum(['income', 'expense'], { message: 'Please select a transaction type' }),
-  description: z
-    .string()
-    .max(500, 'Description must be less than 500 characters')
-    .default(''),
+  description: z.string().max(500, 'Description must be less than 500 characters').default(''),
   date: z.string().min(1, 'Please select a date'),
   isRecurring: z.boolean().default(false),
   recurrence: z.enum(['none', 'daily', 'weekly', 'monthly', 'yearly']).default('none'),
@@ -85,9 +82,7 @@ export const categorySchema = z.object({
     .min(1, 'Category name is required')
     .max(50, 'Category name must be less than 50 characters'),
   icon: z.string().min(1, 'Please select an icon'),
-  color: z
-    .string()
-    .regex(/^#[0-9A-Fa-f]{6}$/, 'Please enter a valid hex color'),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Please enter a valid hex color'),
   type: z.enum(['income', 'expense'], { message: 'Please select a category type' }),
 });
 

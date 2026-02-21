@@ -12,16 +12,11 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header
-        onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        isSidebarOpen={isSidebarOpen}
-      />
+      <Header onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} isSidebarOpen={isSidebarOpen} />
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
       <div className="lg:pl-64">
-        <main className="min-h-[calc(100vh-4rem-3.5rem)] p-4 lg:p-6">
-          {children}
-        </main>
+        <main className="min-h-[calc(100vh-4rem-3.5rem)] p-4 lg:p-6">{children}</main>
         <Footer />
       </div>
     </div>

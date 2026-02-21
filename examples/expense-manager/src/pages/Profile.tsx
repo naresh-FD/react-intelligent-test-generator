@@ -3,7 +3,13 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { User, Mail, Camera, Lock, Save } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/common/Card';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { Select } from '@/components/common/Select';
@@ -131,7 +137,11 @@ export function Profile() {
               />
 
               <div className="flex justify-end">
-                <Button type="submit" isLoading={isProfileSubmitting} leftIcon={<Save className="h-4 w-4" />}>
+                <Button
+                  type="submit"
+                  isLoading={isProfileSubmitting}
+                  leftIcon={<Save className="h-4 w-4" />}
+                >
                   Save Changes
                 </Button>
               </div>
@@ -213,11 +223,7 @@ export function Profile() {
           />
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsPasswordModalOpen(false)}
-            >
+            <Button type="button" variant="outline" onClick={() => setIsPasswordModalOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" isLoading={isPasswordSubmitting}>

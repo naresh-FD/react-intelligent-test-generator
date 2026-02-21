@@ -52,7 +52,9 @@ export function ExpenseForm({
     },
   });
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- react-hook-form watch() is intentional; React Compiler skips this component
   const transactionType = watch('type');
+
   const isRecurring = watch('isRecurring');
 
   const categories = transactionType === 'income' ? incomeCategories : expenseCategories;
@@ -89,7 +91,7 @@ export function ExpenseForm({
     setValue('categoryId', '');
   }, [transactionType, setValue]);
 
-  const handleFormSubmit = async (data: any) => {
+  const handleFormSubmit = async (data: ExpenseFormData) => {
     await onSubmit(data);
     onClose();
   };

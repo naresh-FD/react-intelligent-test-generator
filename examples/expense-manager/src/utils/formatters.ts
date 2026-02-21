@@ -29,10 +29,7 @@ export function formatCompactCurrency(amount: number, currency: string = DEFAULT
   return formatCurrency(amount, currency);
 }
 
-export function formatNumber(
-  value: number,
-  options?: Intl.NumberFormatOptions
-): string {
+export function formatNumber(value: number, options?: Intl.NumberFormatOptions): string {
   return new Intl.NumberFormat('en-US', options).format(value);
 }
 
@@ -40,10 +37,7 @@ export function formatPercentage(value: number, decimals: number = 1): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(decimals)}%`;
 }
 
-export function formatDate(
-  date: string | Date,
-  formatString: string = 'MMM dd, yyyy'
-): string {
+export function formatDate(date: string | Date, formatString: string = 'MMM dd, yyyy'): string {
   const dateObj = typeof date === 'string' ? parseISO(date) : date;
   if (!isValid(dateObj)) return 'Invalid date';
   return format(dateObj, formatString);
