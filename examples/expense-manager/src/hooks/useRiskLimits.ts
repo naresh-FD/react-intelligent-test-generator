@@ -63,7 +63,10 @@ export function useRiskLimits(exposures: DeskExposure[], limits: RiskLimitConfig
     const maxDeskConcentration = concentrationByDesk[0]?.share || 0;
 
     const varUtilization = safeRatio(totalVar95, limits.maxVar95);
-    const expectedShortfallUtilization = safeRatio(totalExpectedShortfall, limits.maxExpectedShortfall);
+    const expectedShortfallUtilization = safeRatio(
+      totalExpectedShortfall,
+      limits.maxExpectedShortfall
+    );
 
     const breachedRules: string[] = [];
 

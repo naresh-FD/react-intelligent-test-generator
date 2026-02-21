@@ -153,7 +153,9 @@ export const authService = {
   },
 
   async forgotPassword(email: string): Promise<void> {
-    const exists = localDb.getUsers().some((user) => user.email.toLowerCase() === email.toLowerCase());
+    const exists = localDb
+      .getUsers()
+      .some((user) => user.email.toLowerCase() === email.toLowerCase());
     if (!exists) {
       throw new Error('Email not found');
     }

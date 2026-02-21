@@ -1,10 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useState,
-  useCallback,
-  type ReactNode,
-} from 'react';
+import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import type { Toast } from '@/types';
 import { generateId } from '@/utils/helpers';
 import { TOAST_DURATION } from '@/utils/constants';
@@ -94,11 +88,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     info,
   };
 
-  return (
-    <NotificationContext.Provider value={value}>
-      {children}
-    </NotificationContext.Provider>
-  );
+  return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;
 }
 
 export function useNotification(): NotificationContextType {

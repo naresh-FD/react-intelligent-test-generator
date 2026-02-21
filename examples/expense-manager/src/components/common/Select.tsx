@@ -19,10 +19,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <div className="w-full">
         {label && (
-          <label
-            htmlFor={selectId}
-            className="mb-1.5 block text-sm font-medium text-foreground"
-          >
+          <label htmlFor={selectId} className="mb-1.5 block text-sm font-medium text-foreground">
             {label}
           </label>
         )}
@@ -54,11 +51,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
               </option>
             )}
             {options.map((option) => (
-              <option
-                key={option.value}
-                value={option.value}
-                disabled={option.disabled}
-              >
+              <option key={option.value} value={option.value} disabled={option.disabled}>
                 {option.label}
               </option>
             ))}

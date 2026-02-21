@@ -37,13 +37,7 @@ export function useExpenses(options: UseExpensesOptions = {}) {
     },
   ];
 
-  const {
-    data,
-    isLoading,
-    error,
-    refetch,
-    isFetching,
-  } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey,
     queryFn: () =>
       expenseService.getExpenses({

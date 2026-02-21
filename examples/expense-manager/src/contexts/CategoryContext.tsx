@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useState,
-  useCallback,
-  useEffect,
-  type ReactNode,
-} from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { expenseService } from '@/services';
 import { useNotification } from './NotificationContext';
@@ -37,12 +30,7 @@ export function CategoryProvider({ children }: CategoryProviderProps) {
   const { success, error: showError } = useNotification();
   const [categories, setCategories] = useState<Category[]>([]);
 
-  const {
-    data,
-    isLoading,
-    error,
-    refetch,
-  } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: [QUERY_KEYS.CATEGORIES],
     queryFn: () => expenseService.getCategories(),
     staleTime: 5 * 60 * 1000,
@@ -50,6 +38,7 @@ export function CategoryProvider({ children }: CategoryProviderProps) {
 
   useEffect(() => {
     if (data) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCategories(data);
     }
   }, [data]);

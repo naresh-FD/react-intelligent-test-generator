@@ -35,10 +35,18 @@ export function RiskLimitBoard({ exposures, limits, onEscalate }: RiskLimitBoard
           };
 
   return (
-    <section className="space-y-4 rounded-lg border border-border p-4" aria-label="Risk limit board">
+    <section
+      className="space-y-4 rounded-lg border border-border p-4"
+      aria-label="Risk limit board"
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-semibold">Risk Limits</h2>
-        <span className={cn('inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm', statusConfig.className)}>
+        <span
+          className={cn(
+            'inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm',
+            statusConfig.className
+          )}
+        >
           {statusConfig.icon}
           {statusConfig.label}
         </span>
@@ -47,22 +55,29 @@ export function RiskLimitBoard({ exposures, limits, onEscalate }: RiskLimitBoard
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-md border border-border p-3">
           <p className="text-xs text-muted-foreground">VaR 95% Utilization</p>
-          <p className="text-sm font-semibold">{formatPercentage(metrics.varUtilization * 100, 1)}</p>
+          <p className="text-sm font-semibold">
+            {formatPercentage(metrics.varUtilization * 100, 1)}
+          </p>
           <p className="text-xs text-muted-foreground">
             {formatCurrency(metrics.totalVar95)} / {formatCurrency(limits.maxVar95)}
           </p>
         </div>
         <div className="rounded-md border border-border p-3">
           <p className="text-xs text-muted-foreground">Expected Shortfall Utilization</p>
-          <p className="text-sm font-semibold">{formatPercentage(metrics.expectedShortfallUtilization * 100, 1)}</p>
+          <p className="text-sm font-semibold">
+            {formatPercentage(metrics.expectedShortfallUtilization * 100, 1)}
+          </p>
           <p className="text-xs text-muted-foreground">
-            {formatCurrency(metrics.totalExpectedShortfall)} / {formatCurrency(limits.maxExpectedShortfall)}
+            {formatCurrency(metrics.totalExpectedShortfall)} /{' '}
+            {formatCurrency(limits.maxExpectedShortfall)}
           </p>
         </div>
         <div className="rounded-md border border-border p-3">
           <p className="text-xs text-muted-foreground">Max Desk Concentration</p>
           <p className="text-sm font-semibold">{toPercent(metrics.maxDeskConcentration)}</p>
-          <p className="text-xs text-muted-foreground">HHI: {metrics.hhiConcentration.toFixed(3)}</p>
+          <p className="text-xs text-muted-foreground">
+            HHI: {metrics.hhiConcentration.toFixed(3)}
+          </p>
         </div>
       </div>
 

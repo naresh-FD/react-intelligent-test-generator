@@ -66,7 +66,8 @@ export function QuickActions({
   const variantStyles = {
     default: 'border-border hover:border-primary hover:bg-primary/5',
     income: 'border-success/30 bg-success/5 hover:border-success hover:bg-success/10',
-    expense: 'border-destructive/30 bg-destructive/5 hover:border-destructive hover:bg-destructive/10',
+    expense:
+      'border-destructive/30 bg-destructive/5 hover:border-destructive hover:bg-destructive/10',
   };
 
   const iconStyles = {

@@ -31,15 +31,25 @@ export function SettlementReconciliation({
   onApproveTolerated,
   onEscalateBreaks,
 }: SettlementReconciliationProps) {
-  const { rows, summary } = useReconciliationMetrics(records, materialityThreshold, autoToleranceBps);
-  const toleratedIds = rows.filter((row) => row.classification === 'tolerated').map((row) => row.id);
+  const { rows, summary } = useReconciliationMetrics(
+    records,
+    materialityThreshold,
+    autoToleranceBps
+  );
+  const toleratedIds = rows
+    .filter((row) => row.classification === 'tolerated')
+    .map((row) => row.id);
 
   return (
-    <section className="space-y-4 rounded-lg border border-border p-4" aria-label="settlement-reconciliation">
+    <section
+      className="space-y-4 rounded-lg border border-border p-4"
+      aria-label="settlement-reconciliation"
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-semibold">Settlement Reconciliation</h2>
         <div className="text-xs text-muted-foreground">
-          Materiality: {formatCurrency(materialityThreshold)} | Auto Tolerance: {autoToleranceBps} bps
+          Materiality: {formatCurrency(materialityThreshold)} | Auto Tolerance: {autoToleranceBps}{' '}
+          bps
         </div>
       </div>
 
@@ -78,12 +88,20 @@ export function SettlementReconciliation({
             {rows.map((row) => (
               <tr key={row.id} className="border-t border-border">
                 <td className="px-3 py-2">{row.counterparty}</td>
-                <td className="px-3 py-2 text-right">{formatCurrency(row.expectedAmount, row.currency)}</td>
-                <td className="px-3 py-2 text-right">{formatCurrency(row.settledAmount, row.currency)}</td>
-                <td className="px-3 py-2 text-right">{formatCurrency(row.deltaAmount, row.currency)}</td>
+                <td className="px-3 py-2 text-right">
+                  {formatCurrency(row.expectedAmount, row.currency)}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {formatCurrency(row.settledAmount, row.currency)}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {formatCurrency(row.deltaAmount, row.currency)}
+                </td>
                 <td className="px-3 py-2 text-right">{formatBps(row.deltaBps)}</td>
                 <td className="px-3 py-2 text-center">
-                  <Badge variant={classificationVariant(row.classification)}>{row.classification}</Badge>
+                  <Badge variant={classificationVariant(row.classification)}>
+                    {row.classification}
+                  </Badge>
                 </td>
               </tr>
             ))}

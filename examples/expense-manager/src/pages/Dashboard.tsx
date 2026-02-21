@@ -44,7 +44,7 @@ export function Dashboard() {
           <div>
             <h1 className="text-2xl font-bold">Dashboard</h1>
             <p className="text-muted-foreground">
-              Welcome back! Here's your financial overview.
+              Welcome back! Here&apos;s your financial overview.
             </p>
           </div>
         </div>
@@ -87,11 +87,7 @@ export function Dashboard() {
         {/* Charts Row */}
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            <ExpenseChart
-              data={chartData.monthly}
-              isLoading={isLoading}
-              title="Monthly Overview"
-            />
+            <ExpenseChart data={chartData.monthly} isLoading={isLoading} title="Monthly Overview" />
           </div>
           <div>
             <CategoryPieChart
@@ -105,19 +101,13 @@ export function Dashboard() {
         {/* Bottom Row */}
         <div className="grid gap-6 lg:grid-cols-3">
           <div>
-            <QuickActions
-              onAddExpense={handleAddExpense}
-              onAddIncome={handleAddIncome}
-            />
+            <QuickActions onAddExpense={handleAddExpense} onAddIncome={handleAddIncome} />
           </div>
           <div>
             <BudgetProgress budgets={budgets} isLoading={isBudgetsLoading} />
           </div>
           <div>
-            <RecentTransactions
-              transactions={expenses.slice(0, 5)}
-              isLoading={isLoading}
-            />
+            <RecentTransactions transactions={expenses.slice(0, 5)} isLoading={isLoading} />
           </div>
         </div>
       </div>

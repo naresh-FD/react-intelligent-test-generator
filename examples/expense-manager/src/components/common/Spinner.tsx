@@ -47,9 +47,7 @@ interface LoadingPlaceholderProps {
 
 export function LoadingPlaceholder({ height = 'h-64', className }: LoadingPlaceholderProps) {
   return (
-    <div
-      className={cn('flex items-center justify-center rounded-lg bg-muted', height, className)}
-    >
+    <div className={cn('flex items-center justify-center rounded-lg bg-muted', height, className)}>
       <Spinner className="text-muted-foreground" />
     </div>
   );

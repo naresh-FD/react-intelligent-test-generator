@@ -54,7 +54,6 @@ export function ExpenseList() {
     setEditingExpense(null);
     setIsFormOpen(true);
   }, []);
-  console.log('dg test  ');
 
   const handleEdit = useCallback((expense: Expense) => {
     setEditingExpense(expense);
@@ -130,7 +129,7 @@ export function ExpenseList() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       success('Expenses exported successfully');
-    } catch (err) {
+    } catch {
       showError('Failed to export expenses');
     } finally {
       setIsExporting(false);
@@ -146,8 +145,6 @@ export function ExpenseList() {
       </div>
     );
   }
-
-  console.log('vhjvhjjjvjbkj');
 
   return (
     <div className="space-y-6">

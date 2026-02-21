@@ -26,11 +26,7 @@ export function Avatar({ src, alt, name, size = 'md', className }: AvatarProps) 
       <img
         src={src}
         alt={alt || name || 'Avatar'}
-        className={cn(
-          'rounded-full object-cover ring-2 ring-border',
-          sizeClasses[size],
-          className
-        )}
+        className={cn('rounded-full object-cover ring-2 ring-border', sizeClasses[size], className)}
         onError={() => setImageError(true)}
       />
     );

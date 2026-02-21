@@ -82,7 +82,11 @@ const applyExpenseFilters = (expenses: Expense[], filters: ExpenseFilters): Expe
   });
 };
 
-const sortExpenses = (expenses: Expense[], sortBy = 'date', sortOrder: 'asc' | 'desc' = 'desc'): Expense[] => {
+const sortExpenses = (
+  expenses: Expense[],
+  sortBy = 'date',
+  sortOrder: 'asc' | 'desc' = 'desc'
+): Expense[] => {
   const sorted = [...expenses].sort((left, right) => {
     if (sortBy === 'amount') {
       return left.amount - right.amount;
@@ -102,7 +106,11 @@ const sortExpenses = (expenses: Expense[], sortBy = 'date', sortOrder: 'asc' | '
   return sortOrder === 'desc' ? sorted.reverse() : sorted;
 };
 
-const toPagination = <T>(items: T[], page = 1, limit = 10): { data: T[]; meta: PaginatedResponse<T>['pagination'] } => {
+const toPagination = <T>(
+  items: T[],
+  page = 1,
+  limit = 10
+): { data: T[]; meta: PaginatedResponse<T>['pagination'] } => {
   const total = items.length;
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const boundedPage = Math.min(Math.max(page, 1), totalPages);
@@ -122,7 +130,9 @@ const toPagination = <T>(items: T[], page = 1, limit = 10): { data: T[]; meta: P
 };
 
 const sumByType = (expenses: Expense[], type: 'income' | 'expense'): number => {
-  return expenses.filter((expense) => expense.type === type).reduce((total, expense) => total + expense.amount, 0);
+  return expenses
+    .filter((expense) => expense.type === type)
+    .reduce((total, expense) => total + expense.amount, 0);
 };
 
 const safePercentChange = (current: number, previous: number): number => {
@@ -187,7 +197,17 @@ const createDailySeries = (expenses: Expense[]): AnalyticsTrends['daily'] => {
 };
 
 const createWeeklySeries = (expenses: Expense[]): AnalyticsTrends['weekly'] => {
-  const map = new Map<string, { income: number; expenses: number; week: number; year: number; startDate: string; endDate: string }>();
+  const map = new Map<
+    string,
+    {
+      income: number;
+      expenses: number;
+      week: number;
+      year: number;
+      startDate: string;
+      endDate: string;
+    }
+  >();
 
   expenses.forEach((expense) => {
     const date = toDate(expense.date);
@@ -225,7 +245,10 @@ const createWeeklySeries = (expenses: Expense[]): AnalyticsTrends['weekly'] => {
 };
 
 const createMonthlySeries = (expenses: Expense[]): AnalyticsTrends['monthly'] => {
-  const map = new Map<string, { income: number; expenses: number; month: number; year: number; monthName: string }>();
+  const map = new Map<
+    string,
+    { income: number; expenses: number; month: number; year: number; monthName: string }
+  >();
 
   expenses.forEach((expense) => {
     const date = toDate(expense.date);
@@ -248,7 +271,9 @@ const createMonthlySeries = (expenses: Expense[]): AnalyticsTrends['monthly'] =>
   });
 
   return [...map.values()]
-    .sort((left, right) => (left.year === right.year ? left.month - right.month : left.year - right.year))
+    .sort((left, right) =>
+      left.year === right.year ? left.month - right.month : left.year - right.year
+    )
     .map((item) => ({
       ...item,
       balance: item.income - item.expenses,
@@ -473,7 +498,9 @@ export const expenseService = {
     localDb.removeBudget(id);
   },
 
-  async getAnalyticsSummary(params: { startDate?: string; endDate?: string } = {}): Promise<AnalyticsSummary> {
+  async getAnalyticsSummary(
+    params: { startDate?: string; endDate?: string } = {}
+  ): Promise<AnalyticsSummary> {
     const allExpenses = localDb.getExpenses();
     const filtered = applyExpenseFilters(allExpenses, params);
 
@@ -485,7 +512,10 @@ export const expenseService = {
     const defaultStart = firstDate.length > 0 ? new Date(Math.min(...firstDate)) : new Date();
     const rangeStart = params.startDate ? toDate(params.startDate) : defaultStart;
     const rangeEnd = params.endDate ? toDate(params.endDate) : new Date();
-    const diffDays = Math.max(1, Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24)));
+    const diffDays = Math.max(
+      1,
+      Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24))
+    );
 
     const previousEnd = new Date(rangeStart);
     previousEnd.setUTCDate(previousEnd.getUTCDate() - 1);
@@ -513,7 +543,9 @@ export const expenseService = {
     };
   },
 
-  async getAnalyticsTrends(params: { startDate?: string; endDate?: string } = {}): Promise<AnalyticsTrends> {
+  async getAnalyticsTrends(
+    params: { startDate?: string; endDate?: string } = {}
+  ): Promise<AnalyticsTrends> {
     const filtered = applyExpenseFilters(localDb.getExpenses(), params);
 
     return {
@@ -523,7 +555,9 @@ export const expenseService = {
     };
   },
 
-  async getCategoryAnalytics(params: { startDate?: string; endDate?: string } = {}): Promise<CategoryAnalytics[]> {
+  async getCategoryAnalytics(
+    params: { startDate?: string; endDate?: string } = {}
+  ): Promise<CategoryAnalytics[]> {
     const categories = localDb.getCategories();
     const filteredExpenses = applyExpenseFilters(localDb.getExpenses(), params).filter(
       (expense) => expense.type === 'expense'

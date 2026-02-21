@@ -1,4 +1,4 @@
-import type { } from 'react';
+import type {} from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CheckCircle, AlertCircle, AlertTriangle, Info } from 'lucide-react';
@@ -45,9 +45,7 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
       <Icon className="h-5 w-5 flex-shrink-0" />
       <div className="flex-1 space-y-1">
         <p className="text-sm font-medium">{toast.title}</p>
-        {toast.message && (
-          <p className="text-sm opacity-90">{toast.message}</p>
-        )}
+        {toast.message && <p className="text-sm opacity-90">{toast.message}</p>}
       </div>
       <button
         onClick={() => onRemove(toast.id)}

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { PieChart, Pie, ResponsiveContainer, Tooltip, Cell } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/common/Card';
 import { Skeleton } from '@/components/common/Skeleton';
 import { formatCurrency } from '@/utils/formatters';
@@ -18,6 +18,30 @@ interface CategoryPieChartProps {
   isLoading?: boolean;
 }
 
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{ payload: CategoryData }>;
+  total: number;
+}
+
+const CustomTooltip = ({ active, payload, total }: CustomTooltipProps) => {
+  if (!active || !payload?.[0]) return null;
+
+  const data = payload[0].payload;
+  const percentage = ((data.value / total) * 100).toFixed(1);
+
+  return (
+    <div className="rounded-lg border border-border bg-background p-3 shadow-lg">
+      <p className="font-medium" style={{ color: data.color }}>
+        {data.name}
+      </p>
+      <p className="text-sm text-muted-foreground">
+        {formatCurrency(data.value)} ({percentage}%)
+      </p>
+    </div>
+  );
+};
+
 export function CategoryPieChart({
   data,
   title = 'Expenses by Category',
@@ -33,24 +57,6 @@ export function CategoryPieChart({
   const total = useMemo(() => {
     return data.reduce((sum, item) => sum + item.value, 0);
   }, [data]);
-
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (!active || !payload?.[0]) return null;
-
-    const data = payload[0].payload;
-    const percentage = ((data.value / total) * 100).toFixed(1);
-
-    return (
-      <div className="rounded-lg border border-border bg-background p-3 shadow-lg">
-        <p className="font-medium" style={{ color: data.color }}>
-          {data.name}
-        </p>
-        <p className="text-sm text-muted-foreground">
-          {formatCurrency(data.value)} ({percentage}%)
-        </p>
-      </div>
-    );
-  };
 
   if (isLoading) {
     return (
@@ -109,7 +115,7 @@ export function CategoryPieChart({
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip content={<CustomTooltip total={total} />} />
             </PieChart>
           </ResponsiveContainer>
         </div>

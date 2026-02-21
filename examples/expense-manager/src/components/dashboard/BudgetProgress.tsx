@@ -15,16 +15,10 @@ interface BudgetProgressProps {
   limit?: number;
 }
 
-export function BudgetProgress({
-  budgets,
-  isLoading = false,
-  limit = 4,
-}: BudgetProgressProps) {
+export function BudgetProgress({ budgets, isLoading = false, limit = 4 }: BudgetProgressProps) {
   const { getCategoryById } = useCategoryContext();
 
-  const displayBudgets = budgets
-    .filter((b) => b.isActive)
-    .slice(0, limit);
+  const displayBudgets = budgets.filter((b) => b.isActive).slice(0, limit);
 
   if (isLoading) {
     return (
@@ -113,11 +107,7 @@ export function BudgetProgress({
                       transition={{ duration: 0.5, delay: index * 0.1 }}
                       className={cn(
                         'absolute inset-y-0 left-0 rounded-full',
-                        isOverBudget
-                          ? 'bg-destructive'
-                          : isWarning
-                          ? 'bg-warning'
-                          : 'bg-primary'
+                        isOverBudget ? 'bg-destructive' : isWarning ? 'bg-warning' : 'bg-primary'
                       )}
                     />
                   </div>

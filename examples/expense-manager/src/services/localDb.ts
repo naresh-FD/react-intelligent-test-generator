@@ -21,7 +21,12 @@ const toLocalDb = (value: unknown): LocalDbSchema => {
     return clone(seedData as LocalDbSchema);
   }
 
-  if (!Array.isArray(parsed.users) || !Array.isArray(parsed.categories) || !Array.isArray(parsed.expenses) || !Array.isArray(parsed.budgets)) {
+  if (
+    !Array.isArray(parsed.users) ||
+    !Array.isArray(parsed.categories) ||
+    !Array.isArray(parsed.expenses) ||
+    !Array.isArray(parsed.budgets)
+  ) {
     return clone(seedData as LocalDbSchema);
   }
 

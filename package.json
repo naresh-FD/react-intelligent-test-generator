@@ -18,6 +18,7 @@
     "testgen:all": "npm --workspace examples/expense-manager run testgen:all",
     "testgen:smart": "npm --workspace examples/expense-manager run testgen:smart",
     "testgen:smart:file": "npm --workspace examples/expense-manager run testgen:smart:file",
-    "testgen:smart:git": "npm --workspace examples/expense-manager run testgen:smart:git"
+    "testgen:smart:git": "npm --workspace examples/expense-manager run testgen:smart:git",
+    "sonar": "npx sonarqube-scanner"
   }
 }

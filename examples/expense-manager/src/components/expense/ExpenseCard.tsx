@@ -57,10 +57,7 @@ export const ExpenseCard = memo(function ExpenseCard({
           className="flex h-10 w-10 items-center justify-center rounded-full"
           style={{ backgroundColor: category?.color + '20' }}
         >
-          <div
-            className="h-5 w-5 rounded-full"
-            style={{ backgroundColor: category?.color }}
-          />
+          <div className="h-5 w-5 rounded-full" style={{ backgroundColor: category?.color }} />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -82,18 +79,11 @@ export const ExpenseCard = memo(function ExpenseCard({
             </div>
 
             <div className="text-right shrink-0">
-              <p
-                className={cn(
-                  'font-semibold',
-                  isIncome ? 'text-success' : 'text-destructive'
-                )}
-              >
+              <p className={cn('font-semibold', isIncome ? 'text-success' : 'text-destructive')}>
                 {isIncome ? '+' : '-'}
                 {formatCurrency(expense.amount)}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {formatDate(expense.date)}
-              </p>
+              <p className="text-xs text-muted-foreground mt-1">{formatDate(expense.date)}</p>
             </div>
           </div>
         </div>

@@ -154,12 +154,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [navigate]);
 
   const updateProfile = useCallback(async (data: UpdateProfileData) => {
-    try {
-      const user = await authService.updateProfile(data);
-      dispatch({ type: 'UPDATE_USER', payload: { user } });
-    } catch (error) {
-      throw error;
-    }
+    const user = await authService.updateProfile(data);
+    dispatch({ type: 'UPDATE_USER', payload: { user } });
   }, []);
 
   const changePassword = useCallback(async (data: ChangePasswordData) => {

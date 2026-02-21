@@ -12,57 +12,57 @@ let _activeFramework: TestFramework | null = null;
  * Checks package.json dependencies and config files.
  */
 export function detectTestFramework(rootDir: string = ROOT_DIR): TestFramework {
-    const normalizedRoot = path.resolve(rootDir);
-    const cached = _frameworkCache.get(normalizedRoot);
-    if (cached) return cached;
+  const normalizedRoot = path.resolve(rootDir);
+  const cached = _frameworkCache.get(normalizedRoot);
+  if (cached) return cached;
 
-    // Check for vitest config files
-    const vitestConfigs = [
-        'vitest.config.ts',
-        'vitest.config.js',
-        'vitest.config.mts',
-        'vitest.config.mjs',
-    ];
-    for (const config of vitestConfigs) {
-        if (exists(path.join(normalizedRoot, config))) {
-            _frameworkCache.set(normalizedRoot, 'vitest');
-            return 'vitest';
-        }
+  // Check for vitest config files
+  const vitestConfigs = [
+    'vitest.config.ts',
+    'vitest.config.js',
+    'vitest.config.mts',
+    'vitest.config.mjs',
+  ];
+  for (const config of vitestConfigs) {
+    if (exists(path.join(normalizedRoot, config))) {
+      _frameworkCache.set(normalizedRoot, 'vitest');
+      return 'vitest';
     }
+  }
 
-    // Check package.json
-    const pkgPath = path.join(normalizedRoot, 'package.json');
-    if (exists(pkgPath)) {
-        try {
-            const pkg = JSON.parse(readFile(pkgPath));
-            const allDeps = {
-                ...pkg.dependencies,
-                ...pkg.devDependencies,
-            };
-            if (allDeps['vitest']) {
-                _frameworkCache.set(normalizedRoot, 'vitest');
-                return 'vitest';
-            }
-        } catch {
-            // ignore parse errors
-        }
+  // Check package.json
+  const pkgPath = path.join(normalizedRoot, 'package.json');
+  if (exists(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFile(pkgPath));
+      const allDeps = {
+        ...pkg.dependencies,
+        ...pkg.devDependencies,
+      };
+      if (allDeps['vitest']) {
+        _frameworkCache.set(normalizedRoot, 'vitest');
+        return 'vitest';
+      }
+    } catch {
+      // ignore parse errors
     }
+  }
 
-    // Default to jest
-    _frameworkCache.set(normalizedRoot, 'jest');
-    return 'jest';
+  // Default to jest
+  _frameworkCache.set(normalizedRoot, 'jest');
+  return 'jest';
 }
 
 export function detectFrameworkForFile(_filePath: string, packageRoot: string): TestFramework {
-    return detectTestFramework(packageRoot);
+  return detectTestFramework(packageRoot);
 }
 
 export function setActiveFramework(framework: TestFramework | null): void {
-    _activeFramework = framework;
+  _activeFramework = framework;
 }
 
 export function getActiveFramework(): TestFramework {
-    return _activeFramework ?? detectTestFramework();
+  return _activeFramework ?? detectTestFramework();
 }
 
 /**
@@ -70,9 +70,9 @@ export function getActiveFramework(): TestFramework {
  * jest.fn() for Jest, vi.fn() for Vitest.
  */
 export function mockFn(): string {
-    return getActiveFramework() === 'vitest' ? 'vi.fn()' : 'jest.fn()';
+  return getActiveFramework() === 'vitest' ? 'vi.fn()' : 'jest.fn()';
 }
 
 export function mockModuleFn(): string {
-    return getActiveFramework() === 'vitest' ? 'vi.mock' : 'jest.mock';
+  return getActiveFramework() === 'vitest' ? 'vi.mock' : 'jest.mock';
 }

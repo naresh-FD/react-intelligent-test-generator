@@ -76,10 +76,9 @@ api.interceptors.response.use(
       }
 
       try {
-        const response = await axios.post<ApiResponse<{ accessToken: string; refreshToken: string }>>(
-          `${API_BASE_URL}/auth/refresh`,
-          { refreshToken }
-        );
+        const response = await axios.post<
+          ApiResponse<{ accessToken: string; refreshToken: string }>
+        >(`${API_BASE_URL}/auth/refresh`, { refreshToken });
 
         const { accessToken, refreshToken: newRefreshToken } = response.data.data;
         localStorage.setItem(TOKEN_KEY, accessToken);
@@ -103,9 +102,7 @@ api.interceptors.response.use(
     }
 
     const errorMessage =
-      error.response?.data?.error?.message ||
-      error.message ||
-      'An unexpected error occurred';
+      error.response?.data?.error?.message || error.message || 'An unexpected error occurred';
 
     return Promise.reject(new Error(errorMessage));
   }
