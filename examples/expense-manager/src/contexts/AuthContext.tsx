@@ -120,7 +120,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
           type: 'AUTH_FAILURE',
           payload: { error: error instanceof Error ? error.message : 'Login failed' },
         });
-        throw error;
       }
     },
     [navigate]
@@ -138,7 +137,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
           type: 'AUTH_FAILURE',
           payload: { error: error instanceof Error ? error.message : 'Registration failed' },
         });
-        throw error;
       }
     },
     [navigate]

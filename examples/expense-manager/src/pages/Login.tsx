@@ -71,7 +71,7 @@ export function Login() {
 
         <div className="flex items-center justify-between">
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" className="h-4 w-4 rounded border-border" />
+            <input type="checkbox" className="h-4 w-4 rounded border border-border" />
             Remember me
           </label>
           <Link to={ROUTES.FORGOT_PASSWORD} className="text-sm text-primary hover:underline">
