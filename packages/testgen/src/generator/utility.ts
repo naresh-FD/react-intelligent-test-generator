@@ -1,6 +1,7 @@
 import { SourceFile, Node, SyntaxKind, FunctionDeclaration, VariableDeclaration, Type, TypeChecker } from 'ts-morph';
 import { relativeImport, resolveRenderHelper } from '../utils/path';
 import { mockFn, mockModuleFn } from '../utils/framework';
+import { CONTEXT_DETECTION_CONFIG } from '../config';
 
 interface ExportedFunction {
     name: string;
@@ -210,9 +211,10 @@ export function generateUtilityTest(
     const hasHooks = functions.some((f) => /^use[A-Z]/.test(f.name));
     const needsQueryClient = sourceText.includes('useQuery') || sourceText.includes('useMutation') || sourceText.includes('@tanstack/react-query');
     // Detect if hooks use context providers that require wrapping with renderWithProviders
-    const needsProviderWrapper = sourceText.includes('useNotification') || sourceText.includes('useAuth') ||
-        sourceText.includes('useCategoryContext') || sourceText.includes('useExpenseContext') ||
-        sourceText.includes('useBudgetContext') || sourceText.includes('useTheme');
+    // Uses CONTEXT_DETECTION_CONFIG.customContexts so no hardcoded names are needed here
+    const needsProviderWrapper = CONTEXT_DETECTION_CONFIG.customContexts.some(ctx =>
+        ctx.hooks.some(h => sourceText.includes(h))
+    );
     // Check if a custom render helper (renderWithProviders) exists in the project
     const renderHelper = resolveRenderHelper(sourceFilePath);
     const useRenderWithProviders = hasHooks && needsProviderWrapper && renderHelper !== null;
@@ -755,10 +757,12 @@ function detectHookReturnShape(func: ExportedFunction, sourceFile: SourceFile): 
             for (const prop of expr.getProperties()) {
                 if (Node.isShorthandPropertyAssignment(prop) || Node.isPropertyAssignment(prop)) {
                     const name = prop.getName();
-                    // Classify as method or state
-                    if (/^(set|add|remove|update|delete|toggle|fetch|load|save|clear|reset|login|logout|register|create|edit|submit|handle|dispatch|notify|mutate|invalidate|refetch|bulk)/.test(name)) {
+                    // Classify as method or state using CONTEXT_DETECTION_CONFIG patterns
+                    const methodPrefix = CONTEXT_DETECTION_CONFIG.methodPatterns.join('|');
+                    const statePrefix = CONTEXT_DETECTION_CONFIG.statePatterns.join('|');
+                    if (new RegExp(`^(${methodPrefix}|mutate|invalidate|refetch|bulk)`).test(name)) {
                         shape.methods.push(name);
-                    } else if (/^(is|has|can|should|loading|error|data|items|list|user|token|theme|state|count|total|current|selected|expenses|categories|budgets|notifications|pagination|filters|sort)/.test(name)) {
+                    } else if (new RegExp(`^(${statePrefix}|expenses|categories|budgets|notifications|pagination|filters|sort)`).test(name)) {
                         shape.stateProps.push(name);
                     }
                 }
@@ -1019,15 +1023,14 @@ function detectHookProviderImports(sourceFile: SourceFile, sourceText: string, t
     const imports: string[] = [];
     const imported = new Set<string>();
 
-    // Map of hook usage -> provider name + likely import source
-    const contextMap: Array<{ pattern: string; providerName: string; contextFile: string }> = [
-        { pattern: 'useNotification', providerName: 'NotificationProvider', contextFile: 'NotificationContext' },
-        { pattern: 'useAuth', providerName: 'AuthProvider', contextFile: 'AuthContext' },
-        { pattern: 'useCategoryContext', providerName: 'CategoryProvider', contextFile: 'CategoryContext' },
-        { pattern: 'useExpenseContext', providerName: 'ExpenseProvider', contextFile: 'ExpenseContext' },
-        { pattern: 'useBudgetContext', providerName: 'BudgetProvider', contextFile: 'BudgetContext' },
-        { pattern: 'useTheme', providerName: 'ThemeProvider', contextFile: 'ThemeContext' },
-    ];
+    // Build context map from CONTEXT_DETECTION_CONFIG.customContexts — no hardcoded names
+    const contextMap = CONTEXT_DETECTION_CONFIG.customContexts.flatMap(ctx =>
+        ctx.hooks.map(hook => ({
+            pattern: hook,
+            providerName: ctx.providerName,
+            contextFile: ctx.contextName,
+        }))
+    );
 
     for (const ctx of contextMap) {
         if (sourceText.includes(ctx.pattern) && !imported.has(ctx.providerName)) {
@@ -1135,14 +1138,14 @@ function detectApiImportPath(sourceFile: SourceFile, testFilePath?: string): str
 }
 
 function detectRequiredProviders(sourceText: string): string[] {
+    // Driven by CONTEXT_DETECTION_CONFIG.customContexts — no hardcoded names
+    // Order matters: outermost providers first (as listed in config)
     const providers: string[] = [];
-    // Order matters: outermost first
-    if (sourceText.includes('useNotification')) providers.push('NotificationProvider');
-    if (sourceText.includes('useAuth')) providers.push('AuthProvider');
-    if (sourceText.includes('useCategoryContext')) providers.push('CategoryProvider');
-    if (sourceText.includes('useExpenseContext')) providers.push('ExpenseProvider');
-    if (sourceText.includes('useBudgetContext')) providers.push('BudgetProvider');
-    if (sourceText.includes('useTheme')) providers.push('ThemeProvider');
+    for (const ctx of CONTEXT_DETECTION_CONFIG.customContexts) {
+        if (ctx.hooks.some(h => sourceText.includes(h))) {
+            providers.push(ctx.providerName);
+        }
+    }
     return providers;
 }
 
