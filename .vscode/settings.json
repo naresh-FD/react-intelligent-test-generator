@@ -1,5 +1,7 @@
 {
     "chat.tools.terminal.autoApprove": {
         "Set-Location": true
-    }
+    },
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "typescript.enablePromptUseWorkspaceTsdk": true
 }
