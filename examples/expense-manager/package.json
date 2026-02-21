@@ -20,8 +20,11 @@
     "testgen": "ts-node ../../packages/testgen/src/cli.ts --git-unstaged",
     "testgen:file": "ts-node ../../packages/testgen/src/cli.ts --file",
     "testgen:git": "ts-node ../../packages/testgen/src/cli.ts --git-unstaged",
-    "docs:generate": "node scripts/docs/generate-docs.mjs",
-    "testgen:all": "ts-node ../../packages/testgen/src/cli.ts --all"
+    "testgen:all": "ts-node ../../packages/testgen/src/cli.ts --all",
+    "testgen:smart": "ts-node ../../packages/testgen/src/cli.ts --all --verify",
+    "testgen:smart:file": "ts-node ../../packages/testgen/src/cli.ts --file --verify",
+    "testgen:smart:git": "ts-node ../../packages/testgen/src/cli.ts --git-unstaged --verify",
+    "docs:generate": "node scripts/docs/generate-docs.mjs"
   },
   "keywords": [
     "expense",
