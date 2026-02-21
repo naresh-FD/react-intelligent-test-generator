@@ -158,33 +158,15 @@ export function buildCallbackPropTests(component: ComponentInfo): ConditionalTes
                 ],
             });
         } else {
-            // Fallback: try clicking a button with a specific selector, or just verify the prop is accepted
-            const specificButton = component.buttons.find(b => b.strategy !== 'role');
-            if (specificButton) {
-                const buttonSelector = selectorQuery(specificButton);
-                cases.push({
-                    title: `calls ${prop.name} when triggered`,
-                    isAsync: true,
-                    body: [
-                        'const user = userEvent.setup();',
-                        `const ${mockName} = ${mockFn()};`,
-                        `const { container } = renderUI({ ${prop.name}: ${mockName} });`,
-                        `await user.click(${buttonSelector});`,
-                        // May or may not be called - at least exercises the render path with the callback
-                        'expect(container).toBeInTheDocument();',
-                    ],
-                });
-            } else {
-                // No buttons at all - just verify the callback is accepted as a prop
-                cases.push({
-                    title: `accepts ${prop.name} callback prop`,
-                    body: [
-                        `const ${mockName} = ${mockFn()};`,
-                        `const { container } = renderUI({ ${prop.name}: ${mockName} });`,
-                        'expect(container).toBeInTheDocument();',
-                    ],
-                });
-            }
+            // Low confidence mapping: avoid speculative invocation tests.
+            cases.push({
+                title: `accepts ${prop.name} callback prop`,
+                body: [
+                    `const ${mockName} = ${mockFn()};`,
+                    `const { container } = renderUI({ ${prop.name}: ${mockName} });`,
+                    'expect(container).toBeInTheDocument();',
+                ],
+            });
         }
     }
 
@@ -196,11 +178,10 @@ export function buildCallbackPropTests(component: ComponentInfo): ConditionalTes
  * Uses universal naming conventions across React projects.
  */
 function findTriggerElement(propName: string, component: ComponentInfo): string | null {
-    const lowerName = propName.toLowerCase();
 
     // onClick/onPress → click the first button
     if (/^on(click|press|action|tap)$/i.test(propName)) {
-        if (component.buttons.length > 0) {
+        if (component.buttons.length > 0 && isReliableSelector(component.buttons[0])) {
             return selectorQuery(component.buttons[0]);
         }
     }
@@ -208,38 +189,30 @@ function findTriggerElement(propName: string, component: ComponentInfo): string 
     // onSubmit/onSave/onCreate/onConfirm → find submit-like button or LAST button (not first — first is often Cancel)
     if (/^on(submit|save|create|add|confirm|apply)$/i.test(propName)) {
         const submitButton = component.buttons.find(b =>
-            b.value && /submit|save|create|add|confirm|apply|ok|done/i.test(b.value)
+            isReliableSelector(b) && b.value && /submit|save|create|add|confirm|apply|ok|done/i.test(b.value)
         );
         if (submitButton) return selectorQuery(submitButton);
-        // Fallback: use getAllByRole and pick the last button dynamically
-        // (index-based won't work because nested components may add extra buttons at runtime)
-        if (component.buttons.length > 0) {
-            return `screen.getAllByRole("button").slice(-1)[0]`;
-        }
     }
 
     // onClose/onDismiss/onCancel → find close/cancel button (usually first button)
     if (/^on(close|dismiss|cancel|back|exit|hide)$/i.test(propName)) {
         const closeButton = component.buttons.find(b =>
-            b.value && /close|dismiss|cancel|back|exit|hide|x|×/i.test(b.value)
+            isReliableSelector(b) && b.value && /close|dismiss|cancel|back|exit|hide|x|×/i.test(b.value)
         );
         if (closeButton) return selectorQuery(closeButton);
-        // Cancel/close is usually the FIRST button in the pair
-        if (component.buttons.length > 0) return selectorQuery(component.buttons[0]);
     }
 
     // onDelete/onRemove → find delete/remove button
     if (/^on(delete|remove|clear|destroy)$/i.test(propName)) {
         const deleteButton = component.buttons.find(b =>
-            b.value && /delete|remove|clear|destroy|trash/i.test(b.value)
+            isReliableSelector(b) && b.value && /delete|remove|clear|destroy|trash/i.test(b.value)
         );
         if (deleteButton) return selectorQuery(deleteButton);
-        if (component.buttons.length > 0) return selectorQuery(component.buttons[component.buttons.length - 1]);
     }
 
     // onToggle/onSwitch → first button
     if (/^on(toggle|switch|flip)$/i.test(propName)) {
-        if (component.buttons.length > 0) return selectorQuery(component.buttons[0]);
+        if (component.buttons.length > 0 && isReliableSelector(component.buttons[0])) return selectorQuery(component.buttons[0]);
     }
 
     // onChange → type in first input or change first select
@@ -257,15 +230,14 @@ function findTriggerElement(propName: string, component: ComponentInfo): string 
     // onEdit → find edit button
     if (/^on(edit|modify|rename)$/i.test(propName)) {
         const editButton = component.buttons.find(b =>
-            b.value && /edit|modify|rename|pencil/i.test(b.value)
+            isReliableSelector(b) && b.value && /edit|modify|rename|pencil/i.test(b.value)
         );
         if (editButton) return selectorQuery(editButton);
-        if (component.buttons.length > 0) return selectorQuery(component.buttons[0]);
     }
 
     // onExpand/onCollapse/onOpen → find first button
     if (/^on(expand|collapse|open|show|reveal)$/i.test(propName)) {
-        if (component.buttons.length > 0) return selectorQuery(component.buttons[0]);
+        if (component.buttons.length > 0 && isReliableSelector(component.buttons[0])) return selectorQuery(component.buttons[0]);
     }
 
     // onSearch → type in an input (search is input-driven, not button-driven)
@@ -278,20 +250,21 @@ function findTriggerElement(propName: string, component: ComponentInfo): string 
     if (/^on(paginate|page.?change)$/i.test(propName)) {
         // Prefer "next page" or "last page" buttons which are more likely to be enabled
         const nextButton = component.buttons.find(b =>
-            b.value && /next|forward|last/i.test(b.value)
+            isReliableSelector(b) && b.value && /next|forward|last/i.test(b.value)
         );
         if (nextButton) return selectorQuery(nextButton);
-        // Fallback to third button if available (typically "next" in [first, prev, next, last])
-        if (component.buttons.length >= 3) return selectorQuery(component.buttons[2]);
-        if (component.buttons.length > 0) return selectorQuery(component.buttons[component.buttons.length - 1]);
     }
 
     // onSort/onFilter → first button
     if (/^on(sort|filter|refresh|reload|retry)$/i.test(propName)) {
-        if (component.buttons.length > 0) return selectorQuery(component.buttons[0]);
+        if (component.buttons.length > 0 && isReliableSelector(component.buttons[0])) return selectorQuery(component.buttons[0]);
     }
 
     return null;
+}
+
+function isReliableSelector(selector: SelectorInfo): boolean {
+    return selector.strategy !== 'role';
 }
 
 export function buildConditionalRenderTests(component: ComponentInfo): ConditionalTestCase[] {

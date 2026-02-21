@@ -1,6 +1,6 @@
 import { SourceFile, Node, SyntaxKind, FunctionDeclaration, VariableDeclaration, Type, TypeChecker } from 'ts-morph';
 import { relativeImport, resolveRenderHelper } from '../utils/path';
-import { mockFn, detectTestFramework } from '../utils/framework';
+import { mockFn, mockModuleFn } from '../utils/framework';
 
 interface ExportedFunction {
     name: string;
@@ -54,7 +54,7 @@ export function generateUtilityTest(
     const needsLocalStorageMock = sourceText.includes('localStorage');
 
     if (needsAxiosMock) {
-        const mockModule = detectTestFramework() === 'vitest' ? 'vi.mock' : 'jest.mock';
+        const mockModule = mockModuleFn();
         lines.push('');
         // Create a comprehensive mock that handles axios.create() returning a mock instance
         // The response interceptor's success handler is called with response.data, so we mock accordingly
@@ -105,7 +105,7 @@ export function generateUtilityTest(
 
     // For service files that import from a local api module but don't use axios directly
     if (needsApiMockOnly && apiImportPath) {
-        const mockModule = detectTestFramework() === 'vitest' ? 'vi.mock' : 'jest.mock';
+        const mockModule = mockModuleFn();
         lines.push('');
         lines.push(`const mockAxiosInstance = {`);
         lines.push(`  get: ${mockFn()}.mockResolvedValue({ data: {} }),`);

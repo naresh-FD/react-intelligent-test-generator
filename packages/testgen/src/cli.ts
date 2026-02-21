@@ -1,98 +1,175 @@
 /*
 Usage:
-  npm run testgen             # uses unstaged git changes by default
-  npm run testgen:all         # scans all source files
-  npm run testgen:file -- src/path/Component.tsx
+  npm run testgen                         # default mode from config (git-unstaged by default)
+  npm run testgen -- --mode all           # scan configured package files
+  npm run testgen -- --file src/x.tsx     # single file
+  npm run testgen -- --changed-since origin/main --mode changed-since
 */
 
 import path from 'path';
-import fs from 'fs';
-import { execSync } from 'child_process';
-import { createParser, getSourceFile } from './parser';
+import { createParser } from './parser';
 import { analyzeSourceFile } from './analyzer';
-import { scanSourceFiles, getTestFilePath, isTestFile } from './utils/path';
+import { getTestFilePath, isTestFile, setPathResolutionContext } from './utils/path';
 import { writeFile } from './fs';
 import { generateTests } from './generator';
 import { generateBarrelTest } from './generator/barrel';
 import { generateUtilityTest } from './generator/utility';
 import { generateContextTest } from './generator/context';
+import { setActiveFramework } from './utils/framework';
+import { ROOT_DIR } from './config';
+import { loadConfig, GenerationMode, FrameworkMode } from './workspace/config';
+import { resolveWorkspacePackages, resolveTargetFiles, TargetFile } from './workspace/discovery';
 
 interface CliOptions {
     file?: string;
     gitUnstaged?: boolean;
     all?: boolean;
+    config?: string;
+    packageName?: string;
+    changedSince?: string;
+    mode?: GenerationMode;
+    framework?: FrameworkMode;
+    dryRun?: boolean;
 }
 
 function parseArgs(argv: string[]): CliOptions {
     const options: CliOptions = {};
     const fileIndex = argv.indexOf('--file');
-    if (fileIndex >= 0 && argv[fileIndex + 1]) {
-        options.file = argv[fileIndex + 1];
-    }
-    if (argv.includes('--git-unstaged')) {
-        options.gitUnstaged = true;
-    }
-    if (argv.includes('--all')) {
-        options.all = true;
-    }
+    if (fileIndex >= 0 && argv[fileIndex + 1]) options.file = argv[fileIndex + 1];
+
+    const configIndex = argv.indexOf('--config');
+    if (configIndex >= 0 && argv[configIndex + 1]) options.config = argv[configIndex + 1];
+
+    const packageIndex = argv.indexOf('--package');
+    if (packageIndex >= 0 && argv[packageIndex + 1]) options.packageName = argv[packageIndex + 1];
+
+    const changedSinceIndex = argv.indexOf('--changed-since');
+    if (changedSinceIndex >= 0 && argv[changedSinceIndex + 1]) options.changedSince = argv[changedSinceIndex + 1];
+
+    const modeIndex = argv.indexOf('--mode');
+    if (modeIndex >= 0 && argv[modeIndex + 1]) options.mode = argv[modeIndex + 1] as GenerationMode;
+
+    const frameworkIndex = argv.indexOf('--framework');
+    if (frameworkIndex >= 0 && argv[frameworkIndex + 1]) options.framework = argv[frameworkIndex + 1] as FrameworkMode;
+
+    if (argv.includes('--git-unstaged')) options.gitUnstaged = true;
+    if (argv.includes('--all')) options.all = true;
+    if (argv.includes('--dry-run')) options.dryRun = true;
+
     return options;
 }
 
-function resolveFilePath(fileArg: string): string {
-    return path.isAbsolute(fileArg) ? fileArg : path.join(process.cwd(), fileArg);
+function resolveMode(args: CliOptions, defaultMode: GenerationMode): GenerationMode {
+    if (args.mode) return args.mode;
+    if (args.file) return 'file';
+    if (args.changedSince) return 'changed-since';
+    if (args.all) return 'all';
+    if (args.gitUnstaged) return 'git-unstaged';
+    return defaultMode;
 }
 
-function resolveTargetFiles(args: CliOptions): string[] {
-    if (args.file) {
-        return [resolveFilePath(args.file)];
+function isServiceFile(filePath: string, content: string): boolean {
+    const basename = path.basename(filePath).toLowerCase();
+    if (/service|api|client|repository|gateway|adapter/i.test(basename)) return true;
+    const hasHttpClient = content.includes('axios') || content.includes('fetch(') || content.includes('ky.') || content.includes('got.');
+    const hasAsyncMethods = (content.match(/async\s/g) || []).length >= 2;
+    return hasHttpClient && hasAsyncMethods;
+}
+
+function isContextProviderFile(filePath: string, content: string): boolean {
+    const basename = path.basename(filePath).toLowerCase();
+    if (basename.includes('context')) return true;
+    return content.includes('createContext') && (content.includes('Provider') || content.includes('useContext'));
+}
+
+function isTestUtilityFile(filePath: string): boolean {
+    const normalized = filePath.replace(/\\/g, '/');
+    if (normalized.includes('/test-utils/') || normalized.includes('/test-helpers/') ||
+        normalized.includes('/testUtils/') || normalized.includes('/testHelpers/') ||
+        normalized.includes('/testing/') || normalized.includes('/__test-utils__/')) {
+        return true;
     }
+    const basename = path.basename(filePath).toLowerCase();
+    return /^(renderwithproviders|customrender|test-?helpers?|test-?utils?|setup-?tests?|jest-?setup|vitest-?setup|test-?wrapper)/i
+        .test(basename.replace(/\.(tsx?|jsx?)$/, ''));
+}
 
-    if (args.all) {
-        return scanSourceFiles();
-    }
+function isBarrelFile(filePath: string, content: string): boolean {
+    const basename = path.basename(filePath);
+    if (!/^index\.(ts|tsx)$/.test(basename)) return false;
+    const lines = content.split('\n').filter((line) => line.trim().length > 0);
+    if (lines.length === 0) return false;
+    const exportLines = lines.filter((line) => /^\s*(export\s|import\s)/.test(line));
+    return exportLines.length >= lines.length * 0.7;
+}
 
-    const unstagedFiles = getGitUnstagedFiles();
+function isLikelyHookFile(filePath: string, sourceText: string): boolean {
+    const base = path.basename(filePath, path.extname(filePath));
+    if (/^use[A-Z]/.test(base)) return true;
+    return /export\s+(?:const|function)\s+use[A-Z]/.test(sourceText);
+}
 
-    if (unstagedFiles.length > 0) {
-        return unstagedFiles;
-    }
-
-    if (args.gitUnstaged) {
-        return [];
-    }
-
-    return scanSourceFiles();
+function shouldGenerateNonComponent(target: TargetFile, filePath: string, sourceText: string): boolean {
+    const isHook = isLikelyHookFile(filePath, sourceText);
+    if (isHook) return target.generateFor.includes('hooks');
+    return target.generateFor.includes('utils');
 }
 
 async function run() {
     const args = parseArgs(process.argv.slice(2));
-    const { project, checker } = createParser();
-    const files = resolveTargetFiles(args);
+    const config = loadConfig(ROOT_DIR, args.config);
+    const workspacePackages = resolveWorkspacePackages(config, ROOT_DIR);
+    const mode = resolveMode(args, config.defaults.mode);
 
-    console.log(`Found ${files.length} file(s) to process.`);
+    const targets = resolveTargetFiles({
+        mode,
+        packages: workspacePackages,
+        packageName: args.packageName,
+        changedSince: args.changedSince,
+        file: args.file,
+        frameworkOverride: args.framework ?? 'auto',
+        workspaceRoot: ROOT_DIR,
+    });
 
-    if (files.length === 0) {
+    console.log(`Resolved ${targets.length} file(s) to process.`);
+    if (targets.length === 0) {
         console.log('No matching source files found.');
         return;
     }
 
-    for (const [index, filePath] of files.entries()) {
-        console.log(`\n[${index + 1}/${files.length}] Processing ${filePath}`);
-        const sourceFile = getSourceFile(project, filePath);
+    if (args.dryRun) {
+        printDryRun(targets, mode);
+        return;
+    }
 
-        // Skip test utility files (renderWithProviders, test helpers, etc.)
-        if (isTestUtilityFile(filePath)) {
-            console.log('  - Test utility file detected. Skipping (not a file to generate tests for).');
+    const parserByPackage = new Map<string, ReturnType<typeof createParser>>();
+
+    for (const [index, target] of targets.entries()) {
+        if (!parserByPackage.has(target.packageRoot)) {
+            parserByPackage.set(target.packageRoot, createParser(target.packageRoot));
+        }
+        const parser = parserByPackage.get(target.packageRoot)!;
+        const sourceFile = parser.project.getSourceFile(target.filePath) ?? parser.project.addSourceFileAtPath(target.filePath);
+
+        console.log(`\n[${index + 1}/${targets.length}] Processing ${target.filePath}`);
+        setActiveFramework(target.framework);
+        setPathResolutionContext({
+            packageRoot: target.packageRoot,
+            renderHelperOverride: target.renderHelper,
+        });
+
+        if (isTestUtilityFile(target.filePath) || isTestFile(target.filePath)) {
+            console.log('  - Test utility/test file detected. Skipping.');
             continue;
         }
 
-        // Check if this is a barrel/index file (only re-exports, no components)
-        const isBarrel = isBarrelFile(filePath, sourceFile.getText());
-        if (isBarrel) {
-            const testFilePath = getTestFilePath(filePath);
-            console.log(`  - Barrel file detected. Writing test: ${testFilePath}`);
-            const barrelTest = generateBarrelTest(sourceFile, testFilePath, filePath);
+        const sourceText = sourceFile.getText();
+        const testFilePath = getTestFilePath(target.filePath);
+
+        if (isBarrelFile(target.filePath, sourceText) && target.generateFor.includes('utils')) {
+            const barrelTest = generateBarrelTest(sourceFile, testFilePath, target.filePath);
             if (barrelTest) {
+                console.log(`  - Barrel file detected. Writing test: ${testFilePath}`);
                 writeFile(testFilePath, barrelTest);
                 console.log('  - Barrel test file generated/updated.');
             } else {
@@ -101,126 +178,74 @@ async function run() {
             continue;
         }
 
-        const testFilePath = getTestFilePath(filePath);
-
-        // Context files get special handling (Provider + hook testing)
-        const isContextFile = isContextProviderFile(filePath, sourceFile.getText());
-        if (isContextFile) {
-            console.log('  - Context provider file detected. Generating context tests...');
-            const contextTest = generateContextTest(sourceFile, checker, testFilePath, filePath);
+        if (isContextProviderFile(target.filePath, sourceText) && target.generateFor.includes('components')) {
+            const contextTest = generateContextTest(sourceFile, parser.checker, testFilePath, target.filePath);
             if (contextTest) {
-                console.log(`  - Writing context test file: ${testFilePath}`);
+                console.log(`  - Context provider detected. Writing test: ${testFilePath}`);
                 writeFile(testFilePath, contextTest);
                 console.log('  - Context test file generated/updated.');
                 continue;
             }
         }
 
-        // Detect service/API files for enhanced mock injection
-        const fileContent = sourceFile.getText();
-        const isService = isServiceFile(filePath, fileContent);
-
-        const components = analyzeSourceFile(sourceFile, project, checker);
-
-        if (components.length === 0) {
-            // Try utility/function test generation for non-component files
-            const fileType = isService ? 'service' as const : 'utility' as const;
-            console.log(`  - No React components found. Generating ${fileType} tests...`);
-            const utilityTest = generateUtilityTest(sourceFile, checker, testFilePath, filePath, fileType);
-            if (utilityTest) {
-                console.log(`  - Writing ${fileType} test file: ${testFilePath}`);
-                writeFile(testFilePath, utilityTest);
-                console.log(`  - ${fileType} test file generated/updated.`);
-            } else {
-                console.log('  - No exported functions found. Skipping.');
+        const components = analyzeSourceFile(sourceFile, parser.project, parser.checker);
+        if (components.length > 0) {
+            if (!target.generateFor.includes('components')) {
+                console.log('  - Component generation disabled for this package. Skipping.');
+                continue;
             }
+            const generatedTest = generateTests(components, {
+                pass: 2,
+                testFilePath,
+                sourceFilePath: target.filePath,
+            });
+            console.log(`  - Writing component test file: ${testFilePath}`);
+            writeFile(testFilePath, generatedTest);
+            console.log('  - Component test file generated/updated.');
             continue;
         }
 
-        console.log(`  - Writing test file: ${testFilePath}`);
+        if (!shouldGenerateNonComponent(target, target.filePath, sourceText)) {
+            console.log('  - Non-component generation disabled for this file type. Skipping.');
+            continue;
+        }
 
-        const generatedTest = generateTests(components, {
-            pass: 2,
-            testFilePath,
-            sourceFilePath: filePath,
-        });
-
-        writeFile(testFilePath, generatedTest);
-        console.log('  - Test file generated/updated.');
+        const fileType = isServiceFile(target.filePath, sourceText) ? 'service' as const : 'utility' as const;
+        const utilityTest = generateUtilityTest(sourceFile, parser.checker, testFilePath, target.filePath, fileType);
+        if (utilityTest) {
+            console.log(`  - Writing ${fileType} test file: ${testFilePath}`);
+            writeFile(testFilePath, utilityTest);
+            console.log(`  - ${fileType} test file generated/updated.`);
+        } else {
+            console.log('  - No exported functions found. Skipping.');
+        }
     }
+
+    setActiveFramework(null);
+    setPathResolutionContext(null);
 }
 
-function isServiceFile(filePath: string, content: string): boolean {
-    const basename = path.basename(filePath).toLowerCase();
-    // Detect by file name patterns
-    if (/service|api|client|repository|gateway|adapter/i.test(basename)) return true;
-    // Detect by content patterns: axios/fetch imports + async methods
-    const hasHttpClient = content.includes('axios') || content.includes('fetch(') || content.includes('ky.') || content.includes('got.');
-    const hasAsyncMethods = (content.match(/async\s/g) || []).length >= 2;
-    return hasHttpClient && hasAsyncMethods;
-}
-
-function isContextProviderFile(filePath: string, content: string): boolean {
-    const basename = path.basename(filePath).toLowerCase();
-    // Detect context files by name or content patterns
-    if (basename.includes('context')) return true;
-    // Check for createContext usage and Provider export
-    return content.includes('createContext') && (
-        content.includes('Provider') || content.includes('useContext')
-    );
-}
-
-function isTestUtilityFile(filePath: string): boolean {
-    const normalized = filePath.replace(/\\/g, '/');
-    // Skip files in test-utils, test-helpers directories, or files named like test utilities
-    if (normalized.includes('/test-utils/') || normalized.includes('/test-helpers/') ||
-        normalized.includes('/testUtils/') || normalized.includes('/testHelpers/') ||
-        normalized.includes('/testing/') || normalized.includes('/__test-utils__/')) {
-        return true;
+function printDryRun(targets: TargetFile[], mode: GenerationMode): void {
+    console.log(`Dry run mode: ${mode}`);
+    const byPackage = new Map<string, TargetFile[]>();
+    for (const target of targets) {
+        if (!byPackage.has(target.packageName)) byPackage.set(target.packageName, []);
+        byPackage.get(target.packageName)!.push(target);
     }
-    const basename = path.basename(filePath).toLowerCase();
-    if (/^(renderwithproviders|customrender|test-?helpers?|test-?utils?|setup-?tests?|jest-?setup|vitest-?setup|test-?wrapper)/i.test(basename.replace(/\.(tsx?|jsx?)$/, ''))) {
-        return true;
-    }
-    return false;
-}
 
-function isBarrelFile(filePath: string, content: string): boolean {
-    const basename = path.basename(filePath);
-    // index.ts or index.tsx files that primarily re-export
-    if (!/^index\.(ts|tsx)$/.test(basename)) return false;
-
-    const lines = content.split('\n').filter((l) => l.trim().length > 0);
-    if (lines.length === 0) return false;
-
-    // Check if most lines are export/import statements
-    const exportLines = lines.filter(
-        (l) => /^\s*(export\s|import\s)/.test(l)
-    );
-    return exportLines.length >= lines.length * 0.7;
-}
-
-function getGitUnstagedFiles(): string[] {
-    try {
-        const output = execSync('git diff --name-only --diff-filter=ACMTU', {
-            cwd: process.cwd(),
-            encoding: 'utf8',
-        });
-
-        return output
-            .split('\n')
-            .map((line) => line.trim())
-            .filter((line) => line.length > 0)
-            .map((line) => (path.isAbsolute(line) ? line : path.join(process.cwd(), line)))
-            .filter((filePath) => fs.existsSync(filePath))
-            .filter((filePath) => filePath.endsWith('.tsx') || filePath.endsWith('.ts'))
-            .filter((filePath) => !isTestFile(filePath));
-    } catch {
-        return [];
+    for (const [pkg, files] of byPackage.entries()) {
+        const first = files[0];
+        console.log(`\nPackage: ${pkg}`);
+        console.log(`  Root: ${first.packageRoot}`);
+        console.log(`  Framework: ${first.framework}`);
+        console.log(`  Render helper: ${first.renderHelper}`);
+        console.log(`  Files: ${files.length}`);
     }
 }
 
 run().catch((error) => {
+    setActiveFramework(null);
+    setPathResolutionContext(null);
     console.error(error);
     process.exit(1);
 });

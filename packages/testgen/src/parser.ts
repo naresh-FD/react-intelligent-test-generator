@@ -8,8 +8,8 @@ export interface ParserContext {
     checker: TypeChecker;
 }
 
-export function createParser(): ParserContext {
-    const tsconfigPath = path.join(ROOT_DIR, 'tsconfig.json');
+export function createParser(rootDir: string = ROOT_DIR): ParserContext {
+    const tsconfigPath = path.join(rootDir, 'tsconfig.json');
     const project = fs.existsSync(tsconfigPath)
         ? new Project({ tsConfigFilePath: tsconfigPath })
         : new Project({
