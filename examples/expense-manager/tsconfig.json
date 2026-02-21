@@ -1,16 +1,15 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "baseUrl": "./src",
     "paths": {
-      "@/*": ["./*"],
-      "@components/*": ["components/*"],
-      "@contexts/*": ["contexts/*"],
-      "@hooks/*": ["hooks/*"],
-      "@services/*": ["services/*"],
-      "@types/*": ["types/*"],
-      "@utils/*": ["utils/*"],
-      "@pages/*": ["pages/*"]
+      "@/*": ["./src/*"],
+      "@components/*": ["./src/components/*"],
+      "@contexts/*": ["./src/contexts/*"],
+      "@hooks/*": ["./src/hooks/*"],
+      "@services/*": ["./src/services/*"],
+      "@types/*": ["./src/types/*"],
+      "@utils/*": ["./src/utils/*"],
+      "@pages/*": ["./src/pages/*"]
     }
   },
   "include": ["src"],
