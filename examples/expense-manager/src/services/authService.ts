@@ -1,4 +1,5 @@
-import api, { setAuthToken, setRefreshToken, clearAuthTokens } from './api';
+import { setAuthToken, setRefreshToken, clearAuthTokens } from './api';
+import { localDb, localDbHelpers } from './localDb';
 import type {
   User,
   AuthCredentials,
@@ -6,73 +7,160 @@ import type {
   AuthTokens,
   UpdateProfileData,
   ChangePasswordData,
-  ApiResponse,
 } from '@/types';
 import { USER_KEY } from '@/utils/constants';
+import { generateId } from '@/utils/helpers';
 
 interface AuthResponse {
   user: User;
   tokens: AuthTokens;
 }
 
+const createTokens = (): AuthTokens => {
+  return {
+    accessToken: `local-access-${Date.now()}`,
+    refreshToken: `local-refresh-${Date.now()}`,
+    expiresIn: 60 * 60,
+  };
+};
+
+const toPublicUser = (user: User | (User & { password: string })): User => {
+  const { id, email, name, avatar, currency, timezone, language, createdAt, updatedAt } = user;
+  return { id, email, name, avatar, currency, timezone, language, createdAt, updatedAt };
+};
+
+const storeSession = (user: User, tokens: AuthTokens): void => {
+  setAuthToken(tokens.accessToken);
+  setRefreshToken(tokens.refreshToken);
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+};
+
 export const authService = {
   async login(credentials: AuthCredentials): Promise<AuthResponse> {
-    const response = await api.post<ApiResponse<AuthResponse>>('/auth/login', credentials);
-    const { user, tokens } = response.data.data;
+    const matchedUser = localDb
+      .getUsers()
+      .find(
+        (user) =>
+          user.email.toLowerCase() === credentials.email.toLowerCase() &&
+          user.password === credentials.password
+      );
 
-    setAuthToken(tokens.accessToken);
-    setRefreshToken(tokens.refreshToken);
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    if (!matchedUser) {
+      throw new Error('Invalid email or password');
+    }
+
+    const user = toPublicUser(matchedUser);
+    const tokens = createTokens();
+    storeSession(user, tokens);
 
     return { user, tokens };
   },
 
   async register(data: RegisterData): Promise<AuthResponse> {
-    const response = await api.post<ApiResponse<AuthResponse>>('/auth/register', {
-      name: data.name,
+    const users = localDb.getUsers();
+    const existing = users.find((user) => user.email.toLowerCase() === data.email.toLowerCase());
+
+    if (existing) {
+      throw new Error('Email already exists');
+    }
+
+    const timestamp = localDbHelpers.nowIso();
+    const localUser = {
+      id: generateId(),
       email: data.email,
       password: data.password,
-    });
-    const { user, tokens } = response.data.data;
+      name: data.name,
+      avatar: '',
+      currency: 'USD',
+      timezone: 'America/New_York',
+      language: 'en',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
 
-    setAuthToken(tokens.accessToken);
-    setRefreshToken(tokens.refreshToken);
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    localDb.upsertUser(localUser);
+
+    const user = toPublicUser(localUser);
+    const tokens = createTokens();
+    storeSession(user, tokens);
 
     return { user, tokens };
   },
 
   async logout(): Promise<void> {
-    try {
-      await api.post('/auth/logout');
-    } finally {
-      clearAuthTokens();
-      localStorage.removeItem(USER_KEY);
-    }
+    clearAuthTokens();
+    localStorage.removeItem(USER_KEY);
   },
 
   async getCurrentUser(): Promise<User> {
-    const response = await api.get<ApiResponse<User>>('/auth/me');
-    return response.data.data;
+    const user = this.getStoredUser();
+    if (!user) {
+      throw new Error('No active user session');
+    }
+
+    const dbUser = localDb.getUsers().find((item) => item.id === user.id);
+    if (!dbUser) {
+      throw new Error('User not found');
+    }
+
+    return toPublicUser(dbUser);
   },
 
   async updateProfile(data: UpdateProfileData): Promise<User> {
-    const response = await api.put<ApiResponse<User>>('/auth/profile', data);
-    const user = response.data.data;
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
-    return user;
+    const current = this.getStoredUser();
+    if (!current) {
+      throw new Error('Not authenticated');
+    }
+
+    const dbUser = localDb.getUsers().find((user) => user.id === current.id);
+    if (!dbUser) {
+      throw new Error('User not found');
+    }
+
+    const updated = {
+      ...dbUser,
+      ...data,
+      updatedAt: localDbHelpers.nowIso(),
+    };
+
+    localDb.upsertUser(updated);
+    const publicUser = toPublicUser(updated);
+    localStorage.setItem(USER_KEY, JSON.stringify(publicUser));
+
+    return publicUser;
   },
 
   async changePassword(data: ChangePasswordData): Promise<void> {
-    await api.post('/auth/change-password', data);
+    const current = this.getStoredUser();
+    if (!current) {
+      throw new Error('Not authenticated');
+    }
+
+    const dbUser = localDb.getUsers().find((user) => user.id === current.id);
+    if (!dbUser) {
+      throw new Error('User not found');
+    }
+
+    if (dbUser.password !== data.currentPassword) {
+      throw new Error('Current password is incorrect');
+    }
+
+    localDb.upsertUser({
+      ...dbUser,
+      password: data.newPassword,
+      updatedAt: localDbHelpers.nowIso(),
+    });
   },
 
   async forgotPassword(email: string): Promise<void> {
-    await api.post('/auth/forgot-password', { email });
+    const exists = localDb.getUsers().some((user) => user.email.toLowerCase() === email.toLowerCase());
+    if (!exists) {
+      throw new Error('Email not found');
+    }
   },
 
-  async resetPassword(token: string, password: string): Promise<void> {
-    await api.post('/auth/reset-password', { token, password });
+  async resetPassword(_token: string, _password: string): Promise<void> {
+    // Local mode does not issue reset tokens. Keep method for API compatibility.
   },
 
   async refreshToken(): Promise<AuthTokens> {
@@ -81,11 +169,7 @@ export const authService = {
       throw new Error('No refresh token available');
     }
 
-    const response = await api.post<ApiResponse<AuthTokens>>('/auth/refresh', {
-      refreshToken,
-    });
-    const tokens = response.data.data;
-
+    const tokens = createTokens();
     setAuthToken(tokens.accessToken);
     setRefreshToken(tokens.refreshToken);
 
@@ -96,7 +180,7 @@ export const authService = {
     const userStr = localStorage.getItem(USER_KEY);
     if (!userStr) return null;
     try {
-      return JSON.parse(userStr);
+      return JSON.parse(userStr) as User;
     } catch {
       return null;
     }

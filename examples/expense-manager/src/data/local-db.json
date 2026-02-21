@@ -1,0 +1,192 @@
+{
+  "users": [
+    {
+      "id": "user-1",
+      "email": "demo@expense.local",
+      "password": "Demo@1234",
+      "name": "Demo Finance User",
+      "avatar": "",
+      "currency": "USD",
+      "timezone": "America/New_York",
+      "language": "en",
+      "createdAt": "2026-01-01T08:00:00.000Z",
+      "updatedAt": "2026-01-01T08:00:00.000Z"
+    }
+  ],
+  "categories": [
+    {
+      "id": "cat-salary",
+      "name": "Salary",
+      "icon": "Wallet",
+      "color": "#22c55e",
+      "type": "income",
+      "isDefault": true,
+      "createdAt": "2026-01-01T08:00:00.000Z",
+      "updatedAt": "2026-01-01T08:00:00.000Z"
+    },
+    {
+      "id": "cat-investment",
+      "name": "Investment",
+      "icon": "TrendingUp",
+      "color": "#8b5cf6",
+      "type": "income",
+      "isDefault": true,
+      "createdAt": "2026-01-01T08:00:00.000Z",
+      "updatedAt": "2026-01-01T08:00:00.000Z"
+    },
+    {
+      "id": "cat-housing",
+      "name": "Housing",
+      "icon": "Home",
+      "color": "#f97316",
+      "type": "expense",
+      "isDefault": true,
+      "createdAt": "2026-01-01T08:00:00.000Z",
+      "updatedAt": "2026-01-01T08:00:00.000Z"
+    },
+    {
+      "id": "cat-food",
+      "name": "Food & Dining",
+      "icon": "Utensils",
+      "color": "#3b82f6",
+      "type": "expense",
+      "isDefault": true,
+      "createdAt": "2026-01-01T08:00:00.000Z",
+      "updatedAt": "2026-01-01T08:00:00.000Z"
+    },
+    {
+      "id": "cat-transport",
+      "name": "Transportation",
+      "icon": "Car",
+      "color": "#06b6d4",
+      "type": "expense",
+      "isDefault": true,
+      "createdAt": "2026-01-01T08:00:00.000Z",
+      "updatedAt": "2026-01-01T08:00:00.000Z"
+    }
+  ],
+  "expenses": [
+    {
+      "id": "tx-001",
+      "userId": "user-1",
+      "amount": 6200,
+      "category": "Salary",
+      "categoryId": "cat-salary",
+      "type": "income",
+      "description": "Monthly salary",
+      "date": "2026-02-01",
+      "isRecurring": true,
+      "recurrence": "monthly",
+      "tags": [
+        "payroll"
+      ],
+      "attachments": [],
+      "createdAt": "2026-02-01T08:00:00.000Z",
+      "updatedAt": "2026-02-01T08:00:00.000Z"
+    },
+    {
+      "id": "tx-002",
+      "userId": "user-1",
+      "amount": 2800,
+      "category": "Housing",
+      "categoryId": "cat-housing",
+      "type": "expense",
+      "description": "Rent payment",
+      "date": "2026-02-03",
+      "isRecurring": true,
+      "recurrence": "monthly",
+      "tags": [
+        "fixed-cost"
+      ],
+      "attachments": [],
+      "createdAt": "2026-02-03T08:00:00.000Z",
+      "updatedAt": "2026-02-03T08:00:00.000Z"
+    },
+    {
+      "id": "tx-003",
+      "userId": "user-1",
+      "amount": 420,
+      "category": "Food & Dining",
+      "categoryId": "cat-food",
+      "type": "expense",
+      "description": "Groceries",
+      "date": "2026-02-06",
+      "isRecurring": false,
+      "recurrence": "none",
+      "tags": [
+        "essentials"
+      ],
+      "attachments": [],
+      "createdAt": "2026-02-06T08:00:00.000Z",
+      "updatedAt": "2026-02-06T08:00:00.000Z"
+    },
+    {
+      "id": "tx-004",
+      "userId": "user-1",
+      "amount": 160,
+      "category": "Transportation",
+      "categoryId": "cat-transport",
+      "type": "expense",
+      "description": "Fuel and tolls",
+      "date": "2026-02-09",
+      "isRecurring": false,
+      "recurrence": "none",
+      "tags": [
+        "commute"
+      ],
+      "attachments": [],
+      "createdAt": "2026-02-09T08:00:00.000Z",
+      "updatedAt": "2026-02-09T08:00:00.000Z"
+    },
+    {
+      "id": "tx-005",
+      "userId": "user-1",
+      "amount": 250,
+      "category": "Investment",
+      "categoryId": "cat-investment",
+      "type": "income",
+      "description": "Dividend payout",
+      "date": "2026-02-12",
+      "isRecurring": false,
+      "recurrence": "none",
+      "tags": [
+        "portfolio"
+      ],
+      "attachments": [],
+      "createdAt": "2026-02-12T08:00:00.000Z",
+      "updatedAt": "2026-02-12T08:00:00.000Z"
+    }
+  ],
+  "budgets": [
+    {
+      "id": "budget-food",
+      "userId": "user-1",
+      "categoryId": "cat-food",
+      "category": "Food & Dining",
+      "amount": 700,
+      "spent": 420,
+      "period": "monthly",
+      "startDate": "2026-02-01",
+      "endDate": "2026-02-28",
+      "alertThreshold": 80,
+      "isActive": true,
+      "createdAt": "2026-02-01T08:00:00.000Z",
+      "updatedAt": "2026-02-06T08:00:00.000Z"
+    },
+    {
+      "id": "budget-transport",
+      "userId": "user-1",
+      "categoryId": "cat-transport",
+      "category": "Transportation",
+      "amount": 250,
+      "spent": 160,
+      "period": "monthly",
+      "startDate": "2026-02-01",
+      "endDate": "2026-02-28",
+      "alertThreshold": 75,
+      "isActive": true,
+      "createdAt": "2026-02-01T08:00:00.000Z",
+      "updatedAt": "2026-02-09T08:00:00.000Z"
+    }
+  ]
+}
