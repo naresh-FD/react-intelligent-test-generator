@@ -193,10 +193,38 @@ function generateTestForFile(filePath: string, { project, checker }: ParserConte
 /** Temporary output directory (relative to expense-manager cwd) */
 const VERIFY_DIR = '.testgen-results';
 
+function normalizeSlashes(value: string): string {
+  return value.split('\\').join('/');
+}
+
+function escapeRegex(value: string): string {
+  const regexChars = new Set([
+    '\\',
+    '^',
+    '$',
+    '*',
+    '+',
+    '?',
+    '.',
+    '(',
+    ')',
+    '|',
+    '{',
+    '}',
+    '[',
+    ']',
+  ]);
+  let escaped = '';
+  for (const char of value) {
+    escaped += regexChars.has(char) ? `\\${char}` : char;
+  }
+  return escaped;
+}
+
 function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRunResult {
   const cwd = process.cwd();
-  const relTest = path.relative(cwd, testFilePath).replace(/\\/g, '/');
-  const relSrc = path.relative(cwd, sourceFilePath).replace(/\\/g, '/');
+  const relTest = normalizeSlashes(path.relative(cwd, testFilePath));
+  const relSrc = normalizeSlashes(path.relative(cwd, sourceFilePath));
   const resultFile = path.join(cwd, VERIFY_DIR, 'jest-result.json');
   const coverageDir = path.join(cwd, VERIFY_DIR, 'coverage');
 
@@ -205,7 +233,7 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
   if (fs.existsSync(resultFile)) fs.unlinkSync(resultFile);
 
   // Escape the path for use as a jest regex pattern
-  const pathPattern = relTest.replace(/\./g, '\\.').replace(/[[\]()^$*+?{}|]/g, '\\$&');
+  const pathPattern = escapeRegex(relTest);
 
   const jestArgs = [
     `--testPathPattern="${pathPattern}"`,
@@ -261,7 +289,7 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
       // Match by filename (coverage keys are absolute paths on most OS)
       const basename = path.basename(sourceFilePath);
       const matchKey = Object.keys(cov).find(
-        (k) => k.endsWith(basename) || k.replace(/\\/g, '/').endsWith(relSrc)
+        (k) => k.endsWith(basename) || normalizeSlashes(k).endsWith(relSrc)
       );
       const entry = matchKey ? cov[matchKey] : cov['total'];
       coverage = entry?.lines?.pct ?? entry?.statements?.pct ?? 0;
@@ -488,7 +516,7 @@ function isContextProviderFile(filePath: string, content: string): boolean {
 }
 
 function isTestUtilityFile(filePath: string): boolean {
-  const normalized = filePath.replace(/\\/g, '/');
+  const normalized = normalizeSlashes(filePath);
   for (const dir of TEST_UTILITY_PATTERNS.directories) {
     if (normalized.includes(dir)) return true;
   }
@@ -510,7 +538,7 @@ function isTestUtilityFile(filePath: string): boolean {
 }
 
 function isUntestableFile(filePath: string): boolean {
-  const normalized = filePath.replace(/\\/g, '/');
+  const normalized = normalizeSlashes(filePath);
   for (const dir of UNTESTABLE_PATTERNS.directories) {
     if (normalized.includes(dir)) return true;
   }
@@ -545,7 +573,13 @@ function getGitUnstagedFiles(): string[] {
   }
 }
 
-run().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+async function main(): Promise<void> {
+  try {
+    await run();
+  } catch (error) {
+    console.error(error);
+    process.exit(1);
+  }
+}
+
+void main(); // NOSONAR - top-level await may not be compatible with current Node16/CommonJS runtime setup
