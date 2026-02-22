@@ -63,12 +63,33 @@ export const CONTEXT_DETECTION_CONFIG = {
   },
 
   // Custom context providers specific to your app
+  // Order matters: listed outermost-first (last in list = innermost wrapper around children)
   customContexts: [
     {
       name: 'Notification',
       hooks: ['useNotification'],
       contextName: 'NotificationContext',
       providerName: 'NotificationProvider',
+    },
+    // Expense-manager app contexts — hooks mapped to their provider so the wrapper generator
+    // automatically nests the right providers when a hook depends on them.
+    {
+      name: 'Expense',
+      hooks: ['useExpenseContext'],
+      contextName: 'ExpenseContext',
+      providerName: 'ExpenseProvider',
+    },
+    {
+      name: 'Budget',
+      hooks: ['useBudgetContext'],
+      contextName: 'BudgetContext',
+      providerName: 'BudgetProvider',
+    },
+    {
+      name: 'Category',
+      hooks: ['useCategoryContext'],
+      contextName: 'CategoryContext',
+      providerName: 'CategoryProvider',
     },
     {
       name: 'Api',

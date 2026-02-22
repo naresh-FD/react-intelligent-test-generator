@@ -21,7 +21,10 @@ export function buildDefaultProps(component: ComponentInfo): string {
   if (requiredProps.length === 0) return 'const defaultProps = {};';
 
   const lines = requiredProps.map((prop) => {
-    const value = mockValueForProp(prop);
+    let value = mockValueForProp(prop);
+    // Required props must never be undefined — fall back to {} for unknown complex types
+    // so components don't crash on startup with a missing required prop.
+    if (value === 'undefined') value = '{}';
     return `  ${prop.name}: ${value}`;
   });
 
@@ -121,13 +124,17 @@ export function buildVariantProps(component: ComponentInfo): VariantInfo[] {
   }
 
   // Empty data variant (arrays set to [])
+  // Exclude callbacks and function types — a type like `(rules: string[]) => void` contains
+  // "[]" but is a function, not an array prop.
   const arrayProps = component.props.filter(
     (p) =>
-      p.type?.includes('[]') ||
-      p.type?.includes('Array') ||
-      /^(items|data|list|rows|options|results|records|entries|expenses|categories|users|products|orders|notifications|messages|transactions|comments|posts|tasks|events)/i.test(
-        p.name
-      )
+      !p.isCallback &&
+      !p.type?.includes('=>') &&
+      (p.type?.includes('[]') ||
+        p.type?.includes('Array') ||
+        /^(items|data|list|rows|options|results|records|entries|expenses|categories|users|products|orders|notifications|messages|transactions|comments|posts|tasks|events)/i.test(
+          p.name
+        ))
   );
   if (arrayProps.length > 0 && !arrayProps.every((p) => p.isRequired)) {
     variants.push({
