@@ -47,6 +47,8 @@ interface JestRunResult {
   coverage: number;
   /** Raw error output on failure */
   errorOutput: string;
+  /** Concise single-line failure reason extracted from error output */
+  failureReason: string;
 }
 
 type VerifyStatus = 'pass' | 'fail' | 'low-coverage' | 'skipped' | 'generated';
@@ -56,6 +58,8 @@ interface VerifyResult {
   coverage: number;
   attempts: number;
   numTests: number;
+  /** Concise reason why the test failed (first error line) */
+  failureReason?: string;
 }
 
 type ParserContext = ReturnType<typeof createParser>;
@@ -193,10 +197,69 @@ function generateTestForFile(filePath: string, { project, checker }: ParserConte
 /** Temporary output directory (relative to expense-manager cwd) */
 const VERIFY_DIR = '.testgen-results';
 
+function normalizeSlashes(value: string): string {
+  return value.split('\\').join('/');
+}
+
+function escapeRegex(value: string): string {
+  const regexChars = new Set([
+    '\\',
+    '^',
+    '$',
+    '*',
+    '+',
+    '?',
+    '.',
+    '(',
+    ')',
+    '|',
+    '{',
+    '}',
+    '[',
+    ']',
+  ]);
+  let escaped = '';
+  for (const char of value) {
+    escaped += regexChars.has(char) ? `\\${char}` : char;
+  }
+  return escaped;
+}
+
+/**
+ * Strip ANSI escape codes from a string.
+ */
+function stripAnsi(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+/**
+ * Extract a concise, single-line failure reason from jest error output.
+ * Looks for common error patterns (ReferenceError, TypeError, etc.)
+ * and returns the first match, truncated to 150 chars.
+ */
+function extractFailureReason(rawOutput: string): string {
+  const text = stripAnsi(rawOutput);
+  const lines = text.split('\n');
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Match common JS/TS error patterns
+    if (
+      /^(ReferenceError|TypeError|SyntaxError|Error|Cannot find module|expect\()/i.test(trimmed) ||
+      /Expected .+ (to |not )/.test(trimmed)
+    ) {
+      return trimmed.length > 150 ? `${trimmed.substring(0, 147)}...` : trimmed;
+    }
+  }
+
+  return '';
+}
+
 function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRunResult {
   const cwd = process.cwd();
-  const relTest = path.relative(cwd, testFilePath).replace(/\\/g, '/');
-  const relSrc = path.relative(cwd, sourceFilePath).replace(/\\/g, '/');
+  const relTest = normalizeSlashes(path.relative(cwd, testFilePath));
+  const relSrc = normalizeSlashes(path.relative(cwd, sourceFilePath));
   const resultFile = path.join(cwd, VERIFY_DIR, 'jest-result.json');
   const coverageDir = path.join(cwd, VERIFY_DIR, 'coverage');
 
@@ -205,7 +268,7 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
   if (fs.existsSync(resultFile)) fs.unlinkSync(resultFile);
 
   // Escape the path for use as a jest regex pattern
-  const pathPattern = relTest.replace(/\./g, '\\.').replace(/[[\]()^$*+?{}|]/g, '\\$&');
+  const pathPattern = escapeRegex(relTest);
 
   const jestArgs = [
     `--testPathPattern="${pathPattern}"`,
@@ -232,6 +295,7 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
   let passed = false;
   let numTests = 0;
   let numFailed = 0;
+  let failureReason = '';
 
   try {
     if (fs.existsSync(resultFile)) {
@@ -239,14 +303,39 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
         success?: boolean;
         numTotalTests?: number;
         numFailedTests?: number;
+        testResults?: Array<{
+          testResults?: Array<{
+            status?: string;
+            fullName?: string;
+            failureMessages?: string[];
+          }>;
+        }>;
       };
       numTests = jestOut.numTotalTests ?? 0;
       numFailed = jestOut.numFailedTests ?? 0;
       // Consider passing when all tests pass (including 0 tests = nothing to fail)
       passed = numFailed === 0;
+
+      // Extract first failure message from JSON for precise error reporting
+      if (numFailed > 0 && jestOut.testResults) {
+        for (const suite of jestOut.testResults) {
+          for (const test of suite.testResults ?? []) {
+            if (test.status === 'failed' && test.failureMessages?.length) {
+              failureReason = extractFailureReason(test.failureMessages[0]);
+              break;
+            }
+          }
+          if (failureReason) break;
+        }
+      }
     }
   } catch {
     /* result file missing or malformed — keep defaults */
+  }
+
+  // Fall back to raw error output if JSON didn't provide a reason
+  if (!failureReason && errorOutput) {
+    failureReason = extractFailureReason(errorOutput);
   }
 
   // --- Parse coverage for the specific source file ---
@@ -261,7 +350,7 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
       // Match by filename (coverage keys are absolute paths on most OS)
       const basename = path.basename(sourceFilePath);
       const matchKey = Object.keys(cov).find(
-        (k) => k.endsWith(basename) || k.replace(/\\/g, '/').endsWith(relSrc)
+        (k) => k.endsWith(basename) || normalizeSlashes(k).endsWith(relSrc)
       );
       const entry = matchKey ? cov[matchKey] : cov['total'];
       coverage = entry?.lines?.pct ?? entry?.statements?.pct ?? 0;
@@ -270,7 +359,7 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
     /* ignore coverage parse errors */
   }
 
-  return { passed, numTests, numFailed, coverage, errorOutput };
+  return { passed, numTests, numFailed, coverage, errorOutput, failureReason };
 }
 
 // ---------------------------------------------------------------------------
@@ -290,6 +379,7 @@ function verifyAndRetry(
     numFailed: 0,
     coverage: 0,
     errorOutput: '',
+    failureReason: '',
   };
 
   for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
@@ -302,10 +392,13 @@ function verifyAndRetry(
     console.log(`  ▶  Running jest (attempt ${attempt}/${maxRetries + 1})...`);
     lastResult = runJestOnTestFile(testFilePath, filePath);
 
-    const { passed, numTests, numFailed, coverage } = lastResult;
+    const { passed, numTests, numFailed, coverage, failureReason } = lastResult;
 
     if (!passed) {
       console.log(`  ❌ ${numFailed}/${numTests} test(s) failed`);
+      if (failureReason) {
+        console.log(`     Reason: ${failureReason}`);
+      }
       if (attempt < maxRetries + 1) continue; // will retry
     } else if (coverage < coverageThreshold) {
       console.log(
@@ -331,6 +424,7 @@ function verifyAndRetry(
     coverage: lastResult.coverage,
     attempts: maxRetries + 1,
     numTests: lastResult.numTests,
+    failureReason: lastResult.failureReason || undefined,
   };
 }
 
@@ -352,6 +446,7 @@ interface SummaryRow {
   coverage: number;
   attempts: number;
   numTests: number;
+  failureReason?: string;
 }
 
 function printSummary(rows: SummaryRow[]): void {
@@ -380,6 +475,10 @@ function printSummary(rows: SummaryRow[]): void {
     console.log(
       `${r.file.padEnd(fileW)}  ${icon} ${r.status.padEnd(12)} ${cov}  ${tests}  ${tries}`
     );
+    // Show failure reason on the next line for failed tests
+    if (r.status === 'fail' && r.failureReason) {
+      console.log(`${''.padEnd(fileW)}     └─ ${r.failureReason}`);
+    }
 
     if (r.status === 'pass') pass++;
     else if (r.status === 'fail') fail++;
@@ -488,7 +587,7 @@ function isContextProviderFile(filePath: string, content: string): boolean {
 }
 
 function isTestUtilityFile(filePath: string): boolean {
-  const normalized = filePath.replace(/\\/g, '/');
+  const normalized = normalizeSlashes(filePath);
   for (const dir of TEST_UTILITY_PATTERNS.directories) {
     if (normalized.includes(dir)) return true;
   }
@@ -510,7 +609,7 @@ function isTestUtilityFile(filePath: string): boolean {
 }
 
 function isUntestableFile(filePath: string): boolean {
-  const normalized = filePath.replace(/\\/g, '/');
+  const normalized = normalizeSlashes(filePath);
   for (const dir of UNTESTABLE_PATTERNS.directories) {
     if (normalized.includes(dir)) return true;
   }
@@ -545,7 +644,13 @@ function getGitUnstagedFiles(): string[] {
   }
 }
 
-run().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+async function main(): Promise<void> {
+  try {
+    await run();
+  } catch (error) {
+    console.error(error);
+    process.exit(1);
+  }
+}
+
+void main(); // NOSONAR - top-level await may not be compatible with current Node16/CommonJS runtime setup

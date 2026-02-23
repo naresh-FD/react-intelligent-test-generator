@@ -43,6 +43,16 @@ Thumbs.db
 # Testing
 coverage/
 .nyc_output/
+*.test.js
+*.test.jsx
+*.test.ts
+*.test.tsx
+*.spec.js
+*.spec.jsx
+*.spec.ts
+*.spec.tsx
+__tests__/
+.jest-cache/
 
 # Testgen verify output (temporary jest results + coverage snapshots)
 .testgen-results/
@@ -55,3 +65,4 @@ coverage/
 .husky/_
 *.zip
 .claude
+

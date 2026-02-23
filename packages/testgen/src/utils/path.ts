@@ -1,5 +1,5 @@
-import path from 'path';
-import fs from 'fs';
+import path from 'node:path';
+import fs from 'node:fs';
 import { ROOT_DIR, TESTS_DIR_NAME, detectSrcDir } from '../config';
 import { exists, listFilesRecursive } from '../fs';
 
@@ -11,18 +11,22 @@ export interface ScanSourceFilesOptions {
 
 interface GenerationContext {
   packageRoot: string;
-  renderHelperOverride: string | 'auto';
+  renderHelperOverride: string;
 }
 
 let _activeContext: GenerationContext | null = null;
 const _cachedRenderHelper = new Map<string, { path: string; exportName: string } | null>();
+
+function normalizeSlashes(value: string): string {
+  return value.split('\\').join('/');
+}
 
 export function setPathResolutionContext(context: GenerationContext | null): void {
   _activeContext = context;
 }
 
 export function isTestFile(filePath: string): boolean {
-  const normalized = filePath.replace(/\\/g, '/');
+  const normalized = normalizeSlashes(filePath);
   return (
     normalized.includes(`/${TESTS_DIR_NAME}/`) ||
     normalized.endsWith('.test.tsx') ||
@@ -49,7 +53,7 @@ export function scanSourceFiles(options: ScanSourceFilesOptions = {}): string[] 
   return files.filter((filePath) => {
     if (isTestFile(filePath)) return false;
     if (!filePath.endsWith('.ts') && !filePath.endsWith('.tsx')) return false;
-    const rel = path.relative(packageRoot, filePath).replace(/\\/g, '/');
+    const rel = normalizeSlashes(path.relative(packageRoot, filePath));
     const includeMatch = include.length === 0 || include.some((pattern) => matchGlob(rel, pattern));
     if (!includeMatch) return false;
     return !exclude.some((pattern) => matchGlob(rel, pattern));
@@ -66,7 +70,7 @@ export function getTestFilePath(sourceFilePath: string): string {
 
 export function relativeImport(fromFile: string, toFile: string): string {
   const fromDir = path.dirname(fromFile);
-  let rel = path.relative(fromDir, toFile).replace(/\\/g, '/');
+  let rel = normalizeSlashes(path.relative(fromDir, toFile));
   if (!rel.startsWith('.')) rel = `./${rel}`;
   return rel.replace(/\.(tsx?|jsx?)$/, '');
 }
@@ -101,18 +105,31 @@ export function resolveRenderHelper(
 
 function findRenderHelper(packageRoot: string): { path: string; exportName: string } | null {
   const srcDir = detectSrcDir(packageRoot);
-  const rootDir = packageRoot;
+  const dirsToCheck = getRenderHelperDirsToCheck(srcDir, packageRoot);
+  const directMatch = findRenderHelperInDirs(dirsToCheck);
+  if (directMatch) return directMatch;
+  return findRenderHelperBySourceScan(srcDir);
+}
 
+function getRenderHelperDirsToCheck(srcDir: string, packageRoot: string): string[] {
   const dirsToCheck = [srcDir];
-  for (const dirName of RENDER_HELPER_DIRS) {
-    const dirPath = path.join(srcDir, dirName);
-    if (exists(dirPath)) dirsToCheck.push(dirPath);
-  }
-  for (const dirName of RENDER_HELPER_DIRS) {
-    const dirPath = path.join(rootDir, dirName);
-    if (exists(dirPath) && !dirsToCheck.includes(dirPath)) dirsToCheck.push(dirPath);
-  }
+  collectRenderHelperDirs(dirsToCheck, srcDir);
+  collectRenderHelperDirs(dirsToCheck, packageRoot);
+  return dirsToCheck;
+}
 
+function collectRenderHelperDirs(dirsToCheck: string[], baseDir: string): void {
+  for (const dirName of RENDER_HELPER_DIRS) {
+    const dirPath = path.join(baseDir, dirName);
+    if (exists(dirPath) && !dirsToCheck.includes(dirPath)) {
+      dirsToCheck.push(dirPath);
+    }
+  }
+}
+
+function findRenderHelperInDirs(
+  dirsToCheck: string[]
+): { path: string; exportName: string } | null {
   for (const dir of dirsToCheck) {
     for (const fileName of RENDER_HELPER_FILE_NAMES) {
       for (const ext of ['.tsx', '.ts', '.jsx', '.js']) {
@@ -123,28 +140,33 @@ function findRenderHelper(packageRoot: string): { path: string; exportName: stri
       }
     }
   }
+  return null;
+}
 
-  if (exists(srcDir)) {
-    try {
-      const allFiles = listFilesRecursive(srcDir);
-      const candidates = allFiles.filter((filePath) => {
-        if (isTestFile(filePath)) return false;
-        const ext = path.extname(filePath);
-        if (!['.ts', '.tsx', '.js', '.jsx'].includes(ext)) return false;
-        const normalized = filePath.replace(/\\/g, '/');
-        return (
-          !normalized.includes('/node_modules/') &&
-          !normalized.includes('/dist/') &&
-          !normalized.includes('/build/')
-        );
-      });
-      for (const filePath of candidates) {
-        const exportName = detectRenderExport(filePath);
-        if (exportName) return { path: filePath, exportName };
-      }
-    } catch {
-      return null;
+function isEligibleRenderHelperCandidate(filePath: string): boolean {
+  if (isTestFile(filePath)) return false;
+  const ext = path.extname(filePath);
+  if (!['.ts', '.tsx', '.js', '.jsx'].includes(ext)) return false;
+  const normalized = normalizeSlashes(filePath);
+  return (
+    !normalized.includes('/node_modules/') &&
+    !normalized.includes('/dist/') &&
+    !normalized.includes('/build/')
+  );
+}
+
+function findRenderHelperBySourceScan(srcDir: string): { path: string; exportName: string } | null {
+  if (!exists(srcDir)) return null;
+
+  try {
+    const allFiles = listFilesRecursive(srcDir);
+    const candidates = allFiles.filter(isEligibleRenderHelperCandidate);
+    for (const filePath of candidates) {
+      const exportName = detectRenderExport(filePath);
+      if (exportName) return { path: filePath, exportName };
     }
+  } catch {
+    return null;
   }
 
   return null;
@@ -161,7 +183,7 @@ function detectRenderExport(filePath: string): string | null {
     ];
 
     for (const pattern of exportPatterns) {
-      const match = content.match(pattern);
+      const match = pattern.exec(content);
       if (match) return match[1];
     }
 
@@ -172,7 +194,7 @@ function detectRenderExport(filePath: string): string | null {
         content.includes('export { render') ||
         content.includes('export default'))
     ) {
-      const customExportMatch = content.match(/export\s+(?:const|function)\s+(render\w+)/);
+      const customExportMatch = /export\s+(?:const|function)\s+(render\w+)/.exec(content);
       if (customExportMatch) return customExportMatch[1];
     }
 
@@ -231,50 +253,62 @@ const RENDER_HELPER_DIRS = [
 ];
 
 function matchGlob(relativePath: string, pattern: string): boolean {
-  const normalizedPattern = pattern.replace(/\\/g, '/').replace(/^\.\//, '');
+  const slashNormalized = normalizeSlashes(pattern);
+  const normalizedPattern = slashNormalized.startsWith('./')
+    ? slashNormalized.slice(2)
+    : slashNormalized;
   const regex = globToRegex(normalizedPattern);
   return regex.test(relativePath);
 }
 
 function globToRegex(pattern: string): RegExp {
   let out = '^';
-  for (let i = 0; i < pattern.length; i++) {
-    const char = pattern[i];
-    const next = pattern[i + 1];
+  let index = 0;
+  while (index < pattern.length) {
+    const char = pattern[index];
+    const next = pattern[index + 1];
 
     if (char === '*' && next === '*') {
       out += '.*';
-      i++;
+      index += 2;
       continue;
     }
     if (char === '*') {
       out += '[^/]*';
+      index++;
       continue;
     }
     if (char === '?') {
       out += '[^/]';
+      index++;
       continue;
     }
     if (char === '{') {
-      const close = pattern.indexOf('}', i);
-      if (close > i) {
+      const close = pattern.indexOf('}', index);
+      if (close > index) {
         const options = pattern
-          .slice(i + 1, close)
+          .slice(index + 1, close)
           .split(',')
           .map((item) => item.trim())
           .filter((item) => item.length > 0)
           .map((item) => escapeRegex(item));
         out += `(${options.join('|')})`;
-        i = close;
+        index = close + 1;
         continue;
       }
     }
     out += escapeRegex(char);
+    index++;
   }
   out += '$';
   return new RegExp(out);
 }
 
 function escapeRegex(value: string): string {
-  return value.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  const specialChars = new Set(['.', '+', '^', '$', '{', '}', '(', ')', '|', '[', ']', '\\']);
+  let escaped = '';
+  for (const char of value) {
+    escaped += specialChars.has(char) ? `\\${char}` : char;
+  }
+  return escaped;
 }

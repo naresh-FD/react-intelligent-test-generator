@@ -1,5 +1,6 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { execSync } from 'child_process';
 import { isTestFile } from '../utils/path';
 import { listFilesRecursive } from '../fs';
