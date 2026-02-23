@@ -1,5 +1,6 @@
 import { Node, SourceFile, SyntaxKind, TypeChecker } from 'ts-morph';
 import path from 'node:path';
+import fs from 'node:fs';
 import { CONTEXT_DETECTION_CONFIG } from '../config';
 import { relativeImport } from '../utils/path';
 
@@ -43,7 +44,16 @@ export function generateContextTest(
 
   const importPath = relativeImport(testFilePath, sourceFilePath);
   const sourceText = sourceFile.getText();
-  const dependencies = detectDependencies(sourceText);
+  const dependencies = detectDependencies(sourceText, sourceFile);
+
+  // If NotificationProvider dependency detected but import path can't be resolved,
+  // skip the wrapper to avoid generating code that references an undefined component.
+  if (dependencies.needsNotificationProvider) {
+    if (!detectSiblingContextImport(sourceFile, testFilePath)) {
+      dependencies.needsNotificationProvider = false;
+    }
+  }
+
   const wrappers = buildWrappers(dependencies);
   const lines: string[] = [];
 
@@ -223,8 +233,16 @@ function appendHookTests(
   appendLines(lines, '});', '');
 }
 
-function detectDependencies(sourceText: string): ContextDependencies {
+function detectDependencies(sourceText: string, sourceFile: SourceFile): ContextDependencies {
   const { router, reactQuery, customContexts } = CONTEXT_DETECTION_CONFIG;
+
+  // Collect exported names so we can skip self-references.
+  // E.g. ExpenseContext.tsx exports "ExpenseProvider" / "ExpenseContext" and should
+  // NOT match itself as a dependency when those names appear in customContexts.
+  const exportedNames = new Set<string>();
+  for (const [name] of sourceFile.getExportedDeclarations()) {
+    exportedNames.add(name);
+  }
 
   const needsRouter =
     router.hooks.some((hook) => sourceText.includes(hook)) ||
@@ -234,12 +252,16 @@ function detectDependencies(sourceText: string): ContextDependencies {
     reactQuery.hooks.some((hook) => sourceText.includes(hook)) ||
     reactQuery.imports.some((imp) => sourceText.includes(imp));
 
-  const needsNotificationProvider = customContexts.some(
-    (ctx) =>
+  const needsNotificationProvider = customContexts.some((ctx) => {
+    // Skip self-references: if this file exports the provider or context, it IS this context
+    if (exportedNames.has(ctx.providerName) || exportedNames.has(ctx.contextName)) return false;
+
+    return (
       ctx.hooks.some((hook) => sourceText.includes(hook)) ||
       sourceText.includes(ctx.contextName) ||
       sourceText.includes(ctx.providerName)
-  );
+    );
+  });
 
   return {
     needsRouter,
@@ -364,8 +386,23 @@ function detectSiblingContextImport(sourceFile: SourceFile, testFilePath: string
 
     if (!hasNotificationImport) continue;
 
-    const sourceDir = path.dirname(sourceFile.getFilePath());
-    const resolvedPath = path.resolve(sourceDir, moduleSpecifier);
+    const sourceDir = normalizeSlashes(path.dirname(sourceFile.getFilePath()));
+    let resolvedPath: string;
+
+    if (moduleSpecifier.startsWith('.')) {
+      // Relative import — resolve directly
+      resolvedPath = path.resolve(sourceDir, moduleSpecifier);
+    } else if (moduleSpecifier.startsWith('@/') || moduleSpecifier.startsWith('~/')) {
+      // Path alias (e.g. @/contexts/NotificationContext)
+      // Resolve by finding the project's src/ directory
+      const srcDir = findAncestorSrcDir(sourceDir);
+      if (!srcDir) continue;
+      resolvedPath = path.resolve(srcDir, moduleSpecifier.replace(/^[@~]\//, ''));
+    } else {
+      // Package import — not a sibling context, skip
+      continue;
+    }
+
     const testDir = path.dirname(testFilePath);
 
     let relativePath = normalizeSlashes(path.relative(testDir, resolvedPath));
@@ -376,5 +413,22 @@ function detectSiblingContextImport(sourceFile: SourceFile, testFilePath: string
     return relativePath.replace(/\.(tsx?|jsx?)$/, '');
   }
 
+  return null;
+}
+
+/**
+ * Walk up directory tree to find the nearest ancestor `src/` directory.
+ * Returns the full path to the src directory, or null if not found.
+ */
+function findAncestorSrcDir(dir: string): string | null {
+  let current = dir;
+  while (current.length > 1) {
+    if (current.endsWith('/src')) return current;
+    const srcIdx = current.lastIndexOf('/src/');
+    if (srcIdx !== -1) return current.substring(0, srcIdx + 4);
+    const parent = normalizeSlashes(path.dirname(current));
+    if (parent === current) break;
+    current = parent;
+  }
   return null;
 }
