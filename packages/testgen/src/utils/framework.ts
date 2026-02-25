@@ -76,3 +76,33 @@ export function mockFn(): string {
 export function mockModuleFn(): string {
   return getActiveFramework() === 'vitest' ? 'vi.mock' : 'jest.mock';
 }
+
+/**
+ * Returns the test framework global namespace identifier.
+ * jest -> "jest", vitest -> "vi"
+ */
+export function mockGlobalName(): 'jest' | 'vi' {
+  return getActiveFramework() === 'vitest' ? 'vi' : 'jest';
+}
+
+/**
+ * Builds an import line for test globals.
+ * Jest: import { describe, it, expect } from "@jest/globals";
+ * Vitest: import { describe, it, expect } from "vitest";
+ */
+export function buildTestGlobalsImport(symbols: string[]): string {
+  const unique = Array.from(new Set(symbols.filter((s) => s.trim().length > 0)));
+  const moduleName = getActiveFramework() === 'vitest' ? 'vitest' : '@jest/globals';
+  return `import { ${unique.join(', ')} } from "${moduleName}";`;
+}
+
+/**
+ * Builds the side-effect import that augments expect with jest-dom matchers.
+ */
+export function buildDomMatchersImport(): string {
+  const moduleName =
+    getActiveFramework() === 'vitest'
+      ? '@testing-library/jest-dom/vitest'
+      : '@testing-library/jest-dom/jest-globals';
+  return `import "${moduleName}";`;
+}

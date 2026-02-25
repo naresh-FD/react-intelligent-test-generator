@@ -9,7 +9,7 @@ import {
   ReturnStatement,
 } from 'ts-morph';
 import { relativeImport, resolveRenderHelper } from '../utils/path';
-import { mockFn, mockModuleFn } from '../utils/framework';
+import { buildTestGlobalsImport, mockFn, mockGlobalName, mockModuleFn } from '../utils/framework';
 import { CONTEXT_DETECTION_CONFIG } from '../config';
 
 interface ExportedFunction {
@@ -80,6 +80,26 @@ export function generateUtilityTest( // NOSONAR - generator intentionally builds
     sourceText.includes('from "axios"');
   const needsApiMockOnly = !needsAxiosMock && apiImportPath !== null && fileType === 'service';
   const needsLocalStorageMock = sourceText.includes('localStorage');
+  const needsURLMock =
+    sourceText.includes('URL.createObjectURL') || sourceText.includes('URL.revokeObjectURL');
+  const needsClipboardMock = sourceText.includes('navigator.clipboard');
+  const usesFunctionLikeParams = functions.some((func) =>
+    func.params.some(
+      (param) =>
+        param.type.includes('=>') ||
+        /\bfunction\b/i.test(param.type) ||
+        /^(on|handle|set|update|change|toggle|add|remove|delete|clear)[A-Z]/.test(param.name)
+    )
+  );
+  const needsLifecycleHooks = needsURLMock || needsClipboardMock || needsLocalStorageMock;
+  const needsMockGlobal =
+    needsAxiosMock || needsApiMockOnly || needsLifecycleHooks || usesFunctionLikeParams;
+  const testGlobals = ['describe', 'it', 'expect'];
+  if (needsLifecycleHooks) testGlobals.push('beforeEach');
+  if (needsURLMock) testGlobals.push('afterEach');
+  if (needsMockGlobal) testGlobals.push(mockGlobalName());
+  lines.add(buildTestGlobalsImport(testGlobals));
+  lines.add('');
 
   if (needsAxiosMock) {
     const mockModule = mockModuleFn();
@@ -161,17 +181,12 @@ export function generateUtilityTest( // NOSONAR - generator intentionally builds
     lines.add('}));');
   }
 
-  // Detect browser API usage that needs mocking in jsdom
-  const needsURLMock =
-    sourceText.includes('URL.createObjectURL') || sourceText.includes('URL.revokeObjectURL');
-  const needsClipboardMock = sourceText.includes('navigator.clipboard');
-
   if (needsURLMock) {
     const addCloseHookBlock = () => lines.add('});');
     lines.add('');
     lines.add('beforeEach(() => {');
-    lines.add('  global.URL.createObjectURL = jest.fn(() => "blob:mock-url");');
-    lines.add('  global.URL.revokeObjectURL = jest.fn();');
+    lines.add(`  global.URL.createObjectURL = ${mockFn()}.mockImplementation(() => "blob:mock-url");`);
+    lines.add(`  global.URL.revokeObjectURL = ${mockFn()};`);
     addCloseHookBlock();
     lines.add('afterEach(() => {');
     lines.add('  (global.URL.createObjectURL as any) = undefined;');

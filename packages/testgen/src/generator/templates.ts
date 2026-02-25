@@ -1,5 +1,6 @@
 import { relativeImport, resolveRenderHelper } from '../utils/path';
 import { ComponentInfo } from '../analyzer';
+import { buildDomMatchersImport, buildTestGlobalsImport, mockGlobalName } from '../utils/framework';
 
 export interface TemplateOptions {
   testFilePath: string;
@@ -20,6 +21,12 @@ export function buildImports(components: ComponentInfo[], options: TemplateOptio
   const imports: string[] = [];
   const needsPlainRender = components.some((c) => c.usesRouter);
   const needsProviders = components.some((c) => !c.usesRouter);
+  const needsMockGlobal = components.some((c) => c.props.some((p) => p.isCallback));
+
+  const testGlobals = ['describe', 'it', 'expect'];
+  if (needsMockGlobal) testGlobals.push(mockGlobalName());
+  imports.push(buildTestGlobalsImport(testGlobals));
+  imports.push(buildDomMatchersImport());
 
   // Check if a custom render helper exists in this project
   const renderHelper = resolveRenderHelper(options.sourceFilePath);

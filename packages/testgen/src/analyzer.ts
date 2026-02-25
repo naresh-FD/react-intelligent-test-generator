@@ -256,11 +256,16 @@ function extractProps(candidate: Node, checker: TypeChecker): PropInfo[] {
       : typeText.includes('undefined');
 
     const name = prop.getName();
+    const isCallbackByName =
+      /^(on[A-Z]|handle[A-Z]|set[A-Z]|update[A-Z]|change[A-Z]|toggle[A-Z]|add[A-Z]|remove[A-Z]|delete[A-Z]|clear[A-Z])/.test(
+        name
+      );
+    const isCallbackByType = typeText.includes('=>');
     props.push({
       name,
       type: typeText,
       isRequired: !isOptional,
-      isCallback: typeText.includes('=>') || /^on[A-Z]/.test(name),
+      isCallback: isCallbackByType || isCallbackByName,
       isBoolean: typeText === 'boolean',
     });
   }

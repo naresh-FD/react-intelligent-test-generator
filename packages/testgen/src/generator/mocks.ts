@@ -22,10 +22,29 @@ export function buildDefaultProps(component: ComponentInfo): string {
 
   const lines = requiredProps.map((prop) => {
     let value = mockValueForProp(prop);
-    // Required props must never be undefined — fall back to {} for unknown complex types
-    // so components don't crash on startup with a missing required prop.
-    if (value === 'undefined') value = '{}';
-    return `  ${prop.name}: ${value}`;
+
+    // Required props must never be undefined - fall back to appropriate defaults
+    // for common types so components do not crash on startup with a missing required prop.
+    if (value === 'undefined') {
+      if (prop.isCallback) {
+        value = mockFn();
+      } else if (
+        prop.type.toLowerCase().includes('[]') ||
+        prop.type.toLowerCase().includes('array')
+      ) {
+        value = '[]';
+      } else if (prop.type.toLowerCase().includes('string')) {
+        value = '"test-value"';
+      } else if (prop.type.toLowerCase().includes('number')) {
+        value = '1';
+      } else if (prop.type.toLowerCase().includes('boolean')) {
+        value = 'true';
+      } else {
+        value = '{}';
+      }
+    }
+
+    return `  ${safePropKey(prop.name)}: ${value}`;
   });
 
   return `const defaultProps = {\n${lines.join(',\n')}\n};`;
@@ -66,7 +85,7 @@ export function buildVariantProps(component: ComponentInfo): VariantInfo[] {
       const cleanVal = val.replace(/^["']|["']$/g, '');
       variants.push({
         label: `${prop.name} ${cleanVal}`,
-        propsExpr: `{ ...defaultProps, ${prop.name}: ${val} }`,
+        propsExpr: `{ ...defaultProps, ${safePropKey(prop.name)}: ${val} }`,
       });
     }
   }
@@ -85,7 +104,7 @@ export function buildVariantProps(component: ComponentInfo): VariantInfo[] {
     if (value !== 'undefined') {
       variants.push({
         label: `with ${prop.name}`,
-        propsExpr: `{ ...defaultProps, ${prop.name}: ${value} }`,
+        propsExpr: `{ ...defaultProps, ${safePropKey(prop.name)}: ${value} }`,
       });
     }
   }
@@ -99,7 +118,7 @@ export function buildVariantProps(component: ComponentInfo): VariantInfo[] {
   if (loadingProps.length > 0) {
     variants.push({
       label: 'loading state',
-      propsExpr: `{ ...defaultProps, ${loadingProps.map((p) => `${p.name}: true`).join(', ')} }`,
+      propsExpr: `{ ...defaultProps, ${loadingProps.map((p) => `${safePropKey(p.name)}: true`).join(', ')} }`,
     });
   }
 
@@ -114,8 +133,8 @@ export function buildVariantProps(component: ComponentInfo): VariantInfo[] {
   );
   if (errorBoolProps.length > 0 || errorStringProps.length > 0) {
     const overrides = [
-      ...errorBoolProps.map((p) => `${p.name}: true`),
-      ...errorStringProps.map((p) => `${p.name}: "Test error"`),
+      ...errorBoolProps.map((p) => `${safePropKey(p.name)}: true`),
+      ...errorStringProps.map((p) => `${safePropKey(p.name)}: "Test error"`),
     ];
     variants.push({
       label: 'error state',
@@ -124,7 +143,7 @@ export function buildVariantProps(component: ComponentInfo): VariantInfo[] {
   }
 
   // Empty data variant (arrays set to [])
-  // Exclude callbacks and function types — a type like `(rules: string[]) => void` contains
+  // Exclude callbacks and function types - a type like `(rules: string[]) => void` contains
   // "[]" but is a function, not an array prop.
   const arrayProps = component.props.filter(
     (p) =>
@@ -132,14 +151,14 @@ export function buildVariantProps(component: ComponentInfo): VariantInfo[] {
       !p.type?.includes('=>') &&
       (p.type?.includes('[]') ||
         p.type?.includes('Array') ||
-        /^(items|data|list|rows|options|results|records|entries|expenses|categories|users|products|orders|notifications|messages|transactions|comments|posts|tasks|events)/i.test(
+        /^(items|data|list|rows|options|results|records|entries|expenses|categories|users|products|orders|notifications|messages|transactions|comments|posts|tasks|events|tabs|columns|dropdowndata|itemsperpageoptions|pageoptions)/i.test(
           p.name
         ))
   );
   if (arrayProps.length > 0 && !arrayProps.every((p) => p.isRequired)) {
     variants.push({
       label: 'empty data',
-      propsExpr: `{ ...defaultProps, ${arrayProps.map((p) => `${p.name}: []`).join(', ')} }`,
+      propsExpr: `{ ...defaultProps, ${arrayProps.map((p) => `${safePropKey(p.name)}: []`).join(', ')} }`,
     });
   }
 
@@ -152,7 +171,7 @@ export function buildVariantProps(component: ComponentInfo): VariantInfo[] {
   if (disabledProps.length > 0) {
     variants.push({
       label: 'disabled state',
-      propsExpr: `{ ...defaultProps, ${disabledProps.map((p) => `${p.name}: true`).join(', ')} }`,
+      propsExpr: `{ ...defaultProps, ${disabledProps.map((p) => `${safePropKey(p.name)}: true`).join(', ')} }`,
     });
   }
 
@@ -188,30 +207,74 @@ export function mockValueForProp(prop: PropInfo): string {
   if (name === 'key') return '"test-key"';
 
   // Common name patterns - check before generic type patterns
-  if (/^on[A-Z]/.test(name)) return mockFn();
-  if (/^handle[A-Z]/.test(name)) return mockFn();
+  if (
+    /^(on|handle|set|update|change|toggle|add|remove|delete|clear)[A-Z]/.test(name) ||
+    /^handle[A-Z_]/.test(name)
+  ) {
+    return mockFn();
+  }
   if (
     /^(is|has|show|can|should|disabled|loading|open|visible|active|checked|selected|expanded|hidden)[A-Z_]?/.test(
       name
     ) &&
     (type === 'boolean' || !type.includes('=>'))
-  )
+  ) {
     return 'true';
+  }
 
   // Callback / function types
   if (type.includes('=>') || prop.isCallback) return mockFn();
 
-  // Enum/union string types - use first value
+  // Enum/union string literal types - use first value
   if (isEnumLikeType(prop.type)) {
     const values = extractEnumValues(prop.type);
     return values.length > 0 ? values[0] : '"default"';
   }
 
-  // Date types - only match actual Date type, not interfaces containing "date" in their name
-  if (type === 'date' || type === 'Date') return 'new Date("2024-01-01")';
+  // Handle generic union types without quotes (e.g. type1 | type2)
+  if (prop.type.includes('|') && !prop.type.includes('=>')) {
+    // For string literal unions like 'value1' | 'value2'
+    const quotedMatch = prop.type.match(/'([^']+)'/);
+    if (quotedMatch) return `'${quotedMatch[1]}'`;
 
-  // Array of objects
-  if (type.includes('[]') && type.includes('{')) {
+    const doubleQuotedMatch = prop.type.match(/"([^"]+)"/);
+    if (doubleQuotedMatch) return `"${doubleQuotedMatch[1]}"`;
+
+    // For non-literal unions, return first option
+    const parts = prop.type.split('|').map((p) => p.trim());
+    if (parts.length > 0 && parts[0] !== 'undefined') {
+      return parts[0] === 'null' ? 'null' : `"${parts[0]}"`;
+    }
+  }
+
+  // Date types - only match actual Date type, not interfaces containing "date"
+  // in their name.
+  const trimmedType = prop.type.trim();
+  if (trimmedType === 'Date' || type === 'date') return 'new Date("2024-01-01")';
+
+  // Array props - match based on name patterns (items, data, rows, options,
+  // tabs, etc.) or explicit array types in the type string.
+  const isArrayByName =
+    /^(items|data|list|rows|options|results|records|entries|tabs|columns|dropdowndata|itemsperpageoptions|pageoptions)$/i.test(
+      name
+    );
+  const isArrayByType = type.includes('[]') || /array</.test(type) || /readonly\s*\[\]/.test(type);
+
+  if (isArrayByName || isArrayByType) {
+    // If it is an array of objects, provide at least one item.
+    if (type.includes('{') || type.includes('interface') || type.includes('type')) {
+      return mockArrayOfObjects(prop);
+    }
+
+    // For arrays of primitives (number[], string[]), provide sample data.
+    if (type.includes('number') || /page.*options/i.test(name)) {
+      return '[10, 25, 50, 100]';
+    }
+    if (type.includes('string')) {
+      return '["option1", "option2", "option3"]';
+    }
+
+    // Generic array fallback with at least one item.
     return mockArrayOfObjects(prop);
   }
 
@@ -259,8 +322,20 @@ export function mockValueForProp(prop: PropInfo): string {
   if (/amount$/i.test(name) || /price$/i.test(name) || /value$/i.test(name)) return '100';
   if (/data$/i.test(name) || /items$/i.test(name) || /list$/i.test(name) || /rows$/i.test(name))
     return '[]';
-  if (/^options$/i.test(name)) return '[{ label: "Option 1", value: "option1" }]';
+  if (/options$/i.test(name)) return '[{ label: "Option 1", value: "option1" }]';
+  if (/^(itemsperpageoptions|pageoptions)$/i.test(name)) return '[10, 25, 50, 100]';
   if (/columns$/i.test(name)) return '[]';
+
+  // For required props, never return undefined - provide a safe default.
+  if (prop.isRequired) {
+    const lowerType = prop.type.toLowerCase();
+    if (lowerType.includes('string')) return '"test-value"';
+    if (lowerType.includes('number')) return '1';
+    if (lowerType.includes('boolean')) return 'true';
+    if (lowerType.includes('array') || lowerType.includes('[]')) return '[]';
+    // For objects and other complex types, return empty object.
+    return '{}';
+  }
 
   return 'undefined';
 }
@@ -290,17 +365,40 @@ function contextualNumberMock(name: string): string {
 }
 
 function mockArrayOfObjects(prop: PropInfo): string {
-  // Try to generate a minimal generic object matching common array patterns
+  // Try to generate a minimal generic object matching common array patterns.
   const name = prop.name.toLowerCase();
+
+  // Tab options (ActivityTabs use case).
+  if (name.includes('tab') && !name.includes('table')) {
+    return '[{ label: "Tab 1", value: "tab1" }, { label: "Tab 2", value: "tab2" }]';
+  }
+
+  // Pagination options (itemsPerPageOptions use case).
+  if (
+    name.includes('pageoptions') ||
+    name.includes('perpageoptions') ||
+    name.includes('itemsperpageoptions')
+  ) {
+    return '[10, 25, 50, 100]';
+  }
+
+  // Dropdown data (DescriptionDropdown use case).
+  if (name.includes('dropdown') || name.includes('select')) {
+    return '[{ text: "Option 1", value: "option1" }, { text: "Option 2", value: "option2" }]';
+  }
+
   if (name.includes('column')) {
-    return '[{ key: "col1", header: "Column 1" }]';
+    return '[{ key: "col1", header: "Column 1" }, { key: "col2", header: "Column 2" }]';
   }
+
   if (name.includes('option')) {
-    return '[{ label: "Option 1", value: "option1" }]';
+    return '[{ label: "Option 1", value: "option1" }, { label: "Option 2", value: "option2" }]';
   }
+
   if (name.includes('item') || name.includes('data') || name.includes('row')) {
     return '[{ id: "1", name: "Test Item" }]';
   }
-  // Generic fallback for any array of objects
-  return '[{ id: "1" }]';
+
+  // Generic fallback for any array of objects - at least one item.
+  return '[{ id: "1", label: "Item 1", value: "item1" }]';
 }
