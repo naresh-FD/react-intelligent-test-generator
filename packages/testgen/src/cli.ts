@@ -578,12 +578,30 @@ function isServiceFile(filePath: string, content: string): boolean {
 }
 
 function isContextProviderFile(filePath: string, content: string): boolean {
+  const normalized = normalizeSlashes(filePath).toLowerCase();
   const basename = path.basename(filePath).toLowerCase();
-  if (basename.includes('context')) return true;
-  return (
-    content.includes('createContext') &&
-    (content.includes('Provider') || content.includes('useContext'))
-  );
+
+  // Strong indicators: file is in a /context/ directory with Context in name
+  const isInContextDir = normalized.includes('/context/');
+  const hasContextInName = basename.includes('context');
+
+  // If it's in a context directory OR has Context in the filename, likely a context file
+  if (isInContextDir || hasContextInName) {
+    return (
+      content.includes('createContext') &&
+      (content.includes('Provider') || content.includes('useContext'))
+    );
+  }
+
+  // For files NOT in context directories or without Context in name,
+  // require stronger evidence: must export a Provider component
+  if (content.includes('createContext')) {
+    const exportMatch = content.match(/export\s+(?:const|function|class)\s+\w*Provider/i);
+    const exportedProvider = content.match(/export\s*{\s*[^}]*Provider[^}]*}/i);
+    return !!(exportMatch || exportedProvider);
+  }
+
+  return false;
 }
 
 function isTestUtilityFile(filePath: string): boolean {
