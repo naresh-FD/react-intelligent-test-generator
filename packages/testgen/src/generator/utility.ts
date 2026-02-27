@@ -32,6 +32,8 @@ interface ParamInfo {
 interface SwitchCaseInfo {
   paramName: string;
   values: string[];
+  /** When the switch is on a property (e.g. action.type), this holds the property name */
+  propertyPath?: string;
 }
 
 class LineBuilder {
@@ -646,8 +648,14 @@ function generateFunctionTests( // NOSONAR - template-style test generation inte
   const switchCases = detectSwitchCases(func, sourceFile);
   for (const switchCase of switchCases) {
     for (const caseValue of switchCase.values) {
+      // When the switch is on a property (e.g. `action.type`), wrap the case value
+      // in an object: { type: "ADD_TOAST" } instead of passing "ADD_TOAST" directly
+      const paramValue = switchCase.propertyPath
+        ? `{ ${switchCase.propertyPath}: ${caseValue} }`
+        : caseValue;
+
       const argsWithCase = func.params
-        .map((p) => (p.name === switchCase.paramName ? caseValue : mockValueForParam(p)))
+        .map((p) => (p.name === switchCase.paramName ? paramValue : mockValueForParam(p)))
         .join(', ');
 
       // Strip outer quotes so the title string stays valid JS
@@ -941,11 +949,31 @@ function detectSwitchCases(func: ExportedFunction, sourceFile: SourceFile): Swit
   for (const switchStmt of switchStatements) {
     const switchExpr = switchStmt.getExpression().getText();
 
-    // Try to match switch expression to a param name
-    const matchedParam = func.params.find(
-      (p) =>
-        switchExpr === p.name || switchExpr.endsWith(`.${p.name}`) || switchExpr.includes(p.name)
-    );
+    // Detect property access patterns like `action.type`
+    let matchedParam: ParamInfo | undefined;
+    let propertyPath: string | undefined;
+
+    // First try exact match (switch on param directly)
+    matchedParam = func.params.find((p) => switchExpr === p.name);
+
+    if (!matchedParam) {
+      // Try property access: e.g. `action.type` → param = action, propertyPath = type
+      const dotIndex = switchExpr.indexOf('.');
+      if (dotIndex > 0) {
+        const baseName = switchExpr.slice(0, dotIndex);
+        matchedParam = func.params.find((p) => p.name === baseName);
+        if (matchedParam) {
+          propertyPath = switchExpr.slice(dotIndex + 1);
+        }
+      }
+    }
+
+    if (!matchedParam) {
+      // Fallback: loose match (switch expr includes param name)
+      matchedParam = func.params.find(
+        (p) => switchExpr.endsWith(`.${p.name}`) || switchExpr.includes(p.name)
+      );
+    }
 
     if (!matchedParam) continue;
 
@@ -961,7 +989,7 @@ function detectSwitchCases(func: ExportedFunction, sourceFile: SourceFile): Swit
     }
 
     if (values.length > 0) {
-      results.push({ paramName: matchedParam.name, values });
+      results.push({ paramName: matchedParam.name, values, propertyPath });
     }
   }
 

@@ -14,7 +14,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
 import { createParser, getSourceFile } from './parser';
-import { analyzeSourceFile } from './analyzer';
+import { analyzeSourceFile, getCompoundSubComponents } from './analyzer';
 import { scanSourceFiles, getTestFilePath, isTestFile } from './utils/path';
 import { writeFile } from './fs';
 import { generateTests } from './generator';
@@ -164,7 +164,19 @@ function generateTestForFile(filePath: string, { project, checker }: ParserConte
   // --- Service / utility / component ---
   const fileContent = sourceFile.getText();
   const isService = isServiceFile(filePath, fileContent);
-  const components = analyzeSourceFile(sourceFile, project, checker);
+  const allComponents = analyzeSourceFile(sourceFile, project, checker);
+
+  // Filter out compound UI sub-components (Radix UI, cmdk, vaul, etc.) that
+  // require a parent context and crash when rendered in isolation.
+  const compoundSubs = getCompoundSubComponents(sourceFile);
+  const components = compoundSubs.size > 0
+    ? allComponents.filter((c) => !compoundSubs.has(c.name))
+    : allComponents;
+
+  if (compoundSubs.size > 0 && allComponents.length !== components.length) {
+    const skipped = allComponents.filter((c) => compoundSubs.has(c.name)).map((c) => c.name);
+    console.log(`  - Skipping compound sub-components (need parent context): ${skipped.join(', ')}`);
+  }
 
   if (components.length === 0) {
     const fileType = isService ? ('service' as const) : ('utility' as const);

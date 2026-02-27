@@ -512,6 +512,59 @@ function detectContexts(sourceFile: SourceFile): ContextUsage[] {
   return contexts;
 }
 
+// ---------------------------------------------------------------------------
+// Compound UI library detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Known compound-component libraries whose sub-components require a parent
+ * context/provider and will crash when rendered in isolation.
+ */
+const COMPOUND_UI_LIBRARY_PATTERNS = [
+  /^@radix-ui\//,
+  /^cmdk$/,
+  /^vaul$/,
+  /^react-hook-form$/,
+  /^@headlessui\//,
+  /^@ark-ui\//,
+];
+
+/**
+ * Given a source file, returns the set of component names that are thin wrappers
+ * around compound UI library primitives and require a parent context to render.
+ *
+ * Files that primarily re-export from compound libraries (like shadcn/ui wrappers
+ * around @radix-ui, cmdk, vaul) produce components that crash when rendered in
+ * isolation. We detect these and return ALL non-trivial components from such files.
+ */
+export function getCompoundSubComponents(sourceFile: SourceFile): Set<string> {
+  const subComponents = new Set<string>();
+
+  // Check if the file imports from any known compound UI library
+  let hasCompoundImport = false;
+  for (const decl of sourceFile.getImportDeclarations()) {
+    const moduleSpec = decl.getModuleSpecifierValue();
+    if (COMPOUND_UI_LIBRARY_PATTERNS.some((pattern) => pattern.test(moduleSpec))) {
+      hasCompoundImport = true;
+      break;
+    }
+  }
+
+  if (!hasCompoundImport) return subComponents;
+
+  // This file wraps a compound UI library. Mark all exported components except
+  // trivial HTML wrappers (Header/Footer that just render <div>).
+  const exported = sourceFile.getExportedDeclarations();
+  for (const [name] of exported) {
+    // Pure HTML wrappers like SheetHeader, DrawerFooter are just divs — safe to render.
+    if (/(?:Header|Footer)$/.test(name)) continue;
+
+    subComponents.add(name);
+  }
+
+  return subComponents;
+}
+
 function getImportSourceForIdentifier(
   sourceFile: SourceFile,
   identifier: string

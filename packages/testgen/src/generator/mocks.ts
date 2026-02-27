@@ -233,6 +233,12 @@ export function mockValueForProp(prop: PropInfo): string {
 
   // Handle generic union types without quotes (e.g. type1 | type2)
   if (prop.type.includes('|') && !prop.type.includes('=>')) {
+    // Check if the whole union is wrapped in an array, e.g. (string | number)[]
+    const arrayUnionMatch = prop.type.match(/^\(([^)]+)\)\[\]$/);
+    if (arrayUnionMatch) {
+      return '[]';
+    }
+
     // For string literal unions like 'value1' | 'value2'
     const quotedMatch = prop.type.match(/'([^']+)'/);
     if (quotedMatch) return `'${quotedMatch[1]}'`;
@@ -240,16 +246,34 @@ export function mockValueForProp(prop: PropInfo): string {
     const doubleQuotedMatch = prop.type.match(/"([^"]+)"/);
     if (doubleQuotedMatch) return `"${doubleQuotedMatch[1]}"`;
 
-    // For non-literal unions, return first option
+    // For non-literal unions, check if any part is an array type
     const parts = prop.type.split('|').map((p) => p.trim());
-    if (parts.length > 0 && parts[0] !== 'undefined') {
-      return parts[0] === 'null' ? 'null' : `"${parts[0]}"`;
+    if (parts.some((p) => p.includes('[]') || /^Array</.test(p))) {
+      return '[]';
     }
+
+    if (parts.length > 0 && parts[0] !== 'undefined') {
+      // Avoid wrapping non-string types (number, boolean, null) in quotes
+      const first = parts[0];
+      if (first === 'null') return 'null';
+      if (first === 'number' || first === 'boolean' || first === 'string') {
+        return first === 'number' ? '1' : first === 'boolean' ? 'true' : '"test-value"';
+      }
+      return `"${first}"`;
+    }
+  }
+
+  // File / Blob types (e.g. for CSV parsers, file upload components)
+  const trimmedType = prop.type.trim();
+  if (trimmedType === 'File' || type === 'file') {
+    return 'new File(["test content"], "test.csv", { type: "text/csv" })';
+  }
+  if (trimmedType === 'Blob' || type === 'blob') {
+    return 'new Blob(["test content"], { type: "text/plain" })';
   }
 
   // Date types - only match actual Date type, not interfaces containing "date"
   // in their name.
-  const trimmedType = prop.type.trim();
   if (trimmedType === 'Date' || type === 'date') return 'new Date("2024-01-01")';
 
   // Array props - match based on name patterns (items, data, rows, options,
