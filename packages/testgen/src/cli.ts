@@ -353,7 +353,9 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
         (k) => k.endsWith(basename) || normalizeSlashes(k).endsWith(relSrc)
       );
       const entry = matchKey ? cov[matchKey] : cov['total'];
-      coverage = entry?.lines?.pct ?? entry?.statements?.pct ?? 0;
+      const rawCoverage = entry?.lines?.pct ?? entry?.statements?.pct ?? 0;
+      const numericCoverage = Number(rawCoverage);
+      coverage = Number.isFinite(numericCoverage) ? numericCoverage : 0;
     }
   } catch {
     /* ignore coverage parse errors */
