@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Automated Test Generation - Flow Diagram & Usage Examples</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 40px;
+      background: #fff;
+    }
+
+    /* Title Styles */
+    .title-page {
+      text-align: center;
+      padding: 100px 0;
+      border-bottom: 3px solid #1E40AF;
+      margin-bottom: 40px;
+    }
+
+    .title-page h1 {
+      font-size: 2.5em;
+      color: #1E40AF;
+      margin-bottom: 20px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    .title-page h2 {
+      font-size: 1.5em;
+      color: #059669;
+      margin-bottom: 30px;
+    }
+
+    .title-page .meta {
+      color: #666;
+      font-size: 0.9em;
+    }
+
+    /* Headings */
+    h1 {
+      color: #1E40AF;
+      font-size: 2em;
+      margin: 40px 0 20px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #1E40AF;
+      background: linear-gradient(90deg, #EBF5FF 0%, transparent 100%);
+      padding: 15px;
+      border-radius: 5px 5px 0 0;
+    }
+
+    h2 {
+      color: #059669;
+      font-size: 1.5em;
+      margin: 30px 0 15px;
+      padding-left: 15px;
+      border-left: 4px solid #059669;
+      background: linear-gradient(90deg, #ECFDF5 0%, transparent 100%);
+      padding: 10px 15px;
+    }
+
+    h3 {
+      color: #7C3AED;
+      font-size: 1.2em;
+      margin: 20px 0 10px;
+      padding-left: 10px;
+      border-left: 3px solid #7C3AED;
+    }
+
+    /* Paragraphs */
+    p {
+      margin: 15px 0;
+      text-align: justify;
+    }
+
+    /* Lists */
+    ul, ol {
+      margin: 15px 0 15px 30px;
+    }
+
+    li {
+      margin: 8px 0;
+    }
+
+    /* Code blocks */
+    pre {
+      background: #1F2937;
+      color: #E5E7EB;
+      padding: 20px;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin: 20px 0;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.9em;
+      border-left: 4px solid #3B82F6;
+    }
+
+    code {
+      background: #F3F4F6;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.9em;
+      color: #DC2626;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    th {
+      background: #1E40AF;
+      color: white;
+      padding: 15px;
+      text-align: left;
+      font-weight: 600;
+    }
+
+    td {
+      padding: 12px 15px;
+      border-bottom: 1px solid #E5E7EB;
+    }
+
+    tr:nth-child(even) {
+      background: #F9FAFB;
+    }
+
+    tr:hover {
+      background: #EBF5FF;
+    }
+
+    /* Flow Diagram */
+    .flow-diagram {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 40px;
+      border-radius: 15px;
+      margin: 30px 0;
+      color: white;
+    }
+
+    .flow-diagram h3 {
+      color: white;
+      text-align: center;
+      margin-bottom: 30px;
+      border: none;
+      font-size: 1.5em;
+    }
+
+    .flow-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .flow-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .flow-box {
+      background: rgba(255,255,255,0.95);
+      color: #333;
+      padding: 15px 25px;
+      border-radius: 10px;
+      font-weight: 600;
+      text-align: center;
+      min-width: 150px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+
+    .flow-box.primary {
+      background: #1E40AF;
+      color: white;
+    }
+
+    .flow-box.success {
+      background: #059669;
+      color: white;
+    }
+
+    .flow-box.warning {
+      background: #D97706;
+      color: white;
+    }
+
+    .flow-arrow {
+      font-size: 2em;
+      color: white;
+    }
+
+    /* Highlight boxes */
+    .highlight-box {
+      background: linear-gradient(135deg, #EBF5FF 0%, #DBEAFE 100%);
+      border-left: 5px solid #1E40AF;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 0 10px 10px 0;
+    }
+
+    .highlight-box.warning {
+      background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+      border-left-color: #D97706;
+    }
+
+    .highlight-box.success {
+      background: linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%);
+      border-left-color: #059669;
+    }
+
+    .highlight-box h4 {
+      color: #1E40AF;
+      margin-bottom: 10px;
+    }
+
+    .highlight-box.warning h4 {
+      color: #D97706;
+    }
+
+    .highlight-box.success h4 {
+      color: #059669;
+    }
+
+    /* Page breaks for printing */
+    .page-break {
+      page-break-after: always;
+    }
+
+    /* Architecture Diagram */
+    .architecture {
+      background: #F3F4F6;
+      padding: 30px;
+      border-radius: 15px;
+      margin: 30px 0;
+      font-family: 'Consolas', monospace;
+    }
+
+    .arch-layer {
+      background: white;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 8px;
+      border: 2px solid #E5E7EB;
+      display: flex;
+      justify-content: space-around;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .arch-box {
+      background: linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 5px;
+      text-align: center;
+      min-width: 120px;
+    }
+
+    /* Print styles */
+    @media print {
+      body {
+        padding: 20px;
+      }
+
+      .flow-diagram {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      h1, h2, h3 {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .highlight-box {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Title Page -->
+<div class="title-page">
+  <h1>Automated Test Generation</h1>
+  <h2>Flow Diagrams & Usage Examples</h2>
+  <p class="meta">For React 19 Components with Jest & React Testing Library</p>
+  <p class="meta">Version 1.0 | February 2026</p>
+</div>
+
+<!-- Section 1: System Overview Flow -->
+<h1>1. System Architecture Overview</h1>
+
+<div class="architecture">
+  <h3 style="text-align: center; margin-bottom: 20px; color: #1E40AF;">auto-testgen.mjs Architecture</h3>
+
+  <div class="arch-layer">
+    <div class="arch-box">Git Integration</div>
+    <span>→</span>
+    <div class="arch-box">Babel Parser</div>
+    <span>→</span>
+    <div class="arch-box">ts-morph Types</div>
+  </div>
+
+  <div style="text-align: center; padding: 10px;">↓</div>
+
+  <div class="arch-layer">
+    <div class="arch-box" style="width: 80%;">Test Template Generator<br><small>Component detection • Export enumeration • Props extraction</small></div>
+  </div>
+
+  <div style="text-align: center; padding: 10px;">↓</div>
+
+  <div class="arch-layer">
+    <div class="arch-box">Prettier Formatting</div>
+    <span>→</span>
+    <div class="arch-box">File Write (atomic)</div>
+    <span>→</span>
+    <div class="arch-box">Jest Execution</div>
+  </div>
+</div>
+
+<!-- Section 2: Main Flow Diagram -->
+<h1>2. Test Generation Flow</h1>
+
+<div class="flow-diagram">
+  <h3>Developer Workflow Flow</h3>
+
+  <div class="flow-steps">
+    <div class="flow-row">
+      <div class="flow-box primary">1. Developer Edits<br>React Component</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-box">2. File Shows in<br>Git Unstaged</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-box primary">3. Generator<br>Detects Changes</div>
+    </div>
+
+    <div style="text-align: center; padding: 10px;">
+      <span class="flow-arrow">↓</span>
+    </div>
+
+    <div class="flow-row">
+      <div class="flow-box success">4. AST Parses<br>Exports & Props</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-box">5. Test Template<br>Generated</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-box success">6. Written to<br>__tests__/ folder</div>
+    </div>
+
+    <div style="text-align: center; padding: 10px;">
+      <span class="flow-arrow">↓</span>
+    </div>
+
+    <div class="flow-row">
+      <div class="flow-box warning">7. Developer<br>Fills TODOs</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-box">8. Jest Runs<br>with Coverage</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-box success">9. Commit Both<br>Files Together</div>
+    </div>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- Section 3: Decision Flow -->
+<h1>3. File Processing Decision Flow</h1>
+
+<div class="flow-diagram">
+  <h3>Should This File Be Processed?</h3>
+
+  <div class="flow-steps">
+    <div class="flow-row">
+      <div class="flow-box primary">Source File<br>Changed</div>
+    </div>
+
+    <div style="text-align: center; padding: 10px;">
+      <span class="flow-arrow">↓</span>
+    </div>
+
+    <div class="flow-row">
+      <div class="flow-box">Is it .ts, .tsx,<br>.js, .jsx?</div>
+    </div>
+
+    <div class="flow-row" style="margin-top: 10px;">
+      <div style="color: white;">Yes ↓</div>
+      <div style="width: 100px;"></div>
+      <div class="flow-box warning" style="opacity: 0.7;">No → Skip</div>
+    </div>
+
+    <div class="flow-row">
+      <div class="flow-box">Is it in __tests__<br>or node_modules?</div>
+    </div>
+
+    <div class="flow-row" style="margin-top: 10px;">
+      <div style="color: white;">No ↓</div>
+      <div style="width: 100px;"></div>
+      <div class="flow-box warning" style="opacity: 0.7;">Yes → Skip</div>
+    </div>
+
+    <div class="flow-row">
+      <div class="flow-box">Does test exist<br>WITHOUT @generated?</div>
+    </div>
+
+    <div class="flow-row" style="margin-top: 10px;">
+      <div style="color: white;">No ↓</div>
+      <div style="width: 100px;"></div>
+      <div class="flow-box warning" style="opacity: 0.7;">Yes → Skip<br>(Manual Test)</div>
+    </div>
+
+    <div class="flow-row">
+      <div class="flow-box success">✓ Generate/Update<br>Test File</div>
+    </div>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- Section 4: Usage Examples -->
+<h1>4. Usage Examples</h1>
+
+<h2>Example 1: Daily Development Workflow</h2>
+
+<pre><code># Step 1: Start development with auto test generation
+npm start
+
+# Step 2: Edit your component
+# File: src/components/Button.tsx is modified
+
+# Step 3: Test is auto-generated at:
+# src/components/__tests__/Button.test.tsx
+
+# Step 4: Run tests to verify
+npm test
+
+# Step 5: Before commit, check coverage
+npm run test:coverage:check
+</code></pre>
+
+<h2>Example 2: Git-Unstaged Mode (Before PR)</h2>
+
+<pre><code># Only generate tests for your changes (safest option)
+npm run test:generate:git
+
+# Review the generated tests
+# Fill in TODO placeholders with real values
+
+# Run all tests
+npm test
+
+# Ensure coverage meets threshold
+npm run test:coverage:check
+
+# Commit your changes
+git add .
+git commit -m "feat: add new component with tests"
+</code></pre>
+
+<h2>Example 3: Single File Generation</h2>
+
+<pre><code># Generate test for a specific component
+npm run test:generate:file src/components/ExpenseCard.tsx
+
+# This creates:
+# src/components/__tests__/ExpenseCard.test.tsx
+</code></pre>
+
+<div class="page-break"></div>
+
+<!-- Section 5: Generated Test Example -->
+<h1>5. Generated Test Structure</h1>
+
+<h2>Before: Source Component</h2>
+
+<pre><code>// src/components/expense/ExpenseCard.tsx
+
+export interface ExpenseCardProps {
+  id: string;
+  amount: number;
+  category: string;
+  date: Date;
+  description?: string;
+  onEdit?: (id: string) => void;
+  onDelete?: (id: string) => void;
+}
+
+export function ExpenseCard({ id, amount, category, date, ... }: ExpenseCardProps) {
+  return (
+    &lt;Card className="expense-card"&gt;
+      &lt;Badge&gt;{category}&lt;/Badge&gt;
+      &lt;span&gt;{formatCurrency(amount)}&lt;/span&gt;
+      {/* ... */}
+    &lt;/Card&gt;
+  );
+}
+</code></pre>
+
+<h2>After: Generated Test</h2>
+
+<pre><code>/** @generated AUTO-GENERATED FILE - safe to overwrite */
+import * as React from 'react';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { renderWithProviders } from '../../../test-utils/renderWithProviders';
+import { ExpenseCard } from '../ExpenseCard';
+
+describe('ExpenseCard', () => {
+  const defaultProps = {
+    id: "TODO",
+    amount: 0,
+    category: "TODO",
+    date: undefined /* TODO */,
+  };
+
+  describe('Rendering', () => {
+    it('renders without crashing', () => {
+      renderWithProviders(&lt;ExpenseCard {...defaultProps} /&gt;);
+    });
+
+    it('renders with default props', () => {
+      const { container } = renderWithProviders(&lt;ExpenseCard {...defaultProps} /&gt;);
+      expect(container.firstChild).toBeInTheDocument();
+    });
+  });
+
+  describe('Snapshot', () => {
+    it('matches snapshot', () => {
+      const { container } = renderWithProviders(&lt;ExpenseCard {...defaultProps} /&gt;);
+      expect(container.firstChild).toMatchSnapshot();
+    });
+  });
+
+  // ... Props, User Interactions, Accessibility sections
+});
+</code></pre>
+
+<div class="page-break"></div>
+
+<!-- Section 6: Completing TODOs -->
+<h1>6. Completing the Generated Tests</h1>
+
+<h2>Step 1: Fill in defaultProps</h2>
+
+<pre><code>// Before (generated)
+const defaultProps = {
+  id: "TODO",
+  amount: 0,
+  category: "TODO",
+  date: undefined /* TODO */,
+};
+
+// After (completed by developer)
+const defaultProps = {
+  id: "expense-123",
+  amount: 49.99,
+  category: "Food & Dining",
+  date: new Date('2024-06-15'),
+};
+</code></pre>
+
+<h2>Step 2: Add Interaction Tests</h2>
+
+<pre><code>it('handles edit button click', async () => {
+  const user = userEvent.setup();
+  const handleEdit = jest.fn();
+
+  renderWithProviders(
+    &lt;ExpenseCard {...defaultProps} onEdit={handleEdit} /&gt;
+  );
+
+  await user.click(screen.getByRole('button', { name: /edit/i }));
+  expect(handleEdit).toHaveBeenCalledWith('expense-123');
+});
+
+it('handles delete button click', async () => {
+  const user = userEvent.setup();
+  const handleDelete = jest.fn();
+
+  renderWithProviders(
+    &lt;ExpenseCard {...defaultProps} onDelete={handleDelete} /&gt;
+  );
+
+  await user.click(screen.getByRole('button', { name: /delete/i }));
+  expect(handleDelete).toHaveBeenCalledWith('expense-123');
+});
+</code></pre>
+
+<h2>Step 3: Add Branch Coverage</h2>
+
+<pre><code>it('renders without description when not provided', () => {
+  renderWithProviders(&lt;ExpenseCard {...defaultProps} /&gt;);
+  expect(screen.queryByText(/description/i)).not.toBeInTheDocument();
+});
+
+it('renders description when provided', () => {
+  renderWithProviders(
+    &lt;ExpenseCard {...defaultProps} description="Lunch meeting" /&gt;
+  );
+  expect(screen.getByText('Lunch meeting')).toBeInTheDocument();
+});
+
+it('hides edit button when onEdit not provided', () => {
+  renderWithProviders(&lt;ExpenseCard {...defaultProps} /&gt;);
+  expect(screen.queryByRole('button', { name: /edit/i })).not.toBeInTheDocument();
+});
+</code></pre>
+
+<div class="page-break"></div>
+
+<!-- Section 7: Commands Reference -->
+<h1>7. Commands Quick Reference</h1>
+
+<table>
+  <tr>
+    <th>Task</th>
+    <th>Command</th>
+  </tr>
+  <tr>
+    <td>Start development with auto test generation</td>
+    <td><code>npm start</code></td>
+  </tr>
+  <tr>
+    <td>Start without test generation</td>
+    <td><code>npm run start:no-testgen</code></td>
+  </tr>
+  <tr>
+    <td>Generate tests for git unstaged files (recommended)</td>
+    <td><code>npm run test:generate:git</code></td>
+  </tr>
+  <tr>
+    <td>Generate tests for all files</td>
+    <td><code>npm run test:generate</code></td>
+  </tr>
+  <tr>
+    <td>Generate test for single file</td>
+    <td><code>npm run test:generate:file &lt;path&gt;</code></td>
+  </tr>
+  <tr>
+    <td>Run all tests</td>
+    <td><code>npm test</code></td>
+  </tr>
+  <tr>
+    <td>Run tests in watch mode</td>
+    <td><code>npm run test:watch</code></td>
+  </tr>
+  <tr>
+    <td>Run with coverage report</td>
+    <td><code>npm run test:coverage</code></td>
+  </tr>
+  <tr>
+    <td>Enforce 80% coverage threshold</td>
+    <td><code>npm run test:coverage:check</code></td>
+  </tr>
+</table>
+
+<div class="highlight-box success">
+  <h4>Key Takeaway</h4>
+  <p><strong>Generated tests get you to 60% coverage. Human intent gets you to 100% confidence.</strong></p>
+  <p>The generator removes initial friction by creating test scaffolding, but the quality of your test suite ultimately depends on the assertions and edge cases that developers add.</p>
+</div>
+
+<div class="highlight-box warning">
+  <h4>Known Limitation</h4>
+  <p>Components created with <code>forwardRef</code> are not automatically detected by the AST analyzer. For these components, you'll need to write tests manually.</p>
+</div>
+
+<div class="highlight-box">
+  <h4>Generated File Marker</h4>
+  <p>Tests with this header will be regenerated:</p>
+  <pre style="background: #1F2937; color: #E5E7EB; padding: 10px; margin-top: 10px; border-radius: 5px;">/** @generated AUTO-GENERATED FILE - safe to overwrite */</pre>
+  <p>Remove the header to protect manual edits from being overwritten.</p>
+</div>
+
+</body>
+</html>

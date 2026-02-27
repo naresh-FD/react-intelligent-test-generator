@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Banking Professional Color Palette */
+    --background: 210 20% 98%;
+    --foreground: 215 25% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 25% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 25% 15%;
+
+    /* Primary: Deep Banking Blue */
+    --primary: 214 84% 42%;
+    --primary-foreground: 0 0% 100%;
+    
+    /* Secondary: Professional Gray */
+    --secondary: 215 15% 92%;
+    --secondary-foreground: 215 25% 15%;
+
+    --muted: 215 15% 95%;
+    --muted-foreground: 215 12% 45%;
+
+    /* Accent: Trust Green for positive actions */
+    --accent: 160 60% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Success: Financial Growth Green */
+    --success: 145 65% 45%;
+    --success-foreground: 0 0% 100%;
+    
+    /* Warning: Alert Orange */
+    --warning: 35 95% 55%;
+    --warning-foreground: 0 0% 100%;
+
+    --destructive: 0 75% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 20% 88%;
+    --input: 215 20% 88%;
+    --ring: 214 84% 42%;
+
+    --radius: 0.5rem;
+
+    /* Chart colors for data visualization */
+    --chart-1: 214 84% 42%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 280 65% 60%;
+    --chart-4: 35 95% 55%;
+    --chart-5: 0 75% 50%;
+  }
+
+  .dark {
+    --background: 215 30% 10%;
+    --foreground: 210 20% 95%;
+
+    --card: 215 28% 14%;
+    --card-foreground: 210 20% 95%;
+
+    --popover: 215 28% 14%;
+    --popover-foreground: 210 20% 95%;
+
+    --primary: 214 80% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 215 20% 20%;
+    --secondary-foreground: 210 20% 95%;
+
+    --muted: 215 20% 18%;
+    --muted-foreground: 215 12% 65%;
+
+    --accent: 160 55% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --success: 145 60% 50%;
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 35 90% 60%;
+    --warning-foreground: 0 0% 100%;
+
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 20% 25%;
+    --input: 215 20% 25%;
+    --ring: 214 80% 55%;
+
+    --chart-1: 214 80% 55%;
+    --chart-2: 160 55% 50%;
+    --chart-3: 280 60% 65%;
+    --chart-4: 35 90% 60%;
+    --chart-5: 0 70% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
