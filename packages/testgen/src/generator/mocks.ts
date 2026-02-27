@@ -261,7 +261,14 @@ export function mockValueForProp(prop: PropInfo): string {
   const isArrayByType = type.includes('[]') || /array</.test(type) || /readonly\s*\[\]/.test(type);
 
   if (isArrayByName || isArrayByType) {
-    // If it is an array of objects, provide at least one item.
+    // Named complex types (e.g. AnomalousTransaction[], BranchPerformance[]) —
+    // use an empty array so components render their no-data state rather than
+    // crashing when they try to access deep properties on a wrong-shape object.
+    if (isNamedComplexArrayType(prop.type)) {
+      return '[]';
+    }
+
+    // If it is an array of inline objects, provide at least one item.
     if (type.includes('{') || type.includes('interface') || type.includes('type')) {
       return mockArrayOfObjects(prop);
     }
@@ -362,6 +369,18 @@ function contextualNumberMock(name: string): string {
   if (/size/i.test(name) || /limit/i.test(name)) return '10';
   if (/width/i.test(name) || /height/i.test(name)) return '100';
   return '1';
+}
+
+/**
+ * Returns true when the TypeScript type is a named interface/type array
+ * (e.g. "AnomalousTransaction[]", "BranchPerformance[]") as opposed to an
+ * inline object array ("{ id: string }[]") or a primitive array ("string[]").
+ * Named complex arrays are mocked as [] so that components render their
+ * empty-data state rather than crashing on wrong-shape objects.
+ */
+function isNamedComplexArrayType(type: string): boolean {
+  // Matches TypeName[] or readonly TypeName[] where TypeName starts with uppercase
+  return /(?:readonly\s+)?[A-Z][a-zA-Z0-9]*\[\]/.test(type.trim());
 }
 
 function mockArrayOfObjects(prop: PropInfo): string {

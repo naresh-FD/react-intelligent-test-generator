@@ -22,6 +22,8 @@ import { generateBarrelTest } from './generator/barrel';
 import { generateUtilityTest } from './generator/utility';
 import { generateContextTest } from './generator/context';
 import { TEST_UTILITY_PATTERNS, UNTESTABLE_PATTERNS } from './config';
+import { ensureJestScaffold } from './scaffold';
+import { detectTestFramework } from './utils/framework';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -501,6 +503,12 @@ function printSummary(rows: SummaryRow[]): void {
 
 async function run() {
   const args = parseArgs(process.argv.slice(2));
+
+  // Scaffold jest.config.cjs + test-utils if the project has no Jest config yet
+  if (detectTestFramework(process.cwd()) === 'jest') {
+    ensureJestScaffold(process.cwd());
+  }
+
   const ctx = createParser();
   const files = resolveTargetFiles(args);
 

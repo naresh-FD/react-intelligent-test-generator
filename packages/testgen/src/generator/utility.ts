@@ -650,7 +650,10 @@ function generateFunctionTests( // NOSONAR - template-style test generation inte
         .map((p) => (p.name === switchCase.paramName ? caseValue : mockValueForParam(p)))
         .join(', ');
 
-      lines.add(`${indent}  it("handles case ${caseValue} for ${switchCase.paramName}", () => {`);
+      // Strip outer quotes so the title string stays valid JS
+      // e.g. "DISMISS_TOAST" → DISMISS_TOAST (no embedded quotes in the it() string)
+      const displayValue = caseValue.replace(/^['"`]|['"`]$/g, '');
+      lines.add(`${indent}  it("handles case ${displayValue} for ${switchCase.paramName}", () => {`);
       lines.add(`${indent}    const result = ${func.name}(${argsWithCase});`);
       lines.add(`${indent}    expect(result).toBeDefined();`);
       lines.add(`${indent}  });`);
