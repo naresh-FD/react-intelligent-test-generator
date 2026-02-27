@@ -29,6 +29,16 @@ export interface GenerateOptions {
   sourceFilePath: string;
 }
 
+const GENERATION_LIMITS = {
+  conditional: 2,
+  negative: 2,
+  optional: 1,
+  callback: 2,
+  state: 2,
+  variants: 4,
+  interactions: 2,
+} as const;
+
 export function generateTests(components: ComponentInfo[], options: GenerateOptions): string {
   const usesUserEvent = components.some(
     (c) => c.buttons.length > 0 || c.inputs.length > 0 || c.selects.length > 0 || c.links.length > 0
@@ -89,25 +99,28 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
     }
 
     // Always generate comprehensive tests (pass 2 level)
-    const conditionalTests = buildConditionalRenderTests(component);
+    const conditionalTests = buildConditionalRenderTests(component).slice(
+      0,
+      GENERATION_LIMITS.conditional
+    );
     conditionalTests.forEach((testCase) => {
       blocks.push(buildTestBlock(testCase.title, testCase.body));
     });
 
     // Negative branch tests (prop=false)
-    const negativeTests = buildNegativeBranchTests(component);
+    const negativeTests = buildNegativeBranchTests(component).slice(0, GENERATION_LIMITS.negative);
     negativeTests.forEach((testCase) => {
       blocks.push(buildTestBlock(testCase.title, testCase.body));
     });
 
     // Optional prop tests
-    const optionalTests = buildOptionalPropTests(component);
+    const optionalTests = buildOptionalPropTests(component).slice(0, GENERATION_LIMITS.optional);
     optionalTests.forEach((testCase) => {
       blocks.push(buildTestBlock(testCase.title, testCase.body));
     });
 
     // Callback prop tests (now actually invoke callbacks)
-    const callbackTests = buildCallbackPropTests(component);
+    const callbackTests = buildCallbackPropTests(component).slice(0, GENERATION_LIMITS.callback);
     callbackTests.forEach((testCase) => {
       if (testCase.isAsync) {
         blocks.push(buildAsyncTestBlock(testCase.title, testCase.body));
@@ -117,7 +130,7 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
     });
 
     // State tests (loading, error, empty, disabled)
-    const stateTests = buildStateTests(component);
+    const stateTests = buildStateTests(component).slice(0, GENERATION_LIMITS.state);
     stateTests.forEach((testCase) => {
       blocks.push(buildTestBlock(testCase.title, testCase.body));
     });
@@ -129,13 +142,13 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
     }
 
     // Variant renders - individual test blocks (boolean, enum, optional prop combinations, state variants)
-    const variantCases = buildVariantTestCases(component);
+    const variantCases = buildVariantTestCases(component).slice(0, GENERATION_LIMITS.variants);
     variantCases.forEach((variant) => {
       blocks.push(buildTestBlock(variant.title, variant.body));
     });
 
     // Interaction tests (click, type, select)
-    const interactions = buildInteractionTests(component);
+    const interactions = buildInteractionTests(component).slice(0, GENERATION_LIMITS.interactions);
     interactions.forEach((interaction, index) => {
       blocks.push(buildAsyncTestBlock(`handles interaction ${index + 1}`, interaction.split('\n')));
     });

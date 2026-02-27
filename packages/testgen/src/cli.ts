@@ -65,8 +65,16 @@ function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {};
 
   const fileIndex = argv.indexOf('--file');
-  if (fileIndex >= 0 && argv[fileIndex + 1]) {
-    options.file = argv[fileIndex + 1];
+  if (fileIndex >= 0) {
+    const directValue = argv[fileIndex + 1];
+    if (directValue && !directValue.startsWith('--')) {
+      options.file = directValue;
+    } else {
+      const nextNonFlagValue = argv.slice(fileIndex + 1).find((arg) => !arg.startsWith('--'));
+      if (nextNonFlagValue) {
+        options.file = nextNonFlagValue;
+      }
+    }
   }
   if (argv.includes('--git-unstaged')) options.gitUnstaged = true;
   if (argv.includes('--all')) options.all = true;

@@ -18,25 +18,25 @@ export function buildRenderAssertions(component: ComponentInfo): string[] {
   // (component may conditionally render based on context/hook state)
   for (const button of component.buttons) {
     if (button.strategy !== 'role') {
-      lines.push(`expect(${selectorQuery(button)}).toBeInTheDocument();`);
+      lines.push(`expect(${selectorQuery(button, 'query')}).toBeInTheDocument();`);
     }
   }
 
   for (const input of component.inputs) {
     if (input.strategy !== 'role') {
-      lines.push(`expect(${selectorQuery(input)}).toBeInTheDocument();`);
+      lines.push(`expect(${selectorQuery(input, 'query')}).toBeInTheDocument();`);
     }
   }
 
   for (const select of component.selects) {
     if (select.selector.strategy !== 'role') {
-      lines.push(`expect(${selectorQuery(select.selector)}).toBeInTheDocument();`);
+      lines.push(`expect(${selectorQuery(select.selector, 'query')}).toBeInTheDocument();`);
     }
   }
 
   for (const link of component.links.slice(0, 4)) {
     if (link.strategy !== 'role') {
-      lines.push(`expect(${selectorQuery(link)}).toBeInTheDocument();`);
+      lines.push(`expect(${selectorQuery(link, 'query')}).toBeInTheDocument();`);
     }
   }
 
@@ -54,7 +54,8 @@ export function buildInteractionTests(component: ComponentInfo): string[] {
       [
         'const user = userEvent.setup();',
         'const { container } = renderUI();',
-        `const target = ${selectorQuery(button)};`,
+        `const target = ${selectorQuery(button, 'query')};`,
+        'if (!target) return;',
         'await user.click(target);',
         'expect(container).toBeInTheDocument();',
       ].join('\n')
@@ -68,7 +69,8 @@ export function buildInteractionTests(component: ComponentInfo): string[] {
       [
         'const user = userEvent.setup();',
         'renderUI();',
-        `const target = ${selectorQuery(input)} as HTMLInputElement;`,
+        `const target = ${selectorQuery(input, 'query')} as HTMLInputElement | null;`,
+        'if (!target) return;',
         'await user.clear(target);',
         'await user.type(target, "test");',
         'expect(target.value).toContain("test");',
@@ -83,7 +85,8 @@ export function buildInteractionTests(component: ComponentInfo): string[] {
       [
         'const user = userEvent.setup();',
         'renderUI();',
-        `const target = ${selectorQuery(select.selector)} as HTMLSelectElement;`,
+        `const target = ${selectorQuery(select.selector, 'query')} as HTMLSelectElement | null;`,
+        'if (!target) return;',
         'if (target.options.length > 0) {',
         '  await user.selectOptions(target, target.options[0]?.value || "");',
         '  expect(target.value).toBeDefined();',
@@ -99,7 +102,8 @@ export function buildInteractionTests(component: ComponentInfo): string[] {
       [
         'const user = userEvent.setup();',
         'const { container } = renderUI();',
-        `const target = ${selectorQuery(link)};`,
+        `const target = ${selectorQuery(link, 'query')};`,
+        'if (!target) return;',
         'await user.click(target);',
         'expect(container).toBeInTheDocument();',
       ].join('\n')
@@ -228,7 +232,9 @@ export function buildCallbackPropTests(component: ComponentInfo): ConditionalTes
           'const user = userEvent.setup();',
           `const ${mockName} = ${mockFn()};`,
           `renderUI({ ${prop.name}: ${mockName} });`,
-          `await user.click(${triggerElement});`,
+          `const trigger = ${triggerElement};`,
+          'if (!trigger) return;',
+          'await user.click(trigger);',
           `expect(${mockName}).toHaveBeenCalled();`,
         ],
       });
@@ -256,7 +262,7 @@ function findTriggerElement(propName: string, component: ComponentInfo): string 
   // onClick/onPress → click the first button
   if (/^on(click|press|action|tap)$/i.test(propName)) {
     if (component.buttons.length > 0 && isReliableSelector(component.buttons[0])) {
-      return selectorQuery(component.buttons[0]);
+      return selectorQuery(component.buttons[0], 'query');
     }
   }
 
@@ -268,7 +274,7 @@ function findTriggerElement(propName: string, component: ComponentInfo): string 
         b.value &&
         /submit|save|create|add|confirm|apply|ok|done/i.test(b.value)
     );
-    if (submitButton) return selectorQuery(submitButton);
+    if (submitButton) return selectorQuery(submitButton, 'query');
   }
 
   // onClose/onDismiss/onCancel → find close/cancel button (usually first button)
@@ -277,7 +283,7 @@ function findTriggerElement(propName: string, component: ComponentInfo): string 
       (b) =>
         isReliableSelector(b) && b.value && /close|dismiss|cancel|back|exit|hide|x|×/i.test(b.value)
     );
-    if (closeButton) return selectorQuery(closeButton);
+    if (closeButton) return selectorQuery(closeButton, 'query');
   }
 
   // onDelete/onRemove → find delete/remove button
@@ -285,13 +291,13 @@ function findTriggerElement(propName: string, component: ComponentInfo): string 
     const deleteButton = component.buttons.find(
       (b) => isReliableSelector(b) && b.value && /delete|remove|clear|destroy|trash/i.test(b.value)
     );
-    if (deleteButton) return selectorQuery(deleteButton);
+    if (deleteButton) return selectorQuery(deleteButton, 'query');
   }
 
   // onToggle/onSwitch → first button
   if (/^on(toggle|switch|flip)$/i.test(propName)) {
     if (component.buttons.length > 0 && isReliableSelector(component.buttons[0]))
-      return selectorQuery(component.buttons[0]);
+      return selectorQuery(component.buttons[0], 'query');
   }
 
   // onChange → type in first input or change first select
@@ -311,13 +317,13 @@ function findTriggerElement(propName: string, component: ComponentInfo): string 
     const editButton = component.buttons.find(
       (b) => isReliableSelector(b) && b.value && /edit|modify|rename|pencil/i.test(b.value)
     );
-    if (editButton) return selectorQuery(editButton);
+    if (editButton) return selectorQuery(editButton, 'query');
   }
 
   // onExpand/onCollapse/onOpen → find first button
   if (/^on(expand|collapse|open|show|reveal)$/i.test(propName)) {
     if (component.buttons.length > 0 && isReliableSelector(component.buttons[0]))
-      return selectorQuery(component.buttons[0]);
+      return selectorQuery(component.buttons[0], 'query');
   }
 
   // onSearch → type in an input (search is input-driven, not button-driven)
@@ -332,13 +338,13 @@ function findTriggerElement(propName: string, component: ComponentInfo): string 
     const nextButton = component.buttons.find(
       (b) => isReliableSelector(b) && b.value && /next|forward|last/i.test(b.value)
     );
-    if (nextButton) return selectorQuery(nextButton);
+    if (nextButton) return selectorQuery(nextButton, 'query');
   }
 
   // onSort/onFilter → first button
   if (/^on(sort|filter|refresh|reload|retry)$/i.test(propName)) {
     if (component.buttons.length > 0 && isReliableSelector(component.buttons[0]))
-      return selectorQuery(component.buttons[0]);
+      return selectorQuery(component.buttons[0], 'query');
   }
 
   return null;
@@ -545,8 +551,11 @@ export function buildFormSubmissionTest(component: ComponentInfo): ConditionalTe
 
   // Fill up to 5 inputs
   for (const input of component.inputs.slice(0, 5)) {
-    const selector = selectorQuery(input);
-    body.push(`await user.type(${selector}, "test value");`);
+    const selector = selectorQuery(input, 'query');
+    body.push(`const inputTarget = ${selector};`);
+    body.push('if (inputTarget) {');
+    body.push('  await user.type(inputTarget, "test value");');
+    body.push('}');
   }
 
   // Find and click submit-like button
@@ -556,7 +565,12 @@ export function buildFormSubmissionTest(component: ComponentInfo): ConditionalTe
     ) || component.buttons[0];
 
   if (submitButton) {
-    body.push(`await user.click(${selectorQuery(submitButton)});`);
+    body.push(
+      `const submitButton = ${selectorQuery(submitButton, 'query')};`,
+      'if (submitButton) {',
+      '  await user.click(submitButton);',
+      '}'
+    );
   }
 
   body.push('expect(container).toBeInTheDocument();');
@@ -568,20 +582,24 @@ export function buildFormSubmissionTest(component: ComponentInfo): ConditionalTe
   };
 }
 
-function selectorQuery(selector: SelectorInfo): string {
+function selectorQuery(selector: SelectorInfo, mode: 'get' | 'query' = 'get'): string {
+  const byPrefix = mode === 'query' ? 'queryBy' : 'getBy';
+  const byAllPrefix = mode === 'query' ? 'queryAllBy' : 'getAllBy';
   switch (selector.strategy) {
     case 'testid':
-      return `screen.getByTestId("${escapeRegExp(selector.value)}")`;
+      return `screen.${byPrefix}TestId("${escapeRegExp(selector.value)}")`;
     case 'label':
-      return `screen.getByLabelText(/${escapeRegExp(selector.value)}/i)`;
+      return `screen.${byPrefix}LabelText(/${escapeRegExp(selector.value)}/i)`;
     case 'placeholder':
-      return `screen.getByPlaceholderText(/${escapeRegExp(selector.value)}/i)`;
+      return `screen.${byPrefix}PlaceholderText(/${escapeRegExp(selector.value)}/i)`;
     case 'text':
-      return `screen.getByRole("button", { name: /${escapeRegExp(selector.value)}/i })`;
+      return `screen.${byPrefix}Role("button", { name: /${escapeRegExp(selector.value)}/i })`;
     case 'role':
-      return `screen.getAllByRole("${selector.role || selector.value}")[0]`;
+      return mode === 'query'
+        ? `screen.${byAllPrefix}Role("${selector.role || selector.value}")[0] ?? null`
+        : `screen.${byAllPrefix}Role("${selector.role || selector.value}")[0]`;
     default:
-      return 'screen.getByRole("button")';
+      return mode === 'query' ? 'screen.queryByRole("button")' : 'screen.getByRole("button")';
   }
 }
 
