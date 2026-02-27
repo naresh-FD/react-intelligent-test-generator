@@ -178,6 +178,14 @@ function generateTestForFile(filePath: string, { project, checker }: ParserConte
     console.log(`  - Skipping compound sub-components (need parent context): ${skipped.join(', ')}`);
   }
 
+  // If compound detection filtered ALL components, skip the entire file.
+  // Do NOT fall through to utility test generation — the exported functions
+  // are React components, not utility functions, and would crash.
+  if (compoundSubs.size > 0 && components.length === 0) {
+    console.log('  - All components are compound sub-components. Skipping file.');
+    return null;
+  }
+
   if (components.length === 0) {
     const fileType = isService ? ('service' as const) : ('utility' as const);
     console.log(`  - No React components found. Generating ${fileType} tests...`);
