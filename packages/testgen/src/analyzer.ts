@@ -85,10 +85,18 @@ export function analyzeSourceFile(
       jsxNodes,
       props
     );
-    const usesRouter = jsxNodes.some((node) => {
+    const usesRouterJsx = jsxNodes.some((node) => {
       const tagName = getTagName(node);
       return !!tagName && isRouterTag(tagName);
     });
+    // Also detect react-router hook usage (useLocation, useParams, useSearchParams, etc.)
+    const usesRouterHook =
+      fileUsesIdentifierCall(sourceFile, 'useLocation') ||
+      fileUsesIdentifierCall(sourceFile, 'useParams') ||
+      fileUsesIdentifierCall(sourceFile, 'useSearchParams') ||
+      fileUsesIdentifierCall(sourceFile, 'useMatch') ||
+      fileUsesIdentifierCall(sourceFile, 'useRouteLoaderData');
+    const usesRouter = usesRouterJsx || usesRouterHook;
     const usesAuthHook =
       fileUsesNamedImport(sourceFile, 'useAuth') || fileUsesIdentifierCall(sourceFile, 'useAuth');
 
@@ -527,20 +535,26 @@ const COMPOUND_UI_LIBRARY_PATTERNS = [
   /^react-hook-form$/,
   /^@headlessui\//,
   /^@ark-ui\//,
+  /^embla-carousel/,
+  /^react-resizable-panels$/,
+  /^input-otp$/,
+  /^recharts$/,
+  /^react-day-picker$/,
+  /^@dnd-kit\//,
 ];
 
 /**
  * Given a source file, returns the set of component names that are thin wrappers
  * around compound UI library primitives and require a parent context to render.
  *
- * Files that primarily re-export from compound libraries (like shadcn/ui wrappers
- * around @radix-ui, cmdk, vaul) produce components that crash when rendered in
- * isolation. We detect these and return ALL non-trivial components from such files.
+ * Handles two patterns:
+ * 1. Files importing from compound UI libraries (shadcn/ui wrappers)
+ * 2. Files with local React.createContext where sub-components call the context hook
  */
 export function getCompoundSubComponents(sourceFile: SourceFile): Set<string> {
   const subComponents = new Set<string>();
 
-  // Check if the file imports from any known compound UI library
+  // --- Pattern 1: Third-party compound library imports ---
   let hasCompoundImport = false;
   for (const decl of sourceFile.getImportDeclarations()) {
     const moduleSpec = decl.getModuleSpecifierValue();
@@ -550,16 +564,61 @@ export function getCompoundSubComponents(sourceFile: SourceFile): Set<string> {
     }
   }
 
-  if (!hasCompoundImport) return subComponents;
+  if (hasCompoundImport) {
+    const exported = sourceFile.getExportedDeclarations();
+    for (const [name] of exported) {
+      // Pure HTML wrappers like SheetHeader, DrawerFooter are just divs — safe to render.
+      if (/(?:Header|Footer)$/.test(name)) continue;
+      subComponents.add(name);
+    }
+    return subComponents;
+  }
 
-  // This file wraps a compound UI library. Mark all exported components except
-  // trivial HTML wrappers (Header/Footer that just render <div>).
+  // --- Pattern 2: Same-file context compound components ---
+  // Detect files with React.createContext + useXxx hook + multiple exported components.
+  // Sub-components that call the context hook need the root component as a wrapper.
+  const sourceText = sourceFile.getText();
+  const hasLocalContext = sourceText.includes('createContext');
+  if (!hasLocalContext) return subComponents;
+
+  // Find local useXxx hooks that consume the context (useCarousel, useChart, etc.)
+  const contextHookNames: string[] = [];
+  for (const func of sourceFile.getFunctions()) {
+    const name = func.getName();
+    if (name && /^use[A-Z]/.test(name)) {
+      const body = func.getText();
+      if (body.includes('useContext') || body.includes('use(')) {
+        contextHookNames.push(name);
+      }
+    }
+  }
+  // Also check variable declarations (arrow functions)
+  for (const variable of sourceFile.getVariableDeclarations()) {
+    const name = variable.getName();
+    if (/^use[A-Z]/.test(name)) {
+      const init = variable.getInitializer();
+      if (init) {
+        const initText = init.getText();
+        if (initText.includes('useContext') || initText.includes('use(')) {
+          contextHookNames.push(name);
+        }
+      }
+    }
+  }
+
+  if (contextHookNames.length === 0) return subComponents;
+
+  // Now find which exported components call these context hooks.
+  // Those are the sub-components that need the parent wrapper.
   const exported = sourceFile.getExportedDeclarations();
-  for (const [name] of exported) {
-    // Pure HTML wrappers like SheetHeader, DrawerFooter are just divs — safe to render.
-    if (/(?:Header|Footer)$/.test(name)) continue;
-
-    subComponents.add(name);
+  for (const [name, decls] of exported) {
+    for (const decl of decls) {
+      const declText = decl.getText();
+      // Check if this component calls any of the local context hooks
+      if (contextHookNames.some((hook) => declText.includes(hook))) {
+        subComponents.add(name);
+      }
+    }
   }
 
   return subComponents;

@@ -670,7 +670,14 @@ function generateFunctionTests( // NOSONAR - template-style test generation inte
   }
 
   // Test 6: For functions that return functions (debounce, throttle patterns)
-  if (func.returnType.includes('=>') || func.returnType.includes('Function')) {
+  // Only match when the return type IS a function (starts with `(`) or is literally
+  // "Function", not when it merely contains `=>` inside an object/union type
+  // (e.g. `{ dismiss: () => void }` should NOT trigger this).
+  const isReturnTypeFunction =
+    /^\s*\(/.test(func.returnType) ||
+    func.returnType === 'Function' ||
+    /^(\(.*\))\s*=>/.test(func.returnType.trim());
+  if (isReturnTypeFunction) {
     lines.add(`${indent}  it("returns a callable function", () => {`);
     lines.add(`${indent}    const result = ${func.name}(${mockArgs});`);
     lines.add(`${indent}    expect(typeof result).toBe("function");`);
@@ -1161,11 +1168,54 @@ function mockValueForParam(param: ParamInfo, alternate = false): string {
 
   if (/^options?$/.test(name)) return '{ enabled: false }';
 
+  // For reducer state params, try to build a minimal state shape from the type
+  // so that array properties (e.g. `toasts: Toast[]`) are initialized as `[]`
+  // instead of being left out of `{}`.
+  if (/^state$/.test(name) && param.type.includes('{')) {
+    const stateShape = buildMinimalObjectMock(param.type);
+    if (stateShape) return stateShape;
+  }
+
   const direct = matchDirectParamMock(type, name, alternate);
   if (direct) return direct;
 
   const fallback = matchNameFallbackMock(name, alternate);
   return fallback ?? '{}';
+}
+
+/**
+ * Parse an inline object type string (e.g. `{ toasts: Toast[]; }`) and produce
+ * a minimal mock object with arrays as `[]`, strings as `""`, numbers as `0`,
+ * and booleans as `false`.  Returns null if the type cannot be parsed.
+ */
+function buildMinimalObjectMock(typeStr: string): string | null {
+  // Match `{ prop: type; prop2: type2; ... }`
+  const inner = typeStr.match(/^\{([^}]+)\}$/s)?.[1];
+  if (!inner) return null;
+
+  const props: string[] = [];
+  // Split on `;` to get individual property declarations
+  for (const segment of inner.split(';')) {
+    const trimmed = segment.trim();
+    if (!trimmed) continue;
+    const colonIdx = trimmed.indexOf(':');
+    if (colonIdx <= 0) continue;
+    const propName = trimmed.slice(0, colonIdx).trim().replace(/\?$/, '');
+    const propType = trimmed.slice(colonIdx + 1).trim().toLowerCase();
+
+    if (propType.includes('[]') || propType.includes('array')) {
+      props.push(`${propName}: []`);
+    } else if (propType === 'string') {
+      props.push(`${propName}: ""`);
+    } else if (propType === 'number') {
+      props.push(`${propName}: 0`);
+    } else if (propType === 'boolean') {
+      props.push(`${propName}: false`);
+    }
+  }
+
+  if (props.length === 0) return null;
+  return `{ ${props.join(', ')} }`;
 }
 
 function contextualMock(name: string, type: string, alternate = false): string {

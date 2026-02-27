@@ -16,16 +16,26 @@ export function buildRenderHelper(component: ComponentInfo, sourceFilePath?: str
     renderOptions.push(`authState: ${authState}`);
   }
   const optionsSuffix = renderOptions.length > 0 ? `, { ${renderOptions.join(', ')} }` : '';
+
+  // When the component uses router hooks (useLocation, useNavigate, etc.) and we're
+  // using plain `render` (not a custom renderWithProviders that already wraps Router),
+  // wrap the JSX in <MemoryRouter> so hooks have the required context.
+  const needsRouterWrap = component.usesRouter && renderFn === 'render';
+
   if (component.props.length > 0) {
+    const jsx = needsRouterWrap
+      ? `<MemoryRouter><${component.name} {...defaultProps} {...props} /></MemoryRouter>`
+      : `<${component.name} {...defaultProps} {...props} />`;
     return [
       'const renderUI = (props = {}) =>',
-      `  ${renderFn}(<${component.name} {...defaultProps} {...props} />${optionsSuffix});`,
+      `  ${renderFn}(${jsx}${optionsSuffix});`,
     ].join('\n');
   }
 
-  return ['const renderUI = () =>', `  ${renderFn}(<${component.name} />${optionsSuffix});`].join(
-    '\n'
-  );
+  const jsx = needsRouterWrap
+    ? `<MemoryRouter><${component.name} /></MemoryRouter>`
+    : `<${component.name} />`;
+  return ['const renderUI = () =>', `  ${renderFn}(${jsx}${optionsSuffix});`].join('\n');
 }
 
 function deriveAuthState(component: ComponentInfo): string {

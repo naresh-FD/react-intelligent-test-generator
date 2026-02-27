@@ -39,6 +39,14 @@ export function buildImports(components: ComponentInfo[], options: TemplateOptio
     imports.push(`import { ${rtlImports.join(', ')} } from "@testing-library/react";`);
   }
 
+  // Add MemoryRouter import when components use router hooks with plain render
+  const needsMemoryRouter = needsPlainRender && components.some(
+    (c) => c.usesRouter && getRenderFunctionName(c, options.sourceFilePath) === 'render'
+  );
+  if (needsMemoryRouter) {
+    imports.push('import { MemoryRouter } from "react-router-dom";');
+  }
+
   if (needsProviders && hasCustomRender) {
     const testUtilsImport = relativeImport(options.testFilePath, renderHelper.path);
     const renderFnName = renderHelper.exportName;
