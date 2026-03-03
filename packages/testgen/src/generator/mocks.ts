@@ -238,6 +238,24 @@ export function mockValueForProp(prop: PropInfo): string {
   // Callback / function types
   if (type.includes('=>') || prop.isCallback) return mockFn();
 
+  // TypeScript utility generic types - check on original (non-lowercased) type
+  const trimmedOrig = prop.type.trim();
+  if (/^(Partial|Required|Readonly)</.test(trimmedOrig)) return '{}';
+  if (/^Map</.test(trimmedOrig)) return 'new Map()';
+  if (/^Set</.test(trimmedOrig)) return 'new Set()';
+  if (/^WeakMap</.test(trimmedOrig)) return 'new WeakMap()';
+  if (/^WeakSet</.test(trimmedOrig)) return 'new WeakSet()';
+  if (/^Promise</.test(trimmedOrig)) return 'Promise.resolve(undefined as any)';
+  if (/^(React\.)?Ref</.test(trimmedOrig) || /^(React\.)?MutableRefObject</.test(trimmedOrig)) return '{ current: null }';
+  if (/^React\.Dispatch</.test(trimmedOrig)) return mockFn();
+  // Array<T> generic syntax → empty array
+  if (/^(readonly\s+)?Array</.test(trimmedOrig)) return '[]';
+  if (/^ReadonlyArray</.test(trimmedOrig)) return '[]';
+  // Record<K,V> generic → empty object
+  if (/^Record</.test(trimmedOrig)) return '{}';
+  // Intersection types A & B → empty object satisfying both shapes
+  if (trimmedOrig.includes(' & ') && !trimmedOrig.includes('=>')) return '{}';
+
   // Enum/union string literal types - use first value
   if (isEnumLikeType(prop.type)) {
     const values = extractEnumValues(prop.type);
@@ -295,7 +313,7 @@ export function mockValueForProp(prop: PropInfo): string {
     /^(items|data|list|rows|options|results|records|entries|tabs|columns|dropdowndata|itemsperpageoptions|pageoptions)$/i.test(
       name
     );
-  const isArrayByType = type.includes('[]') || /array</.test(type) || /readonly\s*\[\]/.test(type);
+  const isArrayByType = type.includes('[]') || /array</.test(type) || /readonly\s*\[\]/.test(type) || /readonlyarray</.test(type);
 
   if (isArrayByName || isArrayByType) {
     // Named complex types (e.g. AnomalousTransaction[], BranchPerformance[]) —

@@ -53,6 +53,10 @@ export interface ComponentInfo {
   hasForwardRef: boolean;
   usesNavigation: boolean;
   links: SelectorInfo[];
+  /** True when this is a React Error Boundary (class component with componentDidCatch) */
+  isErrorBoundary: boolean;
+  /** True when this is a class component */
+  isClassComponent: boolean;
 }
 
 export function analyzeSourceFile(
@@ -108,6 +112,11 @@ export function analyzeSourceFile(
     const usesNavigation =
       fileUsesIdentifierCall(sourceFile, 'useNavigate') ||
       fileUsesIdentifierCall(sourceFile, 'useHistory');
+    const isClassComponent = Node.isClassDeclaration(candidate);
+    const isErrorBoundary =
+      isClassComponent &&
+      (candidate.getText().includes('componentDidCatch') ||
+        candidate.getText().includes('getDerivedStateFromError'));
 
     components.push({
       name,
@@ -127,6 +136,8 @@ export function analyzeSourceFile(
       usesUseState,
       hasForwardRef,
       usesNavigation,
+      isErrorBoundary,
+      isClassComponent,
     });
   }
 
@@ -149,6 +160,23 @@ function getComponentCandidates(sourceFile: SourceFile): Node[] {
   for (const func of sourceFile.getFunctions()) {
     if (isComponentName(func.getName())) {
       if (hasJsx(func)) candidates.push(func);
+    }
+  }
+
+  // Class components extending React.Component / PureComponent
+  for (const cls of sourceFile.getClasses()) {
+    const name = cls.getName();
+    if (!isComponentName(name)) continue;
+    const extendsClause = cls.getExtends();
+    if (!extendsClause) continue;
+    const extendsText = extendsClause.getExpression().getText();
+    if (
+      extendsText === 'Component' ||
+      extendsText === 'React.Component' ||
+      extendsText === 'PureComponent' ||
+      extendsText === 'React.PureComponent'
+    ) {
+      candidates.push(cls);
     }
   }
 
@@ -192,11 +220,52 @@ function getComponentCandidates(sourceFile: SourceFile): Node[] {
 function getCandidateName(candidate: Node): string | undefined {
   if (Node.isFunctionDeclaration(candidate)) return candidate.getName();
   if (Node.isVariableDeclaration(candidate)) return candidate.getName();
+  if (Node.isClassDeclaration(candidate)) return candidate.getName() ?? undefined;
   return undefined;
 }
 
 function isComponentName(name?: string): boolean {
   return !!name && /^[A-Z]/.test(name);
+}
+
+function extractClassComponentProps(cls: Node, checker: TypeChecker): PropInfo[] {
+  if (!Node.isClassDeclaration(cls)) return [];
+  const extendsClause = cls.getExtends();
+  if (!extendsClause) return [];
+
+  const typeArgs = extendsClause.getTypeArguments();
+  if (typeArgs.length === 0) return [];
+
+  // The first type argument is the Props type
+  const propsTypeNode = typeArgs[0];
+  const propsType = checker.getTypeAtLocation(propsTypeNode);
+  const props: PropInfo[] = [];
+
+  for (const prop of propsType.getProperties()) {
+    const declarations = prop.getDeclarations();
+    const declaration = declarations.length > 0 ? declarations[0] : null;
+    const propType = checker.getTypeOfSymbolAtLocation(prop, declaration ?? propsTypeNode);
+    const typeText = checker.getTypeText(propType, declaration ?? propsTypeNode);
+    const isOptional = declaration
+      ? Node.isPropertySignature(declaration)
+        ? declaration.hasQuestionToken()
+        : false
+      : typeText.includes('undefined');
+
+    const name = prop.getName();
+    const isCallbackByName =
+      /^(on[A-Z]|handle[A-Z]|set[A-Z]|update[A-Z]|change[A-Z]|toggle[A-Z]|add[A-Z]|remove[A-Z]|delete[A-Z]|clear[A-Z])/.test(name);
+    const isCallbackByType = typeText.includes('=>');
+    props.push({
+      name,
+      type: typeText,
+      isRequired: !isOptional,
+      isCallback: isCallbackByType || isCallbackByName,
+      isBoolean: typeText === 'boolean',
+    });
+  }
+
+  return props;
 }
 
 function hasJsx(node: Node): boolean {
@@ -207,6 +276,11 @@ function hasJsx(node: Node): boolean {
 }
 
 function extractProps(candidate: Node, checker: TypeChecker): PropInfo[] {
+  // Class components: extract props from the generic type argument of React.Component<Props>
+  if (Node.isClassDeclaration(candidate)) {
+    return extractClassComponentProps(candidate, checker);
+  }
+
   const params = Node.isFunctionDeclaration(candidate)
     ? candidate.getParameters()
     : Node.isVariableDeclaration(candidate)

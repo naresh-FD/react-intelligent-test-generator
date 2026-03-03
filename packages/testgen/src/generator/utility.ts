@@ -87,6 +87,14 @@ export function generateUtilityTest( // NOSONAR - generator intentionally builds
   const needsURLMock =
     sourceText.includes('URL.createObjectURL') || sourceText.includes('URL.revokeObjectURL');
   const needsClipboardMock = sourceText.includes('navigator.clipboard');
+  // Detect native fetch usage (but NOT in axios/api files, which mock differently)
+  const needsFetchMock =
+    !needsAxiosMock &&
+    !needsApiMockOnly &&
+    (sourceText.includes('fetch(') ||
+      sourceText.includes('globalThis.fetch') ||
+      sourceText.includes('window.fetch')) &&
+    (fileType === 'service' || sourceText.includes('await fetch'));
   const usesFunctionLikeParams = functions.some((func) =>
     func.params.some(
       (param) =>
@@ -95,12 +103,13 @@ export function generateUtilityTest( // NOSONAR - generator intentionally builds
         /^(on|handle|set|update|change|toggle|add|remove|delete|clear)[A-Z]/.test(param.name)
     )
   );
-  const needsLifecycleHooks = needsURLMock || needsClipboardMock || needsLocalStorageMock;
+  const needsLifecycleHooks =
+    needsURLMock || needsClipboardMock || needsLocalStorageMock || needsFetchMock;
   const needsMockGlobal =
     needsAxiosMock || needsApiMockOnly || needsLifecycleHooks || usesFunctionLikeParams;
   const testGlobals = ['describe', 'it', 'expect'];
   if (needsLifecycleHooks) testGlobals.push('beforeEach');
-  if (needsURLMock) testGlobals.push('afterEach');
+  if (needsURLMock || needsFetchMock) testGlobals.push('afterEach');
   if (needsMockGlobal) testGlobals.push(mockGlobalName());
   lines.add(buildTestGlobalsImport(testGlobals));
   lines.add('');
@@ -207,6 +216,26 @@ export function generateUtilityTest( // NOSONAR - generator intentionally builds
     lines.add(`      readText: ${mockFn()}.mockResolvedValue(""),`);
     lines.add('    },');
     lines.add('  });');
+    lines.add('});');
+  }
+
+  if (needsFetchMock) {
+    lines.add('');
+    lines.add('// Mock global fetch to prevent real network calls in tests');
+    lines.add('const mockFetchResponse = {');
+    lines.add('  ok: true,');
+    lines.add('  status: 200,');
+    lines.add('  statusText: "OK",');
+    lines.add(`  json: ${mockFn()}.mockResolvedValue({}),`);
+    lines.add(`  text: ${mockFn()}.mockResolvedValue(""),`);
+    lines.add(`  blob: ${mockFn()}.mockResolvedValue(new Blob()),`);
+    lines.add('  headers: new Headers(),');
+    lines.add('};');
+    lines.add('beforeEach(() => {');
+    lines.add(`  global.fetch = ${mockFn()}.mockResolvedValue(mockFetchResponse as any);`);
+    lines.add('});');
+    lines.add('afterEach(() => {');
+    lines.add('  (global.fetch as any) = undefined;');
     lines.add('});');
   }
 
@@ -1405,10 +1434,22 @@ function resolveTypeRuleMock(type: string, name: string, alternate: boolean): st
   if (type === 'boolean') return alternate ? 'false' : 'true';
   if (type === 'file') return 'new File(["id,name\\n1,test"], "test.csv", { type: "text/csv" })';
   if (type === 'blob') return 'new Blob(["test"], { type: "text/plain" })';
-  if (type.includes('[]')) return alternate ? '[{ id: "1" }]' : '[]';
+  // Array<T> / ReadonlyArray<T> and T[]
+  if (type.includes('[]') || /^(readonly\s+)?array</.test(type) || /^readonlyarray</.test(type)) {
+    return alternate ? '[{ id: "1" }]' : '[]';
+  }
   if (type === 'date') {
     return alternate ? 'new Date("2025-06-15")' : 'new Date("2024-01-01")';
   }
+  // TypeScript utility types
+  if (/^map</.test(type)) return 'new Map()';
+  if (/^set</.test(type)) return 'new Set()';
+  if (/^weakmap</.test(type)) return 'new WeakMap()';
+  if (/^weakset</.test(type)) return 'new WeakSet()';
+  if (/^promise</.test(type)) return 'Promise.resolve(undefined as any)';
+  if (/^(partial|required|readonly|record)</.test(type)) return '{}';
+  // Intersection types (A & B) - can only be satisfied by empty object for testing
+  if (type.includes(' & ') && !type.includes('=>')) return '{}';
   return null;
 }
 

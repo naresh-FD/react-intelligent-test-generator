@@ -45,6 +45,27 @@ export const UNTESTABLE_PATTERNS = {
 };
 
 /**
+ * Patterns that identify state management store files.
+ * These trigger the dedicated store test generator.
+ */
+export const STORE_FILE_PATTERNS = {
+  /** Filename patterns that strongly suggest a store file */
+  filenamePatterns: [
+    /Store\.(ts|tsx)$/i,   // useCartStore.ts, authStore.ts
+    /slice\.(ts|tsx)$/i,   // cartSlice.ts, userSlice.ts
+    /reducer\.(ts|tsx)$/i, // cartReducer.ts (old Redux style)
+    /atom\.(ts|tsx)$/i,    // counterAtom.ts (Jotai)
+    /atoms\.(ts|tsx)$/i,   // atoms.ts (Jotai)
+  ],
+  /** Content patterns for Zustand stores */
+  zustand: ["from 'zustand'", 'from "zustand"'],
+  /** Content patterns for Redux Toolkit */
+  rtk: ["from '@reduxjs/toolkit'", 'from "@reduxjs/toolkit"'],
+  /** Content patterns for Jotai atoms */
+  jotai: ["from 'jotai'", 'from "jotai"'],
+};
+
+/**
  * Context detection configuration.
  * Centralised config for detecting React Router, React Query, and custom context providers.
  * Customize this to match your app's contexts.

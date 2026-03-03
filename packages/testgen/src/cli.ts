@@ -21,6 +21,7 @@ import { generateTests } from './generator';
 import { generateBarrelTest } from './generator/barrel';
 import { generateUtilityTest } from './generator/utility';
 import { generateContextTest } from './generator/context';
+import { generateStoreTest } from './generator/store';
 import { TEST_UTILITY_PATTERNS, UNTESTABLE_PATTERNS } from './config';
 import { ensureJestScaffold } from './scaffold';
 import { detectTestFramework } from './utils/framework';
@@ -161,8 +162,22 @@ function generateTestForFile(filePath: string, { project, checker }: ParserConte
     // Fall through to component/utility generation if context gen fails
   }
 
-  // --- Service / utility / component ---
+  // --- State management store file (Zustand / Redux Toolkit) ---
   const fileContent = sourceFile.getText();
+  const isStore = isStoreFile(filePath, fileContent);
+  if (isStore) {
+    console.log('  - State management store detected. Generating store tests...');
+    const storeTest = generateStoreTest(sourceFile, checker, testFilePath, filePath);
+    if (storeTest) {
+      console.log(`  - Writing store test file: ${testFilePath}`);
+      writeFile(testFilePath, storeTest);
+      console.log('  - Store test file generated/updated.');
+      return testFilePath;
+    }
+    // Fall through to utility/component generation if store gen fails
+  }
+
+  // --- Service / utility / component ---
   const isService = isServiceFile(filePath, fileContent);
   const allComponents = analyzeSourceFile(sourceFile, project, checker);
 
@@ -751,6 +766,37 @@ async function run() {
 // ---------------------------------------------------------------------------
 // File classifier helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Detects Zustand or Redux Toolkit (createSlice/createAsyncThunk) store files.
+ * These need the dedicated store test generator.
+ */
+function isStoreFile(filePath: string, content: string): boolean {
+  const basename = path.basename(filePath).toLowerCase();
+  const isZustandFile =
+    content.includes("from 'zustand'") || content.includes('from "zustand"');
+  const isRTKFile =
+    content.includes("from '@reduxjs/toolkit'") || content.includes('from "@reduxjs/toolkit"');
+
+  if (!isZustandFile && !isRTKFile) return false;
+
+  const isJotaiFile =
+    content.includes("from 'jotai'") || content.includes('from "jotai"');
+
+  // Must have the actual store creation call, not just type imports
+  if (isZustandFile && (content.includes('create(') || content.includes('create<'))) return true;
+  if (
+    isRTKFile &&
+    (content.includes('createSlice(') || content.includes('createAsyncThunk('))
+  )
+    return true;
+  if (isJotaiFile && (content.includes('atom(') || content.includes('atom<'))) return true;
+
+  // Filename hint: store.ts, authStore.ts, useXxxStore.ts, xxxSlice.ts
+  if (/store\.|slice\./i.test(basename)) return true;
+
+  return false;
+}
 
 function isServiceFile(filePath: string, content: string): boolean {
   const basename = path.basename(filePath).toLowerCase();

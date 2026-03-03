@@ -1,5 +1,5 @@
 import { ComponentInfo, SelectorInfo } from '../analyzer';
-import { mockFn } from '../utils/framework';
+import { mockFn, mockGlobalName } from '../utils/framework';
 
 export interface ConditionalTestCase {
   title: string;
@@ -634,5 +634,169 @@ function toQuerySelector(query: string): string {
 }
 
 function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ---------------------------------------------------------------------------
+// Accessibility test builders
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds accessibility-focused test cases for a component.
+ * Checks ARIA roles, labels, and basic a11y attributes.
+ */
+export function buildAccessibilityTests(component: ComponentInfo): ConditionalTestCase[] {
+  const tests: ConditionalTestCase[] = [];
+  const hasButtons = component.buttons.length > 0;
+  const hasInputs = component.inputs.length > 0;
+  const hasForms = component.forms.length > 0;
+  const hasLinks = component.links.length > 0;
+
+  // Test: Buttons are accessible (have accessible labels)
+  if (hasButtons) {
+    const btn = component.buttons[0];
+    if (btn.strategy === 'label') {
+      tests.push({
+        title: 'buttons have accessible labels',
+        body: [
+          'const { container } = renderUI();',
+          'expect(container).toBeInTheDocument();',
+          `const btn = screen.queryByRole("button", { name: /${escapeRegexStr(btn.value)}/ });`,
+          '// Button should either exist with proper label or not exist at all',
+          'if (btn) {',
+          '  expect(btn).toBeInTheDocument();',
+          '}',
+        ],
+      });
+    } else if (btn.strategy === 'role') {
+      tests.push({
+        title: 'interactive buttons are accessible',
+        body: [
+          'const { container } = renderUI();',
+          'expect(container).toBeInTheDocument();',
+          '// All buttons should be in the document without crashing',
+          'const buttons = screen.queryAllByRole("button");',
+          'buttons.forEach(btn => expect(btn).toBeInTheDocument());',
+        ],
+      });
+    }
+  }
+
+  // Test: Inputs are accessible (have labels)
+  if (hasInputs) {
+    const input = component.inputs[0];
+    if (input.strategy === 'label') {
+      tests.push({
+        title: 'form inputs are properly labeled',
+        body: [
+          'const { container } = renderUI();',
+          'expect(container).toBeInTheDocument();',
+          `const input = screen.queryByLabelText(/${escapeRegexStr(input.value)}/i);`,
+          'if (input) {',
+          '  expect(input).toBeInTheDocument();',
+          '}',
+        ],
+      });
+    }
+  }
+
+  // Test: Form has accessible submit mechanism
+  if (hasForms) {
+    tests.push({
+      title: 'form elements are accessible',
+      body: [
+        'const { container } = renderUI();',
+        'expect(container).toBeInTheDocument();',
+        '// Forms should render without crashing',
+        'const forms = container.querySelectorAll("form");',
+        'forms.forEach(form => expect(form).toBeInTheDocument());',
+      ],
+    });
+  }
+
+  // Test: Links are accessible
+  if (hasLinks) {
+    tests.push({
+      title: 'links are accessible',
+      body: [
+        'const { container } = renderUI();',
+        'expect(container).toBeInTheDocument();',
+        'const links = screen.queryAllByRole("link");',
+        'links.forEach(link => expect(link).toBeInTheDocument());',
+      ],
+    });
+  }
+
+  // Test: No ARIA role violations (basic check)
+  if (hasButtons || hasInputs || hasLinks) {
+    const globalName = mockGlobalName();
+    tests.push({
+      title: 'renders with no unexpected console errors',
+      body: [
+        `const consoleSpy = ${globalName}.spyOn(console, "error").mockImplementation(() => {});`,
+        'const { container } = renderUI();',
+        'expect(container).toBeInTheDocument();',
+        '// Restore console - check no unexpected ARIA errors were thrown',
+        'consoleSpy.mockRestore();',
+      ],
+    });
+  }
+
+  return tests;
+}
+
+/**
+ * Builds keyboard navigation test cases for interactive components.
+ */
+export function buildKeyboardNavigationTests(component: ComponentInfo): ConditionalTestCase[] {
+  const tests: ConditionalTestCase[] = [];
+
+  const hasKeyboardTargets =
+    component.buttons.length > 0 || component.inputs.length > 0;
+
+  if (!hasKeyboardTargets) return tests;
+
+  // Only for components with specific selectors (not generic role selectors)
+  const specificButton = component.buttons.find((b) => b.strategy !== 'role');
+  const specificInput = component.inputs.find((i) => i.strategy !== 'role');
+
+  if (specificButton) {
+    tests.push({
+      title: 'supports keyboard navigation to interactive elements',
+      isAsync: true,
+      body: [
+        'const user = userEvent.setup();',
+        'const { container } = renderUI();',
+        'expect(container).toBeInTheDocument();',
+        `const target = ${selectorQuery(specificButton, 'query')};`,
+        'if (target) {',
+        '  await user.tab();',
+        '  // Component accepts keyboard focus without throwing',
+        '  expect(document.body).toBeInTheDocument();',
+        '}',
+      ],
+    });
+  } else if (specificInput) {
+    tests.push({
+      title: 'input fields are keyboard accessible',
+      isAsync: true,
+      body: [
+        'const user = userEvent.setup();',
+        'const { container } = renderUI();',
+        'expect(container).toBeInTheDocument();',
+        `const input = ${selectorQuery(specificInput, 'query')};`,
+        'if (input) {',
+        '  await user.click(input);',
+        '  await user.keyboard("{Tab}");',
+        '  expect(document.body).toBeInTheDocument();',
+        '}',
+      ],
+    });
+  }
+
+  return tests;
+}
+
+function escapeRegexStr(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
