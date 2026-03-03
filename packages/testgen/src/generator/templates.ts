@@ -7,6 +7,8 @@ export interface TemplateOptions {
   sourceFilePath: string;
   usesUserEvent: boolean;
   needsScreen: boolean;
+  /** Additional import lines for context objects (e.g., import { AuthContext } from "...") */
+  contextImports?: string[];
 }
 
 export function buildHeader(): string {
@@ -21,7 +23,8 @@ export function buildImports(components: ComponentInfo[], options: TemplateOptio
   const imports: string[] = [];
   const needsPlainRender = components.some((c) => c.usesRouter);
   const needsProviders = components.some((c) => !c.usesRouter);
-  const needsMockGlobal = components.some((c) => c.props.some((p) => p.isCallback));
+  const hasContextMocks = (options.contextImports ?? []).length > 0;
+  const needsMockGlobal = hasContextMocks || components.some((c) => c.props.some((p) => p.isCallback));
 
   const testGlobals = ['describe', 'it', 'expect'];
   if (needsMockGlobal) testGlobals.push(mockGlobalName());
@@ -57,6 +60,23 @@ export function buildImports(components: ComponentInfo[], options: TemplateOptio
 
   if (options.usesUserEvent) {
     imports.push('import userEvent from "@testing-library/user-event";');
+  }
+
+  // Context imports — when components consume React Context
+  const contextImports = options.contextImports ?? [];
+  if (contextImports.length > 0) {
+    // Add React import if not already present (needed for Context.Provider JSX)
+    if (!imports.some((i) => i.includes('from "react"') || i.includes("from 'react'"))) {
+      imports.push('import React from "react";');
+    }
+    // Deduplicate context imports
+    const seen = new Set<string>();
+    for (const ci of contextImports) {
+      if (!seen.has(ci)) {
+        seen.add(ci);
+        imports.push(ci);
+      }
+    }
   }
 
   if (defaultComponents.length > 0 && namedComponents.length > 0) {

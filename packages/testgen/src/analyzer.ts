@@ -1,4 +1,5 @@
-import { Node, Project, SourceFile, SyntaxKind, TypeChecker, JsxAttribute } from 'ts-morph';
+import { Node, Project, SourceFile, SyntaxKind, TypeChecker, JsxAttribute, JsxAttributeLike, ParameterDeclaration } from 'ts-morph';
+import { CONTEXT_DETECTION_CONFIG } from './config';
 
 export interface PropInfo {
   name: string;
@@ -25,7 +26,27 @@ export interface HookUsage {
 }
 
 export interface ContextUsage {
+  /** Name of the React context object (e.g., "AuthContext") */
+  contextName: string;
+  /** Import path for the context (e.g., "@/contexts/AuthContext") */
+  importPath?: string;
+  /** The custom hook name that wraps this context (e.g., "useAuth") */
+  hookName?: string;
+  /** Import path for the hook if different from context import */
+  hookImportPath?: string;
+  /** Properties destructured from the context value */
+  consumedKeys: string[];
+  /** Whether usage is guarded (try/catch, optional chaining, null check) */
+  isOptional: boolean;
+  /** The provider component name (e.g., "AuthProvider") */
+  providerName?: string;
+  /** Import path for the provider */
+  providerImportPath?: string;
+
+  // Backward compat aliases
+  /** @deprecated Use contextName */
   name: string;
+  /** @deprecated Use importPath */
   importSource?: string;
 }
 
@@ -75,7 +96,12 @@ export function analyzeSourceFile(
     const name = getCandidateName(candidate);
     if (!name) continue;
 
-    const exportType = name === defaultExportName ? 'default' : exported.has(name) ? 'named' : null;
+    let exportType: 'default' | 'named' | null = null;
+    if (name === defaultExportName) {
+      exportType = 'default';
+    } else if (exported.has(name)) {
+      exportType = 'named';
+    }
 
     if (!exportType) continue;
 
@@ -105,7 +131,7 @@ export function analyzeSourceFile(
       fileUsesNamedImport(sourceFile, 'useAuth') || fileUsesIdentifierCall(sourceFile, 'useAuth');
 
     const hooks = detectHooks(candidate, sourceFile);
-    const contexts = detectContexts(sourceFile);
+    const contexts = detectContexts(candidate, sourceFile, project);
     const usesUseEffect = fileUsesIdentifierCall(sourceFile, 'useEffect');
     const usesUseState = fileUsesIdentifierCall(sourceFile, 'useState');
     const hasForwardRef = candidate.getText().includes('forwardRef');
@@ -246,11 +272,12 @@ function extractClassComponentProps(cls: Node, checker: TypeChecker): PropInfo[]
     const declaration = declarations.length > 0 ? declarations[0] : null;
     const propType = checker.getTypeOfSymbolAtLocation(prop, declaration ?? propsTypeNode);
     const typeText = checker.getTypeText(propType, declaration ?? propsTypeNode);
-    const isOptional = declaration
-      ? Node.isPropertySignature(declaration)
-        ? declaration.hasQuestionToken()
-        : false
-      : typeText.includes('undefined');
+    let isOptional = false;
+    if (declaration && Node.isPropertySignature(declaration)) {
+      isOptional = declaration.hasQuestionToken();
+    } else if (!declaration) {
+      isOptional = typeText.includes('undefined');
+    }
 
     const name = prop.getName();
     const isCallbackByName =
@@ -275,47 +302,53 @@ function hasJsx(node: Node): boolean {
   );
 }
 
+/** Extract parameters from a function/variable component declaration */
+function getComponentParameters(candidate: Node): ParameterDeclaration[] {
+  if (Node.isFunctionDeclaration(candidate)) {
+    return candidate.getParameters();
+  }
+
+  if (Node.isVariableDeclaration(candidate)) {
+    const initializer = candidate.getInitializer();
+    if (initializer && Node.isArrowFunction(initializer)) {
+      return initializer.getParameters();
+    }
+    if (initializer && Node.isFunctionExpression(initializer)) {
+      return initializer.getParameters();
+    }
+    // Handle memo(), React.memo(), forwardRef(), React.forwardRef() wrappers
+    if (initializer && Node.isCallExpression(initializer)) {
+      const callee = initializer.getExpression().getText();
+      if (
+        callee === 'memo' ||
+        callee === 'React.memo' ||
+        callee === 'forwardRef' ||
+        callee === 'React.forwardRef'
+      ) {
+        const args = initializer.getArguments();
+        if (args.length > 0) {
+          const innerFn = args[0];
+          if (Node.isArrowFunction(innerFn)) {
+            return innerFn.getParameters();
+          }
+          if (Node.isFunctionExpression(innerFn)) {
+            return innerFn.getParameters();
+          }
+        }
+      }
+    }
+  }
+
+  return [];
+}
+
 function extractProps(candidate: Node, checker: TypeChecker): PropInfo[] {
   // Class components: extract props from the generic type argument of React.Component<Props>
   if (Node.isClassDeclaration(candidate)) {
     return extractClassComponentProps(candidate, checker);
   }
 
-  const params = Node.isFunctionDeclaration(candidate)
-    ? candidate.getParameters()
-    : Node.isVariableDeclaration(candidate)
-      ? (() => {
-          const initializer = candidate.getInitializer();
-          if (initializer && Node.isArrowFunction(initializer)) {
-            return initializer.getParameters();
-          }
-          if (initializer && Node.isFunctionExpression(initializer)) {
-            return initializer.getParameters();
-          }
-          // Handle memo(), React.memo(), forwardRef(), React.forwardRef() wrappers
-          if (initializer && Node.isCallExpression(initializer)) {
-            const callee = initializer.getExpression().getText();
-            if (
-              callee === 'memo' ||
-              callee === 'React.memo' ||
-              callee === 'forwardRef' ||
-              callee === 'React.forwardRef'
-            ) {
-              const args = initializer.getArguments();
-              if (args.length > 0) {
-                const innerFn = args[0];
-                if (Node.isArrowFunction(innerFn)) {
-                  return innerFn.getParameters();
-                }
-                if (Node.isFunctionExpression(innerFn)) {
-                  return innerFn.getParameters();
-                }
-              }
-            }
-          }
-          return [];
-        })()
-      : [];
+  const params = getComponentParameters(candidate);
 
   if (params.length === 0) return [];
 
@@ -331,11 +364,12 @@ function extractProps(candidate: Node, checker: TypeChecker): PropInfo[] {
     const propType = checker.getTypeOfSymbolAtLocation(prop, declaration ?? param);
     const typeText = checker.getTypeText(propType, declaration ?? param);
 
-    const isOptional = declaration
-      ? Node.isPropertySignature(declaration)
-        ? declaration.hasQuestionToken()
-        : false
-      : typeText.includes('undefined');
+    let isOptional = false;
+    if (declaration && Node.isPropertySignature(declaration)) {
+      isOptional = declaration.hasQuestionToken();
+    } else if (!declaration) {
+      isOptional = typeText.includes('undefined');
+    }
 
     const name = prop.getName();
     const isCallbackByName =
@@ -420,11 +454,14 @@ function analyzeJsxNodes(
     const isSelect = (isIntrinsic && lowerTag === 'select') || isSelectLikeComponent(tagName);
 
     if (isSelect) {
-      const selector = dataTestId
-        ? { strategy: 'testid' as const, value: dataTestId }
-        : ariaLabel
-          ? { strategy: 'label' as const, value: ariaLabel }
-          : { strategy: 'role' as const, value: 'combobox', role: 'combobox' };
+      let selector: SelectorInfo;
+      if (dataTestId) {
+        selector = { strategy: 'testid', value: dataTestId };
+      } else if (ariaLabel) {
+        selector = { strategy: 'label', value: ariaLabel };
+      } else {
+        selector = { strategy: 'role', value: 'combobox', role: 'combobox' };
+      }
       selects.push({ tag: 'select', selector });
     } else if (
       (isIntrinsic && (lowerTag === 'input' || lowerTag === 'textarea')) ||
@@ -442,11 +479,14 @@ function analyzeJsxNodes(
     }
 
     if ((isIntrinsic && lowerTag === 'form') || tagName === 'Form') {
-      const selector = dataTestId
-        ? { strategy: 'testid' as const, value: dataTestId }
-        : ariaLabel
-          ? { strategy: 'label' as const, value: ariaLabel }
-          : { strategy: 'role' as const, value: 'form', role: 'form' };
+      let selector: SelectorInfo;
+      if (dataTestId) {
+        selector = { strategy: 'testid', value: dataTestId };
+      } else if (ariaLabel) {
+        selector = { strategy: 'label', value: ariaLabel };
+      } else {
+        selector = { strategy: 'role', value: 'form', role: 'form' };
+      }
       forms.push({ tag: 'form', selector });
     }
 
@@ -478,11 +518,12 @@ function getTagName(node: Node): string | null {
 
 function getAttributes(node: Node): Record<string, string> {
   const attrs: Record<string, string> = {};
-  const attributeNodes = Node.isJsxElement(node)
-    ? node.getOpeningElement().getAttributes()
-    : Node.isJsxSelfClosingElement(node)
-      ? node.getAttributes()
-      : [];
+  let attributeNodes: JsxAttributeLike[] = [];
+  if (Node.isJsxElement(node)) {
+    attributeNodes = node.getOpeningElement().getAttributes();
+  } else if (Node.isJsxSelfClosingElement(node)) {
+    attributeNodes = node.getAttributes();
+  }
 
   for (const attr of attributeNodes) {
     if (Node.isJsxAttribute(attr)) {
@@ -571,27 +612,373 @@ function detectHooks(candidate: Node, sourceFile: SourceFile): HookUsage[] {
   return hooks;
 }
 
-function detectContexts(sourceFile: SourceFile): ContextUsage[] {
+function detectContexts(
+  candidate: Node,
+  sourceFile: SourceFile,
+  project: Project
+): ContextUsage[] {
   const contexts: ContextUsage[] = [];
   const seen = new Set<string>();
 
-  const calls = sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression);
-  for (const call of calls) {
-    const expr = call.getExpression();
-    if (expr.getText() === 'useContext') {
-      const args = call.getArguments();
-      if (args.length > 0) {
-        const contextName = args[0].getText();
-        if (!seen.has(contextName)) {
-          seen.add(contextName);
-          const importSource = getImportSourceForIdentifier(sourceFile, contextName);
-          contexts.push({ name: contextName, importSource });
-        }
+  // Strategy 1: Direct useContext() calls within this component
+  detectDirectUseContext(candidate, sourceFile, contexts, seen);
+
+  // Strategy 2: Custom hooks that internally call useContext
+  detectCustomHookContexts(candidate, sourceFile, project, contexts, seen);
+
+  return contexts;
+}
+
+// ---------------------------------------------------------------------------
+// Context detection helpers
+// ---------------------------------------------------------------------------
+
+/** Extract destructured property names from a variable declaration containing the call */
+function extractDestructuredKeys(call: Node): string[] {
+  const keys: string[] = [];
+  const parent = call.getParent();
+  if (!parent) return keys;
+
+  // Pattern: const { a, b } = useContext(X)
+  let varDecl: Node | undefined;
+  if (Node.isVariableDeclaration(parent)) {
+    varDecl = parent;
+  } else if (Node.isCallExpression(parent)) {
+    // useContext may be wrapped: const { a } = useContext(X)
+    varDecl = parent.getParent();
+  }
+  if (!varDecl) varDecl = parent;
+
+  if (Node.isVariableDeclaration(varDecl)) {
+    const nameNode = varDecl.getNameNode();
+    if (Node.isObjectBindingPattern(nameNode)) {
+      for (const element of nameNode.getElements()) {
+        keys.push(element.getName());
       }
     }
   }
+  return keys;
+}
 
-  return contexts;
+/** Check if a useContext/hook call is inside a try/catch, optional chain, or null guard */
+function isOptionalUsage(call: Node): boolean {
+  let current: Node | undefined = call;
+  while (current) {
+    const parent = current.getParent();
+    if (!parent) break;
+
+    // Inside try block
+    if (Node.isTryStatement(parent)) return true;
+    if (Node.isBlock(parent) && parent.getParent() && Node.isTryStatement(parent.getParent()!)) {
+      return true;
+    }
+
+    // Optional chaining: context?.value
+    const parentText = parent.getText();
+    if (parentText.includes('?.')) return true;
+
+    // Null check: if (context) or context && ...
+    if (Node.isIfStatement(parent)) return true;
+    if (
+      Node.isBinaryExpression(parent) &&
+      (parent.getOperatorToken().getKind() === SyntaxKind.AmpersandAmpersandToken ||
+        parent.getOperatorToken().getKind() === SyntaxKind.QuestionQuestionToken)
+    ) {
+      return true;
+    }
+
+    current = parent;
+  }
+  return false;
+}
+
+/** Infer provider name from context name: AuthContext -> AuthProvider */
+function inferProviderName(contextName: string): string {
+  if (contextName.endsWith('Context')) {
+    return contextName.replace(/Context$/, 'Provider');
+  }
+  return `${contextName}Provider`;
+}
+
+/** Strategy 1: Find direct useContext() calls within the component */
+function detectDirectUseContext(
+  candidate: Node,
+  sourceFile: SourceFile,
+  contexts: ContextUsage[],
+  seen: Set<string>
+): void {
+  const calls = candidate.getDescendantsOfKind(SyntaxKind.CallExpression);
+  for (const call of calls) {
+    const expr = call.getExpression();
+    if (expr.getText() !== 'useContext') continue;
+
+    const args = call.getArguments();
+    if (args.length === 0) continue;
+
+    const contextName = args[0].getText();
+    if (seen.has(contextName)) continue;
+    seen.add(contextName);
+
+    const importSource = getImportSourceForIdentifier(sourceFile, contextName);
+    const consumedKeys = extractDestructuredKeys(call);
+    const optional = isOptionalUsage(call);
+    const providerName = inferProviderName(contextName);
+
+    contexts.push({
+      contextName,
+      importPath: importSource,
+      consumedKeys,
+      isOptional: optional,
+      providerName,
+      providerImportPath: importSource,
+      // backward compat
+      name: contextName,
+      importSource,
+    });
+  }
+}
+
+/** Strategy 2: Detect custom hooks that internally call useContext */
+function detectCustomHookContexts(
+  candidate: Node,
+  sourceFile: SourceFile,
+  project: Project,
+  contexts: ContextUsage[],
+  seen: Set<string>
+): void {
+  const calls = candidate.getDescendantsOfKind(SyntaxKind.CallExpression);
+  for (const call of calls) {
+    const expr = call.getExpression();
+    const hookName = expr.getText();
+
+    // Only check custom hooks (useXxx pattern), skip built-in React hooks
+    if (!/^use[A-Z]/.test(hookName)) continue;
+    if (isBuiltInReactHook(hookName)) continue;
+
+    const hookImportSource = getImportSourceForIdentifier(sourceFile, hookName);
+
+    // Try to resolve the hook to a context via AST follow-through
+    const resolved = resolveHookToContext(hookName, hookImportSource, sourceFile, project);
+
+    if (resolved && !seen.has(resolved.contextName)) {
+      seen.add(resolved.contextName);
+
+      // Extract consumed keys from how the hook result is destructured
+      const consumedKeys = extractDestructuredKeys(call);
+      const optional = isOptionalUsage(call);
+
+      contexts.push({
+        contextName: resolved.contextName,
+        importPath: resolved.contextImportPath,
+        hookName,
+        hookImportPath: hookImportSource,
+        consumedKeys,
+        isOptional: optional,
+        providerName: resolved.providerName,
+        providerImportPath: resolved.providerImportPath ?? resolved.contextImportPath,
+        // backward compat
+        name: resolved.contextName,
+        importSource: resolved.contextImportPath,
+      });
+    } else if (!resolved) {
+      // Fallback: check CONTEXT_DETECTION_CONFIG.customContexts
+      const configMatch = resolveHookFromConfig(hookName);
+      if (configMatch && !seen.has(configMatch.contextName)) {
+        seen.add(configMatch.contextName);
+        const consumedKeys = extractDestructuredKeys(call);
+        const optional = isOptionalUsage(call);
+
+        contexts.push({
+          contextName: configMatch.contextName,
+          importPath: configMatch.importPath,
+          hookName,
+          hookImportPath: hookImportSource,
+          consumedKeys,
+          isOptional: optional,
+          providerName: configMatch.providerName,
+          providerImportPath: configMatch.importPath,
+          // backward compat
+          name: configMatch.contextName,
+          importSource: configMatch.importPath,
+        });
+      }
+    }
+  }
+}
+
+/** Check if a hook name is a built-in React hook that should be skipped */
+function isBuiltInReactHook(name: string): boolean {
+  return /^use(State|Effect|Context|Ref|Memo|Callback|Reducer|LayoutEffect|ImperativeHandle|DebugValue|DeferredValue|Id|InsertionEffect|SyncExternalStore|Transition|OptimisticState|ActionState|Formatus)$/.test(
+    name
+  );
+}
+
+interface ResolvedContext {
+  contextName: string;
+  contextImportPath?: string;
+  providerName: string;
+  providerImportPath?: string;
+}
+
+/**
+ * Follow a custom hook import to its source file and check if it calls useContext().
+ * Also looks for the context + provider exports in the same file.
+ */
+function resolveHookToContext(
+  hookName: string,
+  hookImportSource: string | undefined,
+  sourceFile: SourceFile,
+  project: Project
+): ResolvedContext | null {
+  if (!hookImportSource) return null;
+
+  // Only follow local/relative imports or path aliases
+  if (
+    !hookImportSource.startsWith('.') &&
+    !hookImportSource.startsWith('@/') &&
+    !hookImportSource.startsWith('~/')
+  ) {
+    return null;
+  }
+
+  // Try to find the source file in the project
+  const hookSourceFile = resolveImportToSourceFile(hookImportSource, sourceFile, project);
+  if (!hookSourceFile) return null;
+
+  // Find the hook function in the resolved file
+  const hookFunc = findFunctionByName(hookSourceFile, hookName);
+  if (!hookFunc) return null;
+
+  // Check if the hook calls useContext
+  const useContextCalls = hookFunc.getDescendantsOfKind(SyntaxKind.CallExpression).filter(
+    (call) => call.getExpression().getText() === 'useContext'
+  );
+
+  if (useContextCalls.length === 0) return null;
+
+  // Extract the context name from the first useContext call
+  const firstCall = useContextCalls[0];
+  const args = firstCall.getArguments();
+  if (args.length === 0) return null;
+
+  const contextName = args[0].getText();
+  const providerName = inferProviderName(contextName);
+
+  // Check if provider is exported from the same file
+  const exportedDecls = hookSourceFile.getExportedDeclarations();
+  let providerImportPath: string | undefined = hookImportSource;
+  if (!exportedDecls.has(providerName)) {
+    // Check if context is imported from elsewhere in the hook file
+    const contextImport = getImportSourceForIdentifier(hookSourceFile, contextName);
+    if (contextImport) {
+      providerImportPath = contextImport;
+    }
+  }
+
+  return {
+    contextName,
+    contextImportPath: hookImportSource,
+    providerName,
+    providerImportPath,
+  };
+}
+
+/** Resolve an import specifier to a SourceFile in the project */
+function resolveImportToSourceFile(
+  importSpecifier: string,
+  fromFile: SourceFile,
+  project: Project
+): SourceFile | null {
+  const fromDir = fromFile.getDirectoryPath();
+  const extensions = ['.ts', '.tsx', '.js', '.jsx', ''];
+
+  // Handle path aliases
+  let basePath: string;
+  if (importSpecifier.startsWith('@/') || importSpecifier.startsWith('~/')) {
+    // Find src directory by walking up from the current file
+    const srcDir = findSrcDirFromPath(fromDir);
+    if (!srcDir) return null;
+    basePath = `${srcDir}/${importSpecifier.replace(/^[@~]\//, '')}`;
+  } else if (importSpecifier.startsWith('.')) {
+    basePath = `${fromDir}/${importSpecifier}`;
+  } else {
+    return null; // package import
+  }
+
+  // Normalize the path
+  basePath = basePath.split('\\').join('/');
+
+  // Try with extensions
+  for (const ext of extensions) {
+    const candidate = basePath + ext;
+    const sf = project.getSourceFile(candidate);
+    if (sf) return sf;
+  }
+
+  // Try as index file
+  for (const ext of ['.ts', '.tsx', '.js', '.jsx']) {
+    const candidate = `${basePath}/index${ext}`;
+    const sf = project.getSourceFile(candidate);
+    if (sf) return sf;
+  }
+
+  // Try to add the file to the project if it exists on disk
+  for (const ext of extensions) {
+    const candidate = basePath + ext;
+    try {
+      const sf = project.addSourceFileAtPathIfExists(candidate);
+      if (sf) return sf;
+    } catch {
+      // Ignore resolution errors
+    }
+  }
+
+  return null;
+}
+
+/** Walk up directory tree to find the nearest src/ directory */
+function findSrcDirFromPath(dir: string): string | null {
+  const normalized = dir.split('\\').join('/');
+  const srcIdx = normalized.lastIndexOf('/src');
+  if (srcIdx !== -1) {
+    return normalized.substring(0, srcIdx + 4);
+  }
+  return null;
+}
+
+/** Find a function or arrow function by name in a source file */
+function findFunctionByName(sourceFile: SourceFile, name: string): Node | null {
+  for (const func of sourceFile.getFunctions()) {
+    if (func.getName() === name) return func;
+  }
+
+  for (const variable of sourceFile.getVariableDeclarations()) {
+    if (variable.getName() !== name) continue;
+    const init = variable.getInitializer();
+    if (init && (Node.isArrowFunction(init) || Node.isFunctionExpression(init))) {
+      return init;
+    }
+  }
+
+  return null;
+}
+
+/** Resolve a hook name using CONTEXT_DETECTION_CONFIG as fallback */
+function resolveHookFromConfig(hookName: string): {
+  contextName: string;
+  providerName: string;
+  importPath?: string;
+} | null {
+  for (const ctx of CONTEXT_DETECTION_CONFIG.customContexts) {
+    if (ctx.hooks.includes(hookName)) {
+      return {
+        contextName: ctx.contextName,
+        providerName: ctx.providerName,
+        importPath: undefined, // Config-based matches don't have import paths
+      };
+    }
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------

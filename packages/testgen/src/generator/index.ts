@@ -1,4 +1,5 @@
 import { ComponentInfo } from '../analyzer';
+import { Project, TypeChecker } from 'ts-morph';
 import {
   buildHeader,
   buildImports,
@@ -10,7 +11,7 @@ import {
   buildFileContent,
 } from './templates';
 import { buildDefaultProps } from './mocks';
-import { buildRenderHelper } from './render';
+import { buildRenderHelper, buildContextRenderInfo } from './render';
 import {
   buildRenderAssertions,
   buildInteractionTests,
@@ -24,11 +25,16 @@ import {
   buildKeyboardNavigationTests,
 } from './interactions';
 import { buildVariantTestCases } from './variants';
+import { buildContextVariantTests } from './contextVariants';
 
 export interface GenerateOptions {
   pass: 1 | 2;
   testFilePath: string;
   sourceFilePath: string;
+  /** ts-morph Project instance for cross-file context resolution */
+  project?: Project;
+  /** ts-morph TypeChecker for type analysis */
+  checker?: TypeChecker;
 }
 
 const GENERATION_LIMITS = {
@@ -38,6 +44,7 @@ const GENERATION_LIMITS = {
   callback: 2,
   state: 2,
   variants: 4,
+  contextVariants: 4,
   interactions: 2,
   accessibility: 2,
   keyboard: 1,
@@ -64,6 +71,20 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
         )
     );
 
+  // Build context render info for all components
+  const allContextImports: string[] = [];
+  const contextRenderInfoMap = new Map<string, ReturnType<typeof buildContextRenderInfo>>();
+
+  if (options.project && options.checker) {
+    for (const component of components) {
+      if (component.contexts.length > 0) {
+        const info = buildContextRenderInfo(component, options.project, options.checker);
+        contextRenderInfoMap.set(component.name, info);
+        allContextImports.push(...info.contextImports);
+      }
+    }
+  }
+
   const parts: string[] = [];
   parts.push(buildHeader());
   parts.push(
@@ -72,6 +93,7 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
       sourceFilePath: options.sourceFilePath,
       usesUserEvent,
       needsScreen,
+      contextImports: allContextImports,
     })
   );
 
@@ -79,11 +101,20 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
     const blocks: string[] = [];
     blocks.push(buildDescribeStart(component));
 
+    // Context mock value declarations (placed before defaultProps)
+    const ctxInfo = contextRenderInfoMap.get(component.name);
+    if (ctxInfo && ctxInfo.mockDeclarations.length > 0) {
+      for (const decl of ctxInfo.mockDeclarations) {
+        blocks.push(`  ${decl}`);
+      }
+    }
+
     if (component.props.length > 0) {
       blocks.push(`  ${buildDefaultProps(component)}`);
     }
 
-    blocks.push(`  ${buildRenderHelper(component, options.sourceFilePath)}`);
+    const contextMocks = ctxInfo?.contextMocks;
+    blocks.push(`  ${buildRenderHelper(component, options.sourceFilePath, contextMocks)}`);
 
     // Error boundary components get specialized tests
     if (component.isErrorBoundary) {
@@ -160,6 +191,15 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
       blocks.push(buildTestBlock(variant.title, variant.body));
     });
 
+    // Context variant tests (boolean toggles, null checks, empty arrays in context values)
+    if (contextMocks && contextMocks.length > 0) {
+      const contextVariants = buildContextVariantTests(component, contextMocks)
+        .slice(0, GENERATION_LIMITS.contextVariants);
+      contextVariants.forEach((variant) => {
+        blocks.push(buildTestBlock(variant.title, variant.body));
+      });
+    }
+
     // Interaction tests (click, type, select)
     const interactions = buildInteractionTests(component).slice(0, GENERATION_LIMITS.interactions);
     interactions.forEach((interaction, index) => {
@@ -223,7 +263,6 @@ function buildErrorBoundaryTestBlocks(component: ComponentInfo): string[] {
   );
 
   // Test 2: Catches errors and renders fallback
-  const globalName = component.props.length > 0 ? 'jest' : 'jest'; // resolved at test time
   blocks.push(
     buildTestBlock('catches errors and renders fallback UI', [
       '// Suppress React error boundary console output during this test',
@@ -240,8 +279,6 @@ function buildErrorBoundaryTestBlocks(component: ComponentInfo): string[] {
       '}',
     ])
   );
-
-  void globalName; // suppress unused var warning
 
   // Test 3: Boundary does not crash on initial render
   blocks.push(
