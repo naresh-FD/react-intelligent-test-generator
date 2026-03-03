@@ -67,11 +67,76 @@ function readTsconfigPaths(rootDir: string): Record<string, string> {
 }
 
 // ---------------------------------------------------------------------------
+// ESM package detection
+// ---------------------------------------------------------------------------
+
+/** Default ESM-only packages that must be transformed by Jest */
+const DEFAULT_ESM_PACKAGES = [
+  'lucide-react', '@tanstack', 'react-router', 'react-router-dom',
+  'framer-motion', 'recharts', '@recharts', 'd3-.*', 'internmap',
+  'delaunator', 'robust-predicates', 'react-hook-form', '@hookform',
+  'zod', 'clsx', 'class-variance-authority', 'tailwind-merge',
+  'cmdk', 'vaul', 'input-otp', 'react-day-picker', 'date-fns',
+  'embla-carousel.*', '@radix-ui', '@headlessui', 'react-icons',
+  'sonner', 'react-hot-toast', 'react-toastify', 'uuid', 'nanoid',
+  '@emotion', 'msw', '@mswjs',
+];
+
+/**
+ * Detect ESM-only packages in the target project's node_modules.
+ * Packages with "type":"module" in package.json must be transformed by Jest.
+ */
+function detectEsmOnlyPackages(rootDir: string): string[] {
+  const esmPackages: string[] = [];
+  const nodeModulesDir = path.join(rootDir, 'node_modules');
+  if (!fs.existsSync(nodeModulesDir)) return esmPackages;
+
+  try {
+    const entries = fs.readdirSync(nodeModulesDir);
+    for (const entry of entries) {
+      if (entry.startsWith('.')) continue;
+      if (entry.startsWith('@')) {
+        const scopeDir = path.join(nodeModulesDir, entry);
+        try {
+          const scopeEntries = fs.readdirSync(scopeDir);
+          for (const scopeEntry of scopeEntries) {
+            if (isEsmPackage(path.join(scopeDir, scopeEntry, 'package.json'))) {
+              esmPackages.push(`${entry}/${scopeEntry}`);
+            }
+          }
+        } catch { /* skip unreadable scope dirs */ }
+      } else {
+        if (isEsmPackage(path.join(nodeModulesDir, entry, 'package.json'))) {
+          esmPackages.push(entry);
+        }
+      }
+    }
+  } catch { /* skip if node_modules unreadable */ }
+  return esmPackages;
+}
+
+function isEsmPackage(pkgJsonPath: string): boolean {
+  try {
+    if (!fs.existsSync(pkgJsonPath)) return false;
+    const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+    return pkg.type === 'module';
+  } catch { return false; }
+}
+
+/** Build the combined ESM transform pattern for transformIgnorePatterns */
+function buildEsmTransformPattern(rootDir: string): string {
+  const detected = detectEsmOnlyPackages(rootDir);
+  const all = [...new Set([...DEFAULT_ESM_PACKAGES, ...detected])];
+  return all.join('|');
+}
+
+// ---------------------------------------------------------------------------
 // File content builders
 // ---------------------------------------------------------------------------
 
 function buildJestConfigContent(rootDir: string): string {
   const pathMappings = readTsconfigPaths(rootDir);
+  const esmPattern = buildEsmTransformPattern(rootDir);
 
   // When the project has its own node_modules/react (version differs from the
   // hoisted copy used by @testing-library), pin all React imports to the local
@@ -89,7 +154,9 @@ function buildJestConfigContent(rootDir: string): string {
 
   const staticEntries = [
     `    '\\\\.(css|less|scss|sass)$': 'identity-obj-proxy'`,
-    `    '\\\\.(jpg|jpeg|png|gif|webp|svg|ico|bmp)$': '<rootDir>/src/test-utils/__mocks__/fileMock.js'`,
+    `    '\\\\.(jpg|jpeg|png|gif|webp|ico|bmp)$': '<rootDir>/src/test-utils/__mocks__/fileMock.js'`,
+    `    '\\\\.(svg)$': '<rootDir>/src/test-utils/__mocks__/svgMock.js'`,
+    `    '\\\\.(woff|woff2|ttf|eot|otf)$': '<rootDir>/src/test-utils/__mocks__/fileMock.js'`,
   ];
   const pathEntries = Object.entries(pathMappings).map(
     ([k, v]) => `    '${k}': '${v}'`,
@@ -126,7 +193,7 @@ ${allEntries},
   },
   // Transform ESM-only packages so Jest can load them
   transformIgnorePatterns: [
-    '/node_modules/(?!(lucide-react|@tanstack|react-router|react-router-dom)/)',
+    '/node_modules/(?!(${esmPattern})/)',
   ],
   setupFilesAfterEnv: ['<rootDir>/src/test-utils/setupTests.ts'],
   collectCoverageFrom: [
@@ -179,6 +246,18 @@ global.IntersectionObserver = jest.fn().mockImplementation(() => ({
   unobserve: jest.fn(),
   disconnect: jest.fn(),
 }));
+`;
+}
+
+function buildSvgMockContent(): string {
+  return `const React = require('react');
+const SvgMock = React.forwardRef(function SvgMock(props, ref) {
+  return React.createElement('svg', Object.assign({}, props, { ref: ref }));
+});
+SvgMock.displayName = 'SvgMock';
+module.exports = SvgMock;
+module.exports.default = SvgMock;
+module.exports.ReactComponent = SvgMock;
 `;
 }
 
@@ -265,18 +344,125 @@ HTMLCanvasElement.prototype.getContext = jest.fn().mockReturnValue({
   canvas: { width: 0, height: 0 },
 }) as unknown as typeof HTMLCanvasElement.prototype.getContext;
 
-// Suppress act() warnings from React — noisy in generated tests
+// ---------------------------------------------------------------------------
+// Additional polyfills for common browser/Node APIs
+// ---------------------------------------------------------------------------
+
+// Mock global fetch (not available in JSDOM by default)
+if (typeof globalThis.fetch !== 'function') {
+  globalThis.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: jest.fn().mockResolvedValue({}),
+    text: jest.fn().mockResolvedValue(''),
+    blob: jest.fn().mockResolvedValue(new Blob()),
+    arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+    headers: new Headers(),
+    clone: jest.fn(),
+  } as unknown as Response);
+}
+
+// Mock localStorage and sessionStorage
+const createMockStorage = (): Storage => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: jest.fn((key: string) => store[key] ?? null),
+    setItem: jest.fn((key: string, value: string) => { store[key] = String(value); }),
+    removeItem: jest.fn((key: string) => { delete store[key]; }),
+    clear: jest.fn(() => { store = {}; }),
+    get length() { return Object.keys(store).length; },
+    key: jest.fn((index: number) => Object.keys(store)[index] ?? null),
+  } as Storage;
+};
+if (!window.localStorage || typeof window.localStorage.getItem !== 'function') {
+  Object.defineProperty(window, 'localStorage', { value: createMockStorage(), writable: true });
+}
+if (!window.sessionStorage || typeof window.sessionStorage.getItem !== 'function') {
+  Object.defineProperty(window, 'sessionStorage', { value: createMockStorage(), writable: true });
+}
+
+// Mock crypto.randomUUID and crypto.getRandomValues
+if (typeof globalThis.crypto === 'undefined') {
+  (globalThis as any).crypto = {};
+}
+if (typeof globalThis.crypto.randomUUID !== 'function') {
+  (globalThis.crypto as any).randomUUID = jest.fn(
+    () => '00000000-0000-4000-8000-000000000000'
+  );
+}
+if (typeof globalThis.crypto.getRandomValues !== 'function') {
+  (globalThis.crypto as any).getRandomValues = jest.fn((arr: Uint8Array) => {
+    for (let i = 0; i < arr.length; i++) arr[i] = Math.floor(Math.random() * 256);
+    return arr;
+  });
+}
+
+// Mock requestAnimationFrame / cancelAnimationFrame
+if (typeof window.requestAnimationFrame !== 'function') {
+  window.requestAnimationFrame = jest.fn((cb: FrameRequestCallback) => {
+    return setTimeout(() => cb(Date.now()), 0) as unknown as number;
+  });
+}
+if (typeof window.cancelAnimationFrame !== 'function') {
+  window.cancelAnimationFrame = jest.fn((id: number) => clearTimeout(id));
+}
+
+// Mock navigator.clipboard
+if (!navigator.clipboard) {
+  Object.defineProperty(navigator, 'clipboard', {
+    value: {
+      writeText: jest.fn().mockResolvedValue(undefined),
+      readText: jest.fn().mockResolvedValue(''),
+      write: jest.fn().mockResolvedValue(undefined),
+      read: jest.fn().mockResolvedValue([]),
+    },
+    writable: true,
+  });
+}
+
+// Mock structuredClone (missing in Node < 17)
+if (typeof globalThis.structuredClone !== 'function') {
+  globalThis.structuredClone = jest.fn((val: unknown) => JSON.parse(JSON.stringify(val)));
+}
+
+// Mock browser dialog APIs
+window.confirm = jest.fn(() => true);
+window.alert = jest.fn();
+window.prompt = jest.fn(() => '');
+
+// Prevent unhandled promise rejections from crashing test suite
+process.on('unhandledRejection', () => { /* silently ignore in tests */ });
+
+// ---------------------------------------------------------------------------
+// Console suppression for known-harmless warnings
+// ---------------------------------------------------------------------------
+
+const SUPPRESSED_PATTERNS = [
+  'act(',
+  'ReactDOMTestUtils.act',
+  'Warning: An update to',
+  'Warning: Cannot update a component',
+  'Warning: Each child in a list',
+  'Warning: validateDOMNesting',
+  'Warning: Unknown event handler',
+  'Warning: React does not recognize',
+  'inside a test was not wrapped in act',
+  'Warning: Failed prop type',
+  'Warning: componentWillMount has been renamed',
+  'Warning: componentWillReceiveProps has been renamed',
+];
+
 const originalError = console.error;
 const originalWarn = console.warn;
 beforeAll(() => {
   console.error = (...args: unknown[]) => {
     const msg = typeof args[0] === 'string' ? args[0] : '';
-    if (msg.includes('act(') || msg.includes('ReactDOMTestUtils.act')) return;
+    if (SUPPRESSED_PATTERNS.some(p => msg.includes(p))) return;
     originalError.call(console, ...args);
   };
   console.warn = (...args: unknown[]) => {
     const msg = typeof args[0] === 'string' ? args[0] : '';
-    if (msg.includes('act(') || msg.includes('ReactDOMTestUtils.act')) return;
+    if (SUPPRESSED_PATTERNS.some(p => msg.includes(p))) return;
     originalWarn.call(console, ...args);
   };
 });
@@ -331,6 +517,13 @@ export function ensureJestScaffold(rootDir: string): void {
     fs.mkdirSync(mocksDir, { recursive: true });
     fs.writeFileSync(fileMockPath, `module.exports = 'test-file-stub';\n`, 'utf8');
     console.log('  Created src/test-utils/__mocks__/fileMock.js');
+  }
+
+  // Create SVG mock for .svg imports (supports ReactComponent pattern)
+  const svgMockPath = path.join(mocksDir, 'svgMock.js');
+  if (!fs.existsSync(svgMockPath)) {
+    fs.writeFileSync(svgMockPath, buildSvgMockContent(), 'utf8');
+    console.log('  Created src/test-utils/__mocks__/svgMock.js');
   }
 
   // Create ErrorBoundary component for test resilience

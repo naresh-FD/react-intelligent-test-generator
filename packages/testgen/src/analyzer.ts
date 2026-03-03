@@ -78,6 +78,24 @@ export interface ComponentInfo {
   isErrorBoundary: boolean;
   /** True when this is a class component */
   isClassComponent: boolean;
+  /** True when component uses React Query hooks (useQuery, useMutation, etc.) */
+  usesReactQuery: boolean;
+  /** True when component uses Redux hooks (useSelector, useDispatch) */
+  usesRedux: boolean;
+  /** True when component uses framer-motion */
+  usesFramerMotion: boolean;
+  /** True when component uses Recharts */
+  usesRecharts: boolean;
+  /** True when component uses react-hook-form */
+  usesReactHookForm: boolean;
+  /** True when component uses createPortal */
+  usesPortal: boolean;
+  /** True when component has async useEffect (fetch, .then, async) */
+  hasAsyncEffect: boolean;
+  /** Third-party library imports detected (for module mocking) */
+  thirdPartyImports: string[];
+  /** Service/API module imports that need mocking */
+  serviceImports: string[];
 }
 
 export function analyzeSourceFile(
@@ -144,6 +162,32 @@ export function analyzeSourceFile(
       (candidate.getText().includes('componentDidCatch') ||
         candidate.getText().includes('getDerivedStateFromError'));
 
+    // Detect third-party library usage for auto-mocking
+    const reactQueryHooks = ['useQuery', 'useMutation', 'useQueryClient', 'useInfiniteQuery', 'useSuspenseQuery'];
+    const reduxHooks = ['useSelector', 'useDispatch', 'useStore'];
+    const usesReactQuery = hooks.some(h =>
+      reactQueryHooks.includes(h.name) ||
+      (h.importSource != null && (h.importSource.includes('@tanstack/react-query') || h.importSource.includes('react-query')))
+    );
+    const usesRedux = hooks.some(h =>
+      reduxHooks.includes(h.name) ||
+      (h.importSource != null && h.importSource.includes('react-redux'))
+    );
+    const usesFramerMotion = sourceFile.getImportDeclarations().some(d =>
+      d.getModuleSpecifierValue() === 'framer-motion'
+    );
+    const usesRecharts = sourceFile.getImportDeclarations().some(d =>
+      d.getModuleSpecifierValue() === 'recharts'
+    );
+    const usesReactHookForm = hooks.some(h =>
+      h.name === 'useForm' && (h.importSource == null || h.importSource.includes('react-hook-form'))
+    );
+    const candidateText = candidate.getText();
+    const usesPortal = candidateText.includes('createPortal');
+    const hasAsyncEffect = detectAsyncEffect(candidate);
+    const thirdPartyImports = detectThirdPartyImports(sourceFile);
+    const serviceImports = detectServiceImports(sourceFile);
+
     components.push({
       name,
       exportType,
@@ -164,6 +208,15 @@ export function analyzeSourceFile(
       usesNavigation,
       isErrorBoundary,
       isClassComponent,
+      usesReactQuery,
+      usesRedux,
+      usesFramerMotion,
+      usesRecharts,
+      usesReactHookForm,
+      usesPortal,
+      hasAsyncEffect,
+      thirdPartyImports,
+      serviceImports,
     });
   }
 
@@ -627,6 +680,49 @@ function detectContexts(
   detectCustomHookContexts(candidate, sourceFile, project, contexts, seen);
 
   return contexts;
+}
+
+// ---------------------------------------------------------------------------
+// Third-party and service import detection
+// ---------------------------------------------------------------------------
+
+/** Detect if component has async operations inside useEffect */
+function detectAsyncEffect(candidate: Node): boolean {
+  const useEffectCalls = candidate.getDescendantsOfKind(SyntaxKind.CallExpression)
+    .filter(c => c.getExpression().getText() === 'useEffect');
+  return useEffectCalls.some(c => {
+    const args = c.getArguments();
+    if (args.length === 0) return false;
+    const callbackText = args[0].getText();
+    return callbackText.includes('async') || callbackText.includes('fetch') || callbackText.includes('.then');
+  });
+}
+
+/** Detect third-party (non-relative, non-react) imports */
+function detectThirdPartyImports(sourceFile: SourceFile): string[] {
+  return sourceFile.getImportDeclarations()
+    .map(d => d.getModuleSpecifierValue())
+    .filter(m =>
+      !m.startsWith('.') &&
+      !m.startsWith('@/') &&
+      !m.startsWith('~/') &&
+      m !== 'react' &&
+      !m.startsWith('react/') &&
+      m !== 'react-dom' &&
+      !m.startsWith('react-dom/') &&
+      !m.includes('@testing-library')
+    );
+}
+
+/** Detect service/API module imports that should be auto-mocked */
+function detectServiceImports(sourceFile: SourceFile): string[] {
+  return sourceFile.getImportDeclarations()
+    .filter(d => {
+      const mod = d.getModuleSpecifierValue();
+      const isRelative = mod.startsWith('.') || mod.startsWith('@/') || mod.startsWith('~/');
+      return isRelative && /service|api|client|repository|http/i.test(mod);
+    })
+    .map(d => d.getModuleSpecifierValue());
 }
 
 // ---------------------------------------------------------------------------

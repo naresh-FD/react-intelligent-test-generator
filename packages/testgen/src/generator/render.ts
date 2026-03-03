@@ -90,12 +90,36 @@ export function buildRenderHelper(
     fullJsx = `${contextWrapping.openTags.join('')}${fullJsx}${contextWrapping.closeTags.join('')}`;
   }
 
-  // Wrap with MemoryRouter (outermost wrapping)
+  // Wrap with MemoryRouter
   if (needsRouterWrap) {
     fullJsx = `<MemoryRouter>${fullJsx}</MemoryRouter>`;
   }
 
+  // Wrap with QueryClientProvider (proactive — detected at analysis time)
+  if (component.usesReactQuery) {
+    fullJsx = `<QueryClientProvider client={testQueryClient}>${fullJsx}</QueryClientProvider>`;
+  }
+
+  // Wrap with Redux Provider (proactive — detected at analysis time)
+  if (component.usesRedux) {
+    fullJsx = `<ReduxProvider store={testStore}>${fullJsx}</ReduxProvider>`;
+  }
+
   const params = component.props.length > 0 ? '(props = {})' : '()';
+
+  // Portal-using components need a multi-line renderUI with DOM setup
+  if (component.usesPortal) {
+    return [
+      `const renderUI = ${params} => {`,
+      '  if (!document.getElementById("portal-root")) {',
+      '    const el = document.createElement("div");',
+      '    el.id = "portal-root";',
+      '    document.body.appendChild(el);',
+      '  }',
+      `  return ${renderFn}(${fullJsx}${optionsSuffix});`,
+      '};',
+    ].join('\n');
+  }
 
   return [
     `const renderUI = ${params} =>`,

@@ -26,6 +26,8 @@ import {
 } from './interactions';
 import { buildVariantTestCases } from './variants';
 import { buildContextVariantTests } from './contextVariants';
+import { buildAutoMocks } from './autoMocks';
+import { buildSafeRenderBlock, buildSafeInteractionBlock } from './safePatterns';
 
 export interface GenerateOptions {
   pass: 1 | 2;
@@ -97,6 +99,21 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
     })
   );
 
+  // Auto-mocks for third-party libraries (placed between imports and describe blocks)
+  const allAutoMocks: string[] = [];
+  for (const component of components) {
+    const mocks = buildAutoMocks(component);
+    for (const mock of mocks) {
+      // Deduplicate: same jest.mock() call shouldn't appear twice
+      if (!allAutoMocks.some((existing) => existing === mock)) {
+        allAutoMocks.push(mock);
+      }
+    }
+  }
+  if (allAutoMocks.length > 0) {
+    parts.push(allAutoMocks.join('\n\n'));
+  }
+
   for (const component of components) {
     const blocks: string[] = [];
     blocks.push(buildDescribeStart(component));
@@ -126,19 +143,12 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
 
     const renderAssertions = buildRenderAssertions(component);
     blocks.push(
-      buildTestBlock('renders without crashing', [
-        'const { container } = renderUI();',
-        'expect(container).toBeInTheDocument();',
-      ])
+      buildTestBlock('renders without crashing', buildSafeRenderBlock())
     );
 
     if (renderAssertions.length > 2) {
       blocks.push(
-        buildTestBlock('renders key elements', [
-          'const { container } = renderUI();',
-          'expect(container).toBeInTheDocument();',
-          ...renderAssertions.slice(2),
-        ])
+        buildTestBlock('renders key elements', buildSafeRenderBlock('renderUI()', renderAssertions.slice(2)))
       );
     }
 

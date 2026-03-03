@@ -50,6 +50,21 @@ export function buildImports(components: ComponentInfo[], options: TemplateOptio
     imports.push('import { MemoryRouter } from "react-router-dom";');
   }
 
+  // Add QueryClientProvider import when components use React Query
+  const needsQueryClient = components.some((c) => c.usesReactQuery);
+  if (needsQueryClient) {
+    imports.push('import { QueryClient, QueryClientProvider } from "@tanstack/react-query";');
+    imports.push('const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });');
+  }
+
+  // Add Redux Provider import when components use Redux hooks
+  const needsRedux = components.some((c) => c.usesRedux);
+  if (needsRedux) {
+    imports.push('import { Provider as ReduxProvider } from "react-redux";');
+    imports.push('import { configureStore } from "@reduxjs/toolkit";');
+    imports.push('const testStore = configureStore({ reducer: (state = {}) => state });');
+  }
+
   if (needsProviders && hasCustomRender) {
     const testUtilsImport = relativeImport(options.testFilePath, renderHelper.path);
     const renderFnName = renderHelper.exportName;
