@@ -34,6 +34,8 @@ interface SwitchCaseInfo {
   values: string[];
   /** When the switch is on a property (e.g. action.type), this holds the property name */
   propertyPath?: string;
+  /** Per-case extra properties required to execute that branch safely */
+  requiredPropsByValue?: Record<string, string[]>;
 }
 
 class LineBuilder {
@@ -396,10 +398,11 @@ function generateObjectMethodTests( // NOSONAR - template-style test generation 
   lines.add('');
 
   // Test 2: Call with typical args
-  const mockArgs = func.params.map((p) => mockValueForParam(p)).join(', ');
+  const mockArgs = func.params.map((p) => mockValueForParamInFunction(p, func, sourceFile)).join(', ');
   const isVoid = func.returnType === 'void' || func.returnType === 'Promise<void>';
+  const isAsyncLike = func.isAsync || isPromiseReturnType(func.returnType);
 
-  if (func.isAsync) {
+  if (isAsyncLike) {
     lines.add(`${indent}  it("resolves without throwing", async () => {`);
     lines.add(`${indent}    try {`);
     if (isVoid) {
@@ -433,8 +436,10 @@ function generateObjectMethodTests( // NOSONAR - template-style test generation 
   // Test 3: Minimal args if there are optional params
   const requiredParams = func.params.filter((p) => !p.isOptional && !p.hasDefault);
   if (requiredParams.length < func.params.length) {
-    const minArgs = requiredParams.map((p) => mockValueForParam(p)).join(', ');
-    if (func.isAsync) {
+    const minArgs = requiredParams
+      .map((p) => mockValueForParamInFunction(p, func, sourceFile))
+      .join(', ');
+    if (isAsyncLike) {
       lines.add(`${indent}  it("works with minimal arguments", async () => {`);
       lines.add(`${indent}    try {`);
       if (isVoid) {
@@ -465,7 +470,7 @@ function generateObjectMethodTests( // NOSONAR - template-style test generation 
   }
 
   // Test 4: Error path for async methods
-  if (func.isAsync) {
+  if (isAsyncLike) {
     lines.add(`${indent}  it("handles errors gracefully", async () => {`);
     lines.add(`${indent}    try {`);
     lines.add(`${indent}      await ${callExpr}(${mockArgs});`);
@@ -481,10 +486,12 @@ function generateObjectMethodTests( // NOSONAR - template-style test generation 
     const edgeCases = getEdgeCases(param);
     for (const edgeCase of edgeCases) {
       const argsWithEdge = func.params
-        .map((p) => (p.name === param.name ? edgeCase.value : mockValueForParam(p)))
+        .map((p) =>
+          p.name === param.name ? edgeCase.value : mockValueForParamInFunction(p, func, sourceFile)
+        )
         .join(', ');
 
-      if (func.isAsync) {
+      if (isAsyncLike) {
         lines.add(`${indent}  it("handles ${edgeCase.label} for ${param.name}", async () => {`);
         lines.add(`${indent}    try {`);
         if (isVoid) {
@@ -535,10 +542,11 @@ function generateFunctionTests( // NOSONAR - template-style test generation inte
   lines.add('');
 
   // Test 2: Call with typical args
-  const mockArgs = func.params.map((p) => mockValueForParam(p)).join(', ');
+  const mockArgs = func.params.map((p) => mockValueForParamInFunction(p, func, sourceFile)).join(', ');
   const isVoid = func.returnType === 'void' || func.returnType === 'Promise<void>';
+  const isAsyncLike = func.isAsync || isPromiseReturnType(func.returnType);
 
-  if (func.isAsync) {
+  if (isAsyncLike) {
     lines.add(`${indent}  it("resolves without throwing", async () => {`);
     lines.add(`${indent}    try {`);
     if (isVoid) {
@@ -572,8 +580,10 @@ function generateFunctionTests( // NOSONAR - template-style test generation inte
   // Test 3: For functions with optional params, call with minimal args
   const requiredParams = func.params.filter((p) => !p.isOptional && !p.hasDefault);
   if (requiredParams.length < func.params.length) {
-    const minArgs = requiredParams.map((p) => mockValueForParam(p)).join(', ');
-    if (func.isAsync) {
+    const minArgs = requiredParams
+      .map((p) => mockValueForParamInFunction(p, func, sourceFile))
+      .join(', ');
+    if (isAsyncLike) {
       lines.add(`${indent}  it("works with minimal arguments", async () => {`);
       lines.add(`${indent}    try {`);
       if (isVoid) {
@@ -610,10 +620,12 @@ function generateFunctionTests( // NOSONAR - template-style test generation inte
     const edgeCases = getEdgeCases(param);
     for (const edgeCase of edgeCases) {
       const argsWithEdge = func.params
-        .map((p) => (p.name === param.name ? edgeCase.value : mockValueForParam(p)))
+        .map((p) =>
+          p.name === param.name ? edgeCase.value : mockValueForParamInFunction(p, func, sourceFile)
+        )
         .join(', ');
 
-      if (func.isAsync) {
+      if (isAsyncLike) {
         lines.add(`${indent}  it("handles ${edgeCase.label} for ${param.name}", async () => {`);
         lines.add(`${indent}    try {`);
         if (isVoid) {
@@ -648,14 +660,14 @@ function generateFunctionTests( // NOSONAR - template-style test generation inte
   const switchCases = detectSwitchCases(func, sourceFile);
   for (const switchCase of switchCases) {
     for (const caseValue of switchCase.values) {
-      // When the switch is on a property (e.g. `action.type`), wrap the case value
-      // in an object: { type: "ADD_TOAST" } instead of passing "ADD_TOAST" directly
-      const paramValue = switchCase.propertyPath
-        ? `{ ${switchCase.propertyPath}: ${caseValue} }`
-        : caseValue;
+      const paramValue = buildSwitchCaseParamValue(switchCase, caseValue);
 
       const argsWithCase = func.params
-        .map((p) => (p.name === switchCase.paramName ? paramValue : mockValueForParam(p)))
+        .map((p) =>
+          p.name === switchCase.paramName
+            ? paramValue
+            : mockValueForParamInFunction(p, func, sourceFile)
+        )
         .join(', ');
 
       // Strip outer quotes so the title string stays valid JS
@@ -985,22 +997,86 @@ function detectSwitchCases(func: ExportedFunction, sourceFile: SourceFile): Swit
     if (!matchedParam) continue;
 
     const values: string[] = [];
+    const requiredPropsByValue: Record<string, string[]> = {};
     for (const clause of switchStmt.getClauses()) {
       if (Node.isCaseClause(clause)) {
         const exprText = clause.getExpression().getText();
         // Only include string/number literals
         if (/^['"]/.test(exprText) || /^\d+$/.test(exprText)) {
           values.push(exprText);
+          if (propertyPath) {
+            const requiredProps = collectCaseRequiredProps(
+              clause,
+              matchedParam.name,
+              propertyPath
+            );
+            if (requiredProps.length > 0) {
+              requiredPropsByValue[exprText] = requiredProps;
+            }
+          }
         }
       }
     }
 
     if (values.length > 0) {
-      results.push({ paramName: matchedParam.name, values, propertyPath });
+      results.push({ paramName: matchedParam.name, values, propertyPath, requiredPropsByValue });
     }
   }
 
   return results;
+}
+
+function collectCaseRequiredProps(clause: Node, paramName: string, discriminantProp: string): string[] {
+  const required = new Set<string>();
+
+  for (const access of clause.getDescendantsOfKind(SyntaxKind.PropertyAccessExpression)) {
+    const text = access.getText();
+    if (!text.startsWith(`${paramName}.`)) continue;
+    const remainder = text.slice(paramName.length + 1);
+    const root = remainder.split('.')[0];
+    if (!root || root === discriminantProp) continue;
+    required.add(root);
+  }
+
+  for (const decl of clause.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
+    const initializer = decl.getInitializer();
+    if (!initializer || initializer.getText() !== paramName) continue;
+    const nameNode = decl.getNameNode();
+    if (!Node.isObjectBindingPattern(nameNode)) continue;
+    for (const element of nameNode.getElements()) {
+      const rawName = element.getPropertyNameNode()?.getText() ?? element.getNameNode().getText();
+      const propName = rawName.replace(/^['"`]|['"`]$/g, '');
+      if (!propName || propName === discriminantProp) continue;
+      required.add(propName);
+    }
+  }
+
+  return Array.from(required);
+}
+
+function buildSwitchCaseParamValue(switchCase: SwitchCaseInfo, caseValue: string): string {
+  if (!switchCase.propertyPath) return caseValue;
+
+  const props = [`${switchCase.propertyPath}: ${caseValue}`];
+  const requiredProps = switchCase.requiredPropsByValue?.[caseValue] ?? [];
+
+  for (const prop of requiredProps) {
+    const safeKey = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(prop) ? prop : `"${prop}"`;
+    props.push(`${safeKey}: ${mockValueForSwitchProp(prop)}`);
+  }
+
+  return `{ ${props.join(', ')} }`;
+}
+
+function mockValueForSwitchProp(propName: string): string {
+  const name = propName.toLowerCase();
+  if (name === 'toast') return '{ id: "1", open: true }';
+  if (name.endsWith('id')) return '"test-id"';
+  if (/^(is|has|can)/.test(name)) return 'true';
+  if (/count|index|page|limit|size|offset/.test(name)) return '1';
+  if (/error|message|text/.test(name)) return '"test-value"';
+  if (/items|list|array|records|toasts/.test(name)) return '[]';
+  return '{}';
 }
 
 function findFunctionByName(sourceFile: SourceFile, name: string): Node | null {
@@ -1183,6 +1259,73 @@ function mockValueForParam(param: ParamInfo, alternate = false): string {
   return fallback ?? '{}';
 }
 
+function mockValueForParamInFunction(
+  param: ParamInfo,
+  func: ExportedFunction,
+  sourceFile: SourceFile,
+  alternate = false
+): string {
+  if (/^state$/i.test(param.name)) {
+    const stateShape = buildStateMockFromUsage(func, sourceFile, param.name);
+    if (stateShape) return stateShape;
+  }
+  return mockValueForParam(param, alternate);
+}
+
+function buildStateMockFromUsage(
+  func: ExportedFunction,
+  sourceFile: SourceFile,
+  stateName: string
+): string | null {
+  const funcNode = func.sourceNode ?? findFunctionByName(sourceFile, func.name);
+  if (!funcNode) return null;
+
+  const stateProps = new Set<string>();
+
+  for (const access of funcNode.getDescendantsOfKind(SyntaxKind.PropertyAccessExpression)) {
+    const text = access.getText();
+    if (!text.startsWith(`${stateName}.`)) continue;
+    const remainder = text.slice(stateName.length + 1);
+    const root = remainder.split('.')[0];
+    if (root) stateProps.add(root);
+  }
+
+  for (const decl of funcNode.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
+    const initializer = decl.getInitializer();
+    if (!initializer || initializer.getText() !== stateName) continue;
+    const nameNode = decl.getNameNode();
+    if (!Node.isObjectBindingPattern(nameNode)) continue;
+    for (const element of nameNode.getElements()) {
+      const rawName = element.getPropertyNameNode()?.getText() ?? element.getNameNode().getText();
+      const propName = rawName.replace(/^['"`]|['"`]$/g, '');
+      if (propName) stateProps.add(propName);
+    }
+  }
+
+  if (stateProps.size === 0) return null;
+
+  const fnText = funcNode.getText();
+  const props = Array.from(stateProps).map((prop) => {
+    const escapedProp = escapeRegexPattern(prop);
+    const usesAsArray =
+      new RegExp(`\\b${escapeRegexPattern(stateName)}\\.${escapedProp}\\.(map|filter|forEach|slice|find|some|every|reduce)\\b`).test(
+        fnText
+      ) || new RegExp(`\\.\\.\\.\\s*${escapeRegexPattern(stateName)}\\.${escapedProp}\\b`).test(fnText);
+    return `${prop}: ${usesAsArray ? '[]' : '{}'}`;
+  });
+
+  return `{ ${props.join(', ')} }`;
+}
+
+function escapeRegexPattern(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isPromiseReturnType(returnType: string): boolean {
+  const normalized = returnType.replace(/\s+/g, '');
+  return normalized === 'Promise' || normalized.startsWith('Promise<');
+}
+
 /**
  * Parse an inline object type string (e.g. `{ toasts: Toast[]; }`) and produce
  * a minimal mock object with arrays as `[]`, strings as `""`, numbers as `0`,
@@ -1260,8 +1403,10 @@ function resolveTypeRuleMock(type: string, name: string, alternate: boolean): st
   if (type === 'string') return contextualMock(name, 'string', alternate);
   if (type === 'number') return contextualMock(name, 'number', alternate);
   if (type === 'boolean') return alternate ? 'false' : 'true';
+  if (type === 'file') return 'new File(["id,name\\n1,test"], "test.csv", { type: "text/csv" })';
+  if (type === 'blob') return 'new Blob(["test"], { type: "text/plain" })';
   if (type.includes('[]')) return alternate ? '[{ id: "1" }]' : '[]';
-  if (type === 'date' || type === 'Date') {
+  if (type === 'date') {
     return alternate ? 'new Date("2025-06-15")' : 'new Date("2024-01-01")';
   }
   return null;

@@ -18,9 +18,20 @@ function isComponentProp(prop: PropInfo): boolean {
 
 export function buildDefaultProps(component: ComponentInfo): string {
   const requiredProps = component.props.filter((p) => p.isRequired && isComponentProp(p));
-  if (requiredProps.length === 0) return 'const defaultProps = {};';
+  const childrenProp = component.props.find((p) => p.name === 'children' && isComponentProp(p));
+  const allowOptionalChildrenDefault =
+    childrenProp !== undefined &&
+    !/^(Input|Textarea|Select|Option|Img|Image|Source|Track|Audio|Video)$/i.test(component.name) &&
+    /(Container|Group|Provider|Wrapper|Layout|Shell)$/i.test(component.name);
+  const propsForDefaults = childrenProp
+    ? requiredProps.some((p) => p.name === 'children') || !allowOptionalChildrenDefault
+      ? requiredProps
+      : [...requiredProps, childrenProp]
+    : requiredProps;
 
-  const lines = requiredProps.map((prop) => {
+  if (propsForDefaults.length === 0) return 'const defaultProps = {};';
+
+  const lines = propsForDefaults.map((prop) => {
     let value = mockValueForProp(prop);
 
     // Required props must never be undefined - fall back to appropriate defaults
@@ -209,8 +220,10 @@ export function mockValueForProp(prop: PropInfo): string {
   // Common name patterns - check before generic type patterns
   if (
     /^(on|handle|set|update|change|toggle|add|remove|delete|clear)[A-Z]/.test(name) ||
-    /^handle[A-Z_]/.test(name)
+    /^handle[A-Z_]/.test(name) ||
+    /^render$/i.test(name)
   ) {
+    if (/^render$/i.test(name)) return '() => <div />';
     return mockFn();
   }
   if (
@@ -345,7 +358,8 @@ export function mockValueForProp(prop: PropInfo): string {
   if (/label$/i.test(name)) return '"Test Label"';
   if (/color$/i.test(name)) return '"#000000"';
   if (/size$/i.test(name)) return '"md"';
-  if (/type$/i.test(name) || /variant$/i.test(name) || /kind$/i.test(name)) return '"default"';
+  if (/^type$/i.test(name)) return '"single"';
+  if (/variant$/i.test(name) || /kind$/i.test(name)) return '"default"';
   if (/icon$/i.test(name)) return '"test-icon"';
   if (/image$/i.test(name) || /src$/i.test(name) || /avatar$/i.test(name))
     return '"https://example.com/image.png"';

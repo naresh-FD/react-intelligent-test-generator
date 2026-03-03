@@ -222,6 +222,10 @@ function normalizeSlashes(value: string): string {
   return value.split('\\').join('/');
 }
 
+function normalizePathForCompare(value: string): string {
+  return normalizeSlashes(path.resolve(value)).toLowerCase();
+}
+
 function escapeRegex(value: string): string {
   const regexChars = new Set([
     '\\',
@@ -268,6 +272,9 @@ function extractFailureReason(rawOutput: string): string {
     // Match common JS/TS error patterns
     if (
       /^(ReferenceError|TypeError|SyntaxError|Error|Cannot find module|expect\()/i.test(trimmed) ||
+      /Test suite failed to run/i.test(trimmed) ||
+      /Jest worker encountered/i.test(trimmed) ||
+      /Jest encountered an unexpected token/i.test(trimmed) ||
       /Expected .+ (to |not )/.test(trimmed)
     ) {
       return trimmed.length > 150 ? `${trimmed.substring(0, 147)}...` : trimmed;
@@ -370,29 +377,43 @@ function runJestBatch(
     if (fs.existsSync(resultFile)) {
       const jestOut = JSON.parse(fs.readFileSync(resultFile, 'utf8')) as {
         testResults?: Array<{
+          // Jest JSON schema differs across versions:
+          // - Older: testFilePath + testResults
+          // - Newer: name + assertionResults
           testFilePath?: string;
+          name?: string;
+          status?: string;
+          message?: string;
+          summary?: string;
           testResults?: Array<{
+            status?: string;
+            failureMessages?: string[];
+          }>;
+          assertionResults?: Array<{
             status?: string;
             failureMessages?: string[];
           }>;
         }>;
       };
 
-      for (const suite of jestOut.testResults ?? []) {
-        if (!suite.testFilePath) continue;
+      const testPathLookup = new Map(
+        testFilePaths.map((tp) => [normalizePathForCompare(tp), tp] as const)
+      );
 
-        const normalSuitePath = normalizeSlashes(suite.testFilePath);
-        // Match by normalized absolute path
-        const matchedTestPath = testFilePaths.find(
-          (tp) => normalizeSlashes(tp) === normalSuitePath
-        );
+      for (const suite of jestOut.testResults ?? []) {
+        const suitePath = suite.testFilePath ?? suite.name;
+        if (!suitePath) continue;
+
+        // Match by normalized absolute path (case-insensitive for Windows)
+        const matchedTestPath = testPathLookup.get(normalizePathForCompare(suitePath));
         if (!matchedTestPath) continue;
 
-        const testItems = suite.testResults ?? [];
+        const testItems = suite.testResults ?? suite.assertionResults ?? [];
         const numFailing = testItems.filter((t) => t.status === 'failed').length;
         const numPassing = testItems.filter((t) => t.status === 'passed').length;
         const numTests = numPassing + numFailing;
-        const passed = numFailing === 0;
+        const passed =
+          typeof suite.status === 'string' ? suite.status === 'passed' && numFailing === 0 : numFailing === 0;
 
         let failureReason = '';
         if (!passed) {
@@ -402,6 +423,8 @@ function runJestBatch(
               break;
             }
           }
+          if (!failureReason && suite.message) failureReason = extractFailureReason(suite.message);
+          if (!failureReason && suite.summary) failureReason = extractFailureReason(suite.summary);
           if (!failureReason) failureReason = globalFailureReason;
         }
 
@@ -431,11 +454,14 @@ function runJestBatch(
       for (let i = 0; i < testFilePaths.length; i++) {
         const testPath = testFilePaths[i];
         const srcPath = sourceFilePaths[i];
-        const relSrc = normalizeSlashes(path.relative(cwd, srcPath));
-        const basename = path.basename(srcPath);
+        const relSrc = normalizeSlashes(path.relative(cwd, srcPath)).toLowerCase();
+        const basename = path.basename(srcPath).toLowerCase();
 
         const matchKey = Object.keys(cov).find(
-          (k) => k.endsWith(basename) || normalizeSlashes(k).endsWith(relSrc)
+          (k) => {
+            const norm = normalizeSlashes(k).toLowerCase();
+            return norm.endsWith(basename) || norm.endsWith(relSrc);
+          }
         );
         if (!matchKey) continue;
 

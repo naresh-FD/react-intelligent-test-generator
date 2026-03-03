@@ -543,6 +543,34 @@ const COMPOUND_UI_LIBRARY_PATTERNS = [
   /^@dnd-kit\//,
 ];
 
+const COMPOUND_CHILD_SUFFIXES = [
+  'Item',
+  'Trigger',
+  'Content',
+  'Label',
+  'Separator',
+  'Indicator',
+  'Viewport',
+  'Action',
+  'Close',
+  'Title',
+  'Description',
+  'Thumb',
+  'Track',
+  'Handle',
+  'Panel',
+  'Bar',
+  'Style',
+  'Slot',
+  'Shortcut',
+  'Control',
+  'Message',
+  'Input',
+];
+
+const COMPOUND_ROOT_SUFFIXES = ['Provider', 'Root', 'Container', 'Group'];
+const ALWAYS_SKIP_COMPOUND_ROOTS = new Set(['ToggleGroup', 'Command', 'CommandGroup']);
+
 /**
  * Given a source file, returns the set of component names that are thin wrappers
  * around compound UI library primitives and require a parent context to render.
@@ -566,12 +594,16 @@ export function getCompoundSubComponents(sourceFile: SourceFile): Set<string> {
 
   if (hasCompoundImport) {
     const exported = sourceFile.getExportedDeclarations();
-    for (const [name] of exported) {
+    const exportNames = Array.from(exported.keys());
+    for (const name of exportNames) {
       // Pure HTML wrappers like SheetHeader, DrawerFooter are just divs — safe to render.
       if (/(?:Header|Footer)$/.test(name)) continue;
-      subComponents.add(name);
+      // Only mark likely sub-components (AccordionItem, DialogContent, etc.).
+      // Do not mark standalone/root components (Button, Calendar, AnomalyDetectionChart).
+      if (isLikelyCompoundSubComponent(name, exportNames)) {
+        subComponents.add(name);
+      }
     }
-    return subComponents;
   }
 
   // --- Pattern 2: Same-file context compound components ---
@@ -622,6 +654,30 @@ export function getCompoundSubComponents(sourceFile: SourceFile): Set<string> {
   }
 
   return subComponents;
+}
+
+function isLikelyCompoundSubComponent(name: string, exportNames: string[]): boolean {
+  if (ALWAYS_SKIP_COMPOUND_ROOTS.has(name)) return true;
+
+  // If a matching provider exists (ToastProvider -> Toast), the base/root
+  // component usually needs provider context and should not be rendered alone.
+  if (exportNames.some((n) => n === `${name}Provider`)) {
+    return true;
+  }
+
+  if (name.endsWith('Provider')) return false;
+  if (COMPOUND_CHILD_SUFFIXES.some((suffix) => name.endsWith(suffix))) return true;
+  if (COMPOUND_ROOT_SUFFIXES.some((suffix) => name.endsWith(suffix))) return false;
+
+  // If another exported component is a prefix of this one, this is likely
+  // a sub-component in a compound family (e.g., AccordionItem under Accordion).
+  return exportNames.some(
+    (candidateRoot) =>
+      candidateRoot !== name &&
+      candidateRoot.length >= 3 &&
+      !COMPOUND_CHILD_SUFFIXES.some((suffix) => candidateRoot.endsWith(suffix)) &&
+      name.startsWith(candidateRoot)
+  );
 }
 
 function getImportSourceForIdentifier(
