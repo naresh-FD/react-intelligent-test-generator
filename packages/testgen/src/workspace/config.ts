@@ -7,6 +7,81 @@ export type FrameworkMode = 'auto' | 'jest' | 'vitest';
 export type GenerationKind = 'components' | 'hooks' | 'utils';
 export type GenerationMode = 'git-unstaged' | 'changed-since' | 'all' | 'file';
 
+// ---------------------------------------------------------------------------
+// Test output location configuration
+// ---------------------------------------------------------------------------
+
+export type TestSuffix = '.test' | '.spec';
+
+/**
+ * Configures where generated test files are placed.
+ *
+ * Strategies:
+ * - "colocated": Test file next to the source (Button.tsx → Button.test.tsx)
+ * - "subfolder": Test file in a subdirectory (Button.tsx → __tests__/Button.test.tsx)
+ * - "mirror":    Test files in a separate root, mirroring source structure
+ *                (src/components/Button.tsx → tests/components/Button.test.tsx)
+ */
+export interface TestOutputConfig {
+  strategy: 'colocated' | 'subfolder' | 'mirror';
+  /** Folder name for "subfolder" or root dir for "mirror". Default: "__tests__" */
+  directory?: string;
+  /** Source root to strip when mirroring. Default: "src". Only used with "mirror". */
+  srcRoot?: string;
+  /** File suffix before extension. Default: ".test" */
+  suffix?: TestSuffix;
+}
+
+/** Fully resolved test output config — all optionals filled with defaults. */
+export interface ResolvedTestOutput {
+  strategy: 'colocated' | 'subfolder' | 'mirror';
+  directory: string;
+  srcRoot: string;
+  suffix: TestSuffix;
+}
+
+/** Default test output config — matches current behavior (subfolder + __tests__ + .test) */
+export const DEFAULT_TEST_OUTPUT: ResolvedTestOutput = {
+  strategy: 'subfolder',
+  directory: '__tests__',
+  srcRoot: 'src',
+  suffix: '.test',
+};
+
+/**
+ * Resolve a partial TestOutputConfig into a fully-filled ResolvedTestOutput.
+ * When input is undefined, returns the backwards-compatible default.
+ */
+export function resolveTestOutput(raw?: TestOutputConfig): ResolvedTestOutput {
+  if (!raw) return { ...DEFAULT_TEST_OUTPUT };
+
+  switch (raw.strategy) {
+    case 'colocated':
+      return {
+        strategy: 'colocated',
+        directory: '',
+        srcRoot: raw.srcRoot ?? 'src',
+        suffix: raw.suffix ?? '.test',
+      };
+    case 'subfolder':
+      return {
+        strategy: 'subfolder',
+        directory: raw.directory ?? '__tests__',
+        srcRoot: raw.srcRoot ?? 'src',
+        suffix: raw.suffix ?? '.test',
+      };
+    case 'mirror':
+      return {
+        strategy: 'mirror',
+        directory: raw.directory ?? 'tests',
+        srcRoot: raw.srcRoot ?? 'src',
+        suffix: raw.suffix ?? '.test',
+      };
+    default:
+      return { ...DEFAULT_TEST_OUTPUT };
+  }
+}
+
 export interface TestgenDefaults {
   include: string[];
   exclude: string[];
@@ -14,6 +89,7 @@ export interface TestgenDefaults {
   renderHelper: string | 'auto';
   generateFor: GenerationKind[];
   mode: GenerationMode;
+  testOutput?: TestOutputConfig;
 }
 
 export interface TestgenPackageConfig {
@@ -25,6 +101,7 @@ export interface TestgenPackageConfig {
   renderHelper?: string | 'auto';
   generateFor?: GenerationKind[];
   mode?: GenerationMode;
+  testOutput?: TestOutputConfig;
 }
 
 export interface TestgenConfig {
@@ -151,6 +228,7 @@ function validateDefaults(defaults: Partial<TestgenDefaults>, configPath: string
   if (defaults.generateFor && !isValidGenerateFor(defaults.generateFor)) {
     throw new Error(`"defaults.generateFor" contains invalid values in ${configPath}.`);
   }
+  validateTestOutput((defaults as Record<string, unknown>).testOutput, 'defaults.testOutput', configPath);
 }
 
 function validatePackage(pkg: Partial<TestgenPackageConfig>, configPath: string): void {
@@ -175,4 +253,53 @@ function validatePackage(pkg: Partial<TestgenPackageConfig>, configPath: string)
 
 function isValidGenerateFor(values: unknown[]): boolean {
   return values.every((v) => v === 'components' || v === 'hooks' || v === 'utils');
+}
+
+// ---------------------------------------------------------------------------
+// testOutput validation
+// ---------------------------------------------------------------------------
+
+const VALID_STRATEGIES = ['subfolder', 'colocated', 'mirror'];
+const VALID_SUFFIXES = ['.test', '.spec'];
+
+function validateTestOutput(
+  testOutput: unknown,
+  fieldPath: string,
+  configPath: string,
+): void {
+  if (testOutput === undefined || testOutput === null) return;
+  if (typeof testOutput !== 'object') {
+    throw new Error(`"${fieldPath}" must be an object in ${configPath}.`);
+  }
+
+  const obj = testOutput as Record<string, unknown>;
+
+  if (!obj.strategy || !VALID_STRATEGIES.includes(obj.strategy as string)) {
+    throw new Error(
+      `"${fieldPath}.strategy" must be one of ${VALID_STRATEGIES.join('|')} in ${configPath}.`
+    );
+  }
+
+  if (obj.suffix !== undefined && !VALID_SUFFIXES.includes(obj.suffix as string)) {
+    throw new Error(
+      `"${fieldPath}.suffix" must be one of ${VALID_SUFFIXES.join('|')} in ${configPath}.`
+    );
+  }
+
+  if (obj.directory !== undefined) {
+    if (typeof obj.directory !== 'string' || (obj.directory as string).length === 0) {
+      throw new Error(`"${fieldPath}.directory" must be a non-empty string in ${configPath}.`);
+    }
+  }
+
+  if (obj.srcRoot !== undefined) {
+    if (typeof obj.srcRoot !== 'string' || (obj.srcRoot as string).length === 0) {
+      throw new Error(`"${fieldPath}.srcRoot" must be a non-empty string in ${configPath}.`);
+    }
+  }
+
+  if (obj.strategy === 'mirror' && !obj.directory) {
+    // For mirror, directory defaults to "tests" — this is fine (resolveTestOutput fills it).
+    // But if explicitly provided as empty string, that's caught above.
+  }
 }

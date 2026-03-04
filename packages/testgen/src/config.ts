@@ -2,6 +2,10 @@ import path from 'path';
 import fs from 'fs';
 
 export const ROOT_DIR = process.cwd();
+/**
+ * @deprecated Use `ResolvedTestOutput.directory` from `workspace/config` instead.
+ * Kept for backwards compatibility with external consumers.
+ */
 export const TESTS_DIR_NAME = '__tests__';
 export const COVERAGE_DIR = path.join(ROOT_DIR, 'coverage');
 

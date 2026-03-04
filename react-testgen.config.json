@@ -18,7 +18,10 @@
       "hooks",
       "utils"
     ],
-    "mode": "git-unstaged"
+    "mode": "git-unstaged",
+    "testOutput": {
+      "strategy": "colocated"
+    }
   },
   "packages": [
     {

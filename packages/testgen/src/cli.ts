@@ -26,6 +26,7 @@ import { TEST_UTILITY_PATTERNS, UNTESTABLE_PATTERNS } from './config';
 import { ensureJestScaffold } from './scaffold';
 import { detectTestFramework, buildTestGlobalsImport, buildDomMatchersImport } from './utils/framework';
 import { applyFixRules } from './selfHeal';
+import { loadConfig, resolveTestOutput, ResolvedTestOutput, DEFAULT_TEST_OUTPUT } from './workspace/config';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -118,7 +119,12 @@ function resolveTargetFiles(args: CliOptions): string[] {
  * Generates (or regenerates) a test file for the given source file.
  * Returns the absolute path of the written test file, or null if skipped.
  */
-function generateTestForFile(filePath: string, { project, checker }: ParserContext): string | null {
+function generateTestForFile(
+  filePath: string,
+  { project, checker }: ParserContext,
+  testOutput: ResolvedTestOutput = DEFAULT_TEST_OUTPUT,
+  packageRoot: string = process.cwd(),
+): string | null {
   const sourceFile = getSourceFile(project, filePath);
 
   // Skip test utility files (renderWithProviders, test helpers, etc.)
@@ -133,7 +139,7 @@ function generateTestForFile(filePath: string, { project, checker }: ParserConte
     return null;
   }
 
-  const testFilePath = getTestFilePath(filePath);
+  const testFilePath = getTestFilePath(filePath, testOutput, packageRoot);
 
   // --- Barrel / index file ---
   const isBarrel = isBarrelFile(filePath, sourceFile.getText());
@@ -573,10 +579,20 @@ function printSummary(rows: SummaryRow[]): void {
 
 async function run() {
   const args = parseArgs(process.argv.slice(2));
+  const cwd = process.cwd();
+
+  // Load workspace config (react-testgen.config.json) and resolve testOutput
+  const config = loadConfig(cwd);
+  // For now, use the first package's testOutput (or the defaults)
+  const firstPkg = config.packages[0];
+  const testOutput = resolveTestOutput(firstPkg?.testOutput ?? config.defaults.testOutput);
+  const packageRoot = firstPkg?.root
+    ? path.isAbsolute(firstPkg.root) ? firstPkg.root : path.join(cwd, firstPkg.root)
+    : cwd;
 
   // Scaffold jest.config.cjs + test-utils if the project has no Jest config yet
-  if (detectTestFramework(process.cwd()) === 'jest') {
-    ensureJestScaffold(process.cwd());
+  if (detectTestFramework(cwd) === 'jest') {
+    ensureJestScaffold(cwd, testOutput);
   }
 
   const ctx = createParser();
@@ -612,7 +628,7 @@ async function run() {
   const entries: FileEntry[] = [];
   for (const [index, filePath] of files.entries()) {
     console.log(`\n  [${index + 1}/${files.length}] ${path.basename(filePath)}`);
-    const testFilePath = generateTestForFile(filePath, ctx);
+    const testFilePath = generateTestForFile(filePath, ctx, testOutput, packageRoot);
     entries.push({ srcPath: filePath, testPath: testFilePath });
   }
 
@@ -707,14 +723,19 @@ async function run() {
       const reason = prev?.failureReason ? ` — ${prev.failureReason}` : '';
       console.log(`  - ${path.basename(e.srcPath)}${reason}`);
 
-      // Try applying deterministic fix rules first (pass attempt for escalation tiers)
-      const testContent = fs.readFileSync(e.testPath, 'utf8');
-      const fixed = applyFixRules(testContent, errorMsg, e.srcPath, attempt);
-      if (fixed) {
-        writeFile(e.testPath, fixed);
-      } else {
-        // No fix rule matched — regenerate from scratch
-        generateTestForFile(e.srcPath, ctx);
+      try {
+        // Try applying deterministic fix rules first (pass attempt for escalation tiers)
+        const testContent = fs.readFileSync(e.testPath, 'utf8');
+        const fixed = applyFixRules(testContent, errorMsg, e.srcPath, attempt);
+        if (fixed) {
+          writeFile(e.testPath, fixed);
+        } else {
+          // No fix rule matched — regenerate from scratch
+          generateTestForFile(e.srcPath, ctx, testOutput, packageRoot);
+        }
+      } catch (fixError) {
+        console.log(`    ⚠️  Self-heal error: ${fixError instanceof Error ? fixError.message : 'unknown'}`);
+        // Continue to next file — don't let one file crash the entire batch
       }
     }
 
@@ -755,7 +776,7 @@ async function run() {
     );
     for (const e of remainingFailures) {
       console.log(`  - ${path.basename(e.srcPath)} → smoke test fallback`);
-      const smokeTest = generateMinimalSmokeTest(e.srcPath, e.testPath, ctx);
+      const smokeTest = generateMinimalSmokeTest(e.srcPath, e.testPath, ctx, testOutput, packageRoot);
       writeFile(e.testPath, smokeTest);
     }
 
@@ -984,7 +1005,9 @@ function getGitUnstagedFiles(): string[] {
 function generateMinimalSmokeTest(
   sourceFilePath: string,
   testFilePath: string,
-  ctx: ParserContext
+  ctx: ParserContext,
+  _testOutput: ResolvedTestOutput = DEFAULT_TEST_OUTPUT,
+  _packageRoot: string = process.cwd(),
 ): string {
   const importPath = relativeImport(testFilePath, sourceFilePath);
   const sourceFile = getSourceFile(ctx.project, sourceFilePath);

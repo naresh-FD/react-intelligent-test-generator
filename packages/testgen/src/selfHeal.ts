@@ -54,15 +54,11 @@ export const FIX_RULES: FixRule[] = [
         content,
         'import { MemoryRouter } from "react-router-dom";'
       );
-      // Wrap render calls
+      // Wrap render(<Component ... />) → render(<MemoryRouter><Component ... /></MemoryRouter>)
+      // Only match render( or render(\n  followed by < (not arbitrary JSX)
       result = result.replace(
-        /render\((\s*<)/g,
-        'render(<MemoryRouter>$1'
-      );
-      // This is a rough heuristic — close the tag before the closing paren
-      result = result.replace(
-        /(\/>)\s*\)/g,
-        '$1</MemoryRouter>)'
+        /render\(\s*(<[A-Z]\w*[^]*?\/>\s*)\)/g,
+        (_, jsx) => `render(<MemoryRouter>${jsx.trim()}</MemoryRouter>)`
       );
       return result;
     },
@@ -78,7 +74,13 @@ export const FIX_RULES: FixRule[] = [
         'import { QueryClient, QueryClientProvider } from "@tanstack/react-query";',
         'const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });',
       ].join('\n');
-      return addLineAfterImports(content, imports);
+      let result = addLineAfterImports(content, imports);
+      // Wrap render(<Component ... />) → render(<QueryClientProvider client={testQueryClient}><Component ... /></QueryClientProvider>)
+      result = result.replace(
+        /render\(\s*(<[A-Z]\w*[^]*?\/>\s*)\)/g,
+        (_, jsx) => `render(<QueryClientProvider client={testQueryClient}>${jsx.trim()}</QueryClientProvider>)`
+      );
+      return result;
     },
   },
 
@@ -109,21 +111,18 @@ export const FIX_RULES: FixRule[] = [
     errorPattern: /not wrapped in act|act\(\.\.\.\)/i,
     description: 'Add waitFor wrapper',
     apply(content) {
-      // Add waitFor import if missing
-      if (!content.includes('waitFor')) {
-        content = content.replace(
-          /from "@testing-library\/react"/,
-          (match) => match.replace('";', ', waitFor } from "@testing-library/react"').replace('} from', 'waitFor, } from')
-        );
-        // Fix up the import line more carefully
-        if (!content.includes('waitFor')) {
-          content = content.replace(
-            /import \{ ([^}]+) \} from "@testing-library\/react"/,
-            (_, imports) => `import { ${imports}, waitFor } from "@testing-library/react"`
-          );
-        }
+      if (content.includes('waitFor')) return null;
+      // Add waitFor to existing @testing-library/react import
+      let result = content.replace(
+        /import\s*\{([^}]+)\}\s*from\s*["']@testing-library\/react["']/,
+        (_, imports) => `import { ${imports.trim()}, waitFor } from "@testing-library/react"`
+      );
+      // If no existing import was found, add a new one
+      if (!result.includes('waitFor')) {
+        result = addLineAfterImports(result, 'import { waitFor } from "@testing-library/react";');
       }
-      return content;
+      if (result === content) return null;
+      return result;
     },
   },
 
@@ -162,12 +161,27 @@ export const FIX_RULES: FixRule[] = [
   {
     errorPattern: /does not contain a default export/i,
     description: 'Switch from default to named import',
-    apply(content) {
-      const match = content.match(/import (\w+) from ("[^"]+"|'[^']+')/);
-      if (!match) return null;
-      const [fullMatch, name, importPath] = match;
-      const namedImport = `import { ${name} } from ${importPath}`;
-      return content.replace(fullMatch, namedImport);
+    apply(content, error) {
+      // Extract the module path from the error if possible
+      const errorModuleMatch = error.match(/['"]([^'"]+)['"]\s*does not contain a default export/i)
+        || error.match(/does not contain a default export.*['"]([^'"]+)['"]/i);
+      // Find all default imports, skip React and common libraries
+      const SKIP_IMPORTS = new Set(['React', 'react', 'react-dom', 'react-router-dom']);
+      const importRegex = /import (\w+) from ("[^"]+"|'[^']+')/g;
+      let match;
+      while ((match = importRegex.exec(content)) !== null) {
+        const [fullMatch, name, importPath] = match;
+        // Skip known default exports (React, etc.)
+        if (SKIP_IMPORTS.has(name)) continue;
+        // If we know the module from the error, match it specifically
+        if (errorModuleMatch) {
+          const errorModule = errorModuleMatch[1];
+          if (!importPath.includes(errorModule)) continue;
+        }
+        const namedImport = `import { ${name} } from ${importPath}`;
+        return content.replace(fullMatch, namedImport);
+      }
+      return null;
     },
   },
 
@@ -188,7 +202,7 @@ export const FIX_RULES: FixRule[] = [
 
   // Rule 12: Recharts crash
   {
-    errorPattern: /ResponsiveContainer|recharts|Cannot read.*chart|Cannot find module.*recharts/i,
+    errorPattern: /ResponsiveContainer|recharts|Cannot read.*\bchart\b|Cannot find module.*recharts/i,
     description: 'Mock recharts library',
     apply(content) {
       if (content.includes('jest.mock("recharts"')) return null;
@@ -235,8 +249,11 @@ Object.defineProperty(window, "localStorage", { value: { getItem: jest.fn((k: st
 import { configureStore } from "@reduxjs/toolkit";
 const testStore = configureStore({ reducer: (state = {}) => state });`;
       let result = addLineAfterImports(content, imports);
-      result = result.replace(/render\((\s*<)/g, 'render(<ReduxProvider store={testStore}>$1');
-      result = result.replace(/(\/>\s*)\)/g, '$1</ReduxProvider>)');
+      // Wrap render(<Component ... />) → render(<ReduxProvider store={testStore}><Component ... /></ReduxProvider>)
+      result = result.replace(
+        /render\(\s*(<[A-Z]\w*[^]*?\/>\s*)\)/g,
+        (_, jsx) => `render(<ReduxProvider store={testStore}>${jsx.trim()}</ReduxProvider>)`
+      );
       return result;
     },
   },
@@ -302,10 +319,27 @@ const testStore = configureStore({ reducer: (state = {}) => state });`;
     description: 'Wrap with Suspense fallback',
     apply(content) {
       if (content.includes('Suspense')) return null;
+      // Add Suspense import
       let result = content;
-      if (!result.includes("from 'react'") && !result.includes('from "react"')) {
+      if (result.includes("from 'react'") || result.includes('from "react"')) {
+        // Add Suspense to existing React import
+        result = result.replace(
+          /import\s+(React(?:\s*,\s*\{([^}]*)\})?)\s+from\s*["']react["']/,
+          (_, _full, namedImports) => {
+            if (namedImports) {
+              return `import React, { ${namedImports.trim()}, Suspense } from "react"`;
+            }
+            return 'import React, { Suspense } from "react"';
+          }
+        );
+      } else {
         result = addLineAfterImports(result, 'import React, { Suspense } from "react";');
       }
+      // Wrap render(<Component ... />) → render(<Suspense fallback={<div />}><Component ... /></Suspense>)
+      result = result.replace(
+        /render\(\s*(<[A-Z]\w*[^]*?\/>\s*)\)/g,
+        (_, jsx) => `render(<Suspense fallback={<div />}>${jsx.trim()}</Suspense>)`
+      );
       return result;
     },
   },
@@ -467,9 +501,12 @@ function simplifyTestFile(content: string): string | null {
 
   if (!renderHelper) return null;
 
+  // Strip existing @ts-nocheck from preamble to avoid duplication
+  const cleanPreamble = preamble.replace(/\/\/\s*@ts-nocheck\s*\n?/g, '');
+
   // Build simplified test with just one safe render
   return `// @ts-nocheck
-${preamble}describe("${compName}", () => {
+${cleanPreamble}describe("${compName}", () => {
   ${renderHelper}
 
   it("renders without crashing", () => {

@@ -27,7 +27,7 @@ import {
 import { buildVariantTestCases } from './variants';
 import { buildContextVariantTests } from './contextVariants';
 import { buildAutoMocks } from './autoMocks';
-import { buildSafeRenderBlock, buildSafeInteractionBlock } from './safePatterns';
+import { buildSafeRenderBlock } from './safePatterns';
 
 export interface GenerateOptions {
   pass: 1 | 2;

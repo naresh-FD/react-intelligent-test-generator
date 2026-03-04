@@ -1,7 +1,8 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { ROOT_DIR, TESTS_DIR_NAME, detectSrcDir } from '../config';
+import { ROOT_DIR, detectSrcDir } from '../config';
 import { exists, listFilesRecursive } from '../fs';
+import { ResolvedTestOutput, DEFAULT_TEST_OUTPUT } from '../workspace/config';
 
 export interface ScanSourceFilesOptions {
   packageRoot?: string;
@@ -25,13 +26,30 @@ export function setPathResolutionContext(context: GenerationContext | null): voi
   _activeContext = context;
 }
 
-export function isTestFile(filePath: string): boolean {
+export function isTestFile(filePath: string, output?: ResolvedTestOutput): boolean {
   const normalized = normalizeSlashes(filePath);
-  return (
-    normalized.includes(`/${TESTS_DIR_NAME}/`) ||
-    normalized.endsWith('.test.tsx') ||
-    normalized.endsWith('.test.ts')
-  );
+  const cfg = output ?? DEFAULT_TEST_OUTPUT;
+  const suffix = cfg.suffix; // '.test' or '.spec'
+
+  // Check suffix-based detection (.test.tsx, .spec.ts, etc.)
+  if (
+    normalized.endsWith(`${suffix}.tsx`) ||
+    normalized.endsWith(`${suffix}.ts`)
+  ) {
+    return true;
+  }
+
+  // Check directory-based detection (e.g. /__tests__/, /specs/, /tests/)
+  if (cfg.strategy === 'subfolder' || cfg.strategy === 'mirror') {
+    const dir = cfg.directory || '__tests__';
+    if (normalized.includes(`/${dir}/`)) return true;
+  }
+
+  // Backwards compat: always recognise __tests__ and .test files
+  if (normalized.includes('/__tests__/')) return true;
+  if (normalized.endsWith('.test.tsx') || normalized.endsWith('.test.ts')) return true;
+
+  return false;
 }
 
 export function scanSourceFiles(options: ScanSourceFilesOptions = {}): string[] {
@@ -60,12 +78,57 @@ export function scanSourceFiles(options: ScanSourceFilesOptions = {}): string[] 
   });
 }
 
-export function getTestFilePath(sourceFilePath: string): string {
+/**
+ * Compute the test file path for a given source file.
+ *
+ * Supports three strategies via `output`:
+ *   - **colocated**: test file next to source  (Button.tsx → Button.test.tsx)
+ *   - **subfolder**: test in a subdirectory     (Button.tsx → __tests__/Button.test.tsx)
+ *   - **mirror**:    separate root mirroring src structure
+ *                    (src/components/Button.tsx → tests/components/Button.test.tsx)
+ *
+ * When called without `output`, defaults to subfolder + __tests__ + .test (backwards compatible).
+ */
+export function getTestFilePath(
+  sourceFilePath: string,
+  output?: ResolvedTestOutput,
+  packageRoot?: string,
+): string {
+  const cfg = output ?? DEFAULT_TEST_OUTPUT;
   const dir = path.dirname(sourceFilePath);
   const ext = path.extname(sourceFilePath);
   const base = path.basename(sourceFilePath, ext);
-  const testExt = ext === '.ts' ? '.test.ts' : '.test.tsx';
-  return path.join(dir, TESTS_DIR_NAME, `${base}${testExt}`);
+  const testExt = ext === '.ts' ? `${cfg.suffix}.ts` : `${cfg.suffix}.tsx`;
+  const testFileName = `${base}${testExt}`;
+
+  switch (cfg.strategy) {
+    case 'colocated':
+      return path.join(dir, testFileName);
+
+    case 'subfolder':
+      return path.join(dir, cfg.directory || '__tests__', testFileName);
+
+    case 'mirror': {
+      const root = packageRoot ?? ROOT_DIR;
+      const srcRootAbs = path.join(root, cfg.srcRoot);
+      const rel = normalizeSlashes(path.relative(srcRootAbs, sourceFilePath));
+
+      // Edge case: source file is NOT under srcRoot (relative path starts with ..)
+      if (rel.startsWith('..')) {
+        console.warn(
+          `[testgen] Warning: "${sourceFilePath}" is outside srcRoot "${cfg.srcRoot}". Falling back to subfolder strategy.`
+        );
+        return path.join(dir, cfg.directory || '__tests__', testFileName);
+      }
+
+      // Strip the source filename, keep directory structure
+      const relDir = path.dirname(rel);
+      return path.join(root, cfg.directory || 'tests', relDir, testFileName);
+    }
+
+    default:
+      return path.join(dir, cfg.directory || '__tests__', testFileName);
+  }
 }
 
 export function relativeImport(fromFile: string, toFile: string): string {
