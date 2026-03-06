@@ -30,7 +30,7 @@ Then run `npm run testgen` as usual.
 
 ### 1. Colocated
 
-Test file sits **next to** the source file. No subdirectory.
+Test file sits **next to** the source file. No subgit directory.
 
 ```jsonc
 "testOutput": {
