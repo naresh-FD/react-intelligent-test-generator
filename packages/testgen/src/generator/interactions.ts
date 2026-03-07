@@ -1,6 +1,11 @@
 import { ComponentInfo, SelectorInfo } from '../analyzer';
 import { mockFn, mockGlobalName } from '../utils/framework';
 
+/** Quote prop names that are not valid JS identifiers (e.g. aria-*, data-*) */
+function safePropKey(name: string): string {
+  return /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name) ? name : `"${name}"`;
+}
+
 export interface ConditionalTestCase {
   title: string;
   body: string[];
@@ -231,7 +236,7 @@ export function buildCallbackPropTests(component: ComponentInfo): ConditionalTes
         body: [
           'const user = userEvent.setup();',
           `const ${mockName} = ${mockFn()};`,
-          `renderUI({ ${prop.name}: ${mockName} });`,
+          `renderUI({ ${safePropKey(prop.name)}: ${mockName} });`,
           `const trigger = ${triggerElement};`,
           'if (!trigger) return;',
           'await user.click(trigger);',
@@ -244,7 +249,7 @@ export function buildCallbackPropTests(component: ComponentInfo): ConditionalTes
         title: `accepts ${prop.name} callback prop`,
         body: [
           `const ${mockName} = ${mockFn()};`,
-          `const { container } = renderUI({ ${prop.name}: ${mockName} });`,
+          `const { container } = renderUI({ ${safePropKey(prop.name)}: ${mockName} });`,
           'expect(container).toBeInTheDocument();',
         ],
       });
@@ -361,7 +366,7 @@ export function buildConditionalRenderTests(component: ComponentInfo): Condition
   component.conditionalElements.forEach((element, index) => {
     if (element.requiredProps.length === 0) return;
 
-    const propsArg = element.requiredProps.map((prop) => `${prop}: true`).join(', ');
+    const propsArg = element.requiredProps.map((prop: string) => `${safePropKey(prop)}: true`).join(', ');
     const key = `${propsArg}-${element.selector.strategy}-${element.selector.value}`;
 
     if (seen.has(key)) return;
@@ -401,7 +406,7 @@ export function buildNegativeBranchTests(component: ComponentInfo): ConditionalT
     cases.push({
       title: `renders with ${prop.name} set to false`,
       body: [
-        `const { container } = renderUI({ ${prop.name}: false });`,
+        `const { container } = renderUI({ ${safePropKey(prop.name)}: false });`,
         'expect(container).toBeInTheDocument();',
       ],
     });
@@ -420,7 +425,7 @@ export function buildNegativeBranchTests(component: ComponentInfo): ConditionalT
       return;
     }
 
-    const propsArgFalse = element.requiredProps.map((prop) => `${prop}: false`).join(', ');
+    const propsArgFalse = element.requiredProps.map((prop: string) => `${safePropKey(prop)}: false`).join(', ');
     const query = conditionalSelectorQuery(element.selector);
     const key = `neg-${propsArgFalse}-${element.selector.strategy}-${element.selector.value}`;
 
@@ -471,7 +476,7 @@ export function buildStateTests(component: ComponentInfo): ConditionalTestCase[]
     cases.push({
       title: 'renders loading state',
       body: [
-        `const { container } = renderUI({ ${loadingProps.map((p) => `${p.name}: true`).join(', ')} });`,
+        `const { container } = renderUI({ ${loadingProps.map((p) => `${safePropKey(p.name)}: true`).join(', ')} });`,
         'expect(container).toBeInTheDocument();',
       ],
     });
@@ -488,7 +493,7 @@ export function buildStateTests(component: ComponentInfo): ConditionalTestCase[]
   );
   if (errorBoolProps.length > 0 || errorStringProps.length > 0) {
     const overrides = [
-      ...errorBoolProps.map((p) => `${p.name}: true`),
+      ...errorBoolProps.map((p) => `${safePropKey(p.name)}: true`),
       ...errorStringProps.map((p) => `${p.name}: "Test error message"`),
     ];
     cases.push({
@@ -529,7 +534,7 @@ export function buildStateTests(component: ComponentInfo): ConditionalTestCase[]
     cases.push({
       title: 'renders disabled state',
       body: [
-        `const { container } = renderUI({ ${disabledProps.map((p) => `${p.name}: true`).join(', ')} });`,
+        `const { container } = renderUI({ ${disabledProps.map((p) => `${safePropKey(p.name)}: true`).join(', ')} });`,
         'expect(container).toBeInTheDocument();',
       ],
     });

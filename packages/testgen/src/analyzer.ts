@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { Node, Project, SourceFile, SyntaxKind, TypeChecker, JsxAttribute, JsxAttributeLike, ParameterDeclaration } from 'ts-morph';
 import { CONTEXT_DETECTION_CONFIG } from './config';
 
@@ -714,15 +716,46 @@ function detectThirdPartyImports(sourceFile: SourceFile): string[] {
     );
 }
 
-/** Detect service/API module imports that should be auto-mocked */
+/** Detect service/API module imports that should be auto-mocked.
+ *  Only returns imports whose target file actually exists on disk,
+ *  preventing broken jest.mock() calls for non-existent modules. */
 function detectServiceImports(sourceFile: SourceFile): string[] {
+  const sourceDir = path.dirname(sourceFile.getFilePath());
+
   return sourceFile.getImportDeclarations()
     .filter(d => {
       const mod = d.getModuleSpecifierValue();
       const isRelative = mod.startsWith('.') || mod.startsWith('@/') || mod.startsWith('~/');
       return isRelative && /service|api|client|repository|http/i.test(mod);
     })
+    .filter(d => {
+      const mod = d.getModuleSpecifierValue();
+      // Only validate relative imports (alias imports resolved by bundler are trusted)
+      if (!mod.startsWith('.')) return true;
+      return resolveModulePath(sourceDir, mod);
+    })
     .map(d => d.getModuleSpecifierValue());
+}
+
+/** Check if a relative import resolves to an existing file on disk. */
+function resolveModulePath(fromDir: string, importSpecifier: string): boolean {
+  const extensions = ['.ts', '.tsx', '.js', '.jsx'];
+  const base = path.resolve(fromDir, importSpecifier);
+
+  // Direct file match (import already includes extension)
+  if (fs.existsSync(base) && fs.statSync(base).isFile()) return true;
+
+  // Try appending extensions
+  for (const ext of extensions) {
+    if (fs.existsSync(base + ext)) return true;
+  }
+
+  // Try index files in directory
+  for (const ext of extensions) {
+    if (fs.existsSync(path.join(base, `index${ext}`))) return true;
+  }
+
+  return false;
 }
 
 // ---------------------------------------------------------------------------

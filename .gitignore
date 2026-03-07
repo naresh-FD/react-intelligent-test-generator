@@ -66,3 +66,5 @@ __tests__/
 *.zip
 .claude
 
+.vscode/settings.json
+.vscode/settings.json

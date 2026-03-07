@@ -7,6 +7,14 @@ export type FrameworkMode = 'auto' | 'jest' | 'vitest';
 export type GenerationKind = 'components' | 'hooks' | 'utils';
 export type GenerationMode = 'git-unstaged' | 'changed-since' | 'all' | 'file';
 
+/**
+ * Controls behavior when a test file already exists for a source file.
+ * - 'merge':   Preserve existing tests, append only missing generated blocks (default).
+ * - 'replace': Overwrite the entire test file with a fresh generation.
+ * - 'skip':    Do not touch existing test files at all.
+ */
+export type ExistingTestStrategy = 'merge' | 'replace' | 'skip';
+
 // ---------------------------------------------------------------------------
 // Test output location configuration
 // ---------------------------------------------------------------------------
@@ -90,6 +98,7 @@ export interface TestgenDefaults {
   generateFor: GenerationKind[];
   mode: GenerationMode;
   testOutput?: TestOutputConfig;
+  existingTestStrategy: ExistingTestStrategy;
 }
 
 export interface TestgenPackageConfig {
@@ -102,6 +111,7 @@ export interface TestgenPackageConfig {
   generateFor?: GenerationKind[];
   mode?: GenerationMode;
   testOutput?: TestOutputConfig;
+  existingTestStrategy?: ExistingTestStrategy;
 }
 
 export interface TestgenConfig {
@@ -117,6 +127,7 @@ const DEFAULTS: TestgenDefaults = {
   renderHelper: 'auto',
   generateFor: ['components', 'hooks', 'utils'],
   mode: 'git-unstaged',
+  existingTestStrategy: 'merge',
 };
 
 export function loadConfig(rootDir: string = ROOT_DIR, explicitConfigPath?: string): TestgenConfig {
@@ -147,6 +158,7 @@ export function loadConfig(rootDir: string = ROOT_DIR, explicitConfigPath?: stri
     renderHelper: pkg.renderHelper ?? defaults.renderHelper,
     generateFor: pkg.generateFor ?? defaults.generateFor,
     mode: pkg.mode ?? defaults.mode,
+    existingTestStrategy: pkg.existingTestStrategy ?? defaults.existingTestStrategy,
   }));
 
   return {
@@ -174,6 +186,7 @@ function defaultSinglePackageConfig(_rootDir: string): TestgenConfig {
         renderHelper: DEFAULTS.renderHelper,
         generateFor: DEFAULTS.generateFor,
         mode: DEFAULTS.mode,
+        existingTestStrategy: DEFAULTS.existingTestStrategy,
       },
     ],
   };

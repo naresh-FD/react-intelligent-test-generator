@@ -1,9 +1,34 @@
 /**
- * Self-Heal Engine — deterministic fix rules that patch generated test files
- * based on error messages from Jest runs.
+ * Self-Heal Engine — deterministic, targeted repair for generated test files.
  *
- * Each rule pattern-matches on the error message and applies a code
- * transformation. Rules are tried in order; the first match wins.
+ * Purpose:
+ *   Apply minimal, safe patches to fix known deterministic failures from Jest
+ *   runs. Each rule pattern-matches on the error message and applies a
+ *   localised code transformation. Rules are tried in order; the first match wins.
+ *
+ * Philosophy:
+ *   - Self-heal exists to fix **real** issues (missing provider, missing mock,
+ *     wrong import style) — never to hide bad generation.
+ *   - `@ts-nocheck` and blanket TypeScript suppression are **forbidden**.
+ *   - File deletion is **forbidden** — failing tests are preserved so developers
+ *     can inspect and manually fix.
+ *   - Correctness is always preferred over silence. A failing test with useful
+ *     diagnostics is more valuable than a passing empty test.
+ *
+ * Allowed fix categories:
+ *   - Missing provider wrapper (Router, QueryClient, Redux, etc.)
+ *   - Missing mock for a real, resolvable dependency
+ *   - Wrong import style (default vs named)
+ *   - Unsafe selector strategy (getBy → queryBy)
+ *   - Missing global polyfill (fetch, crypto, localStorage)
+ *   - Module format mismatch (ESM-only packages)
+ *
+ * Forbidden actions:
+ *   - `// @ts-nocheck`
+ *   - `// @ts-ignore` (blanket)
+ *   - Deleting the test file
+ *   - Replacing a real test with an empty smoke test (unless explicit fallback)
+ *   - Swallowing all assertions
  */
 
 export interface FixRule {
@@ -58,7 +83,7 @@ export const FIX_RULES: FixRule[] = [
       // Only match render( or render(\n  followed by < (not arbitrary JSX)
       result = result.replace(
         /render\(\s*(<[A-Z]\w*[^]*?\/>\s*)\)/g,
-        (_, jsx) => `render(<MemoryRouter>${jsx.trim()}</MemoryRouter>)`
+        (_match: string, jsx: string) => `render(<MemoryRouter>${jsx.trim()}</MemoryRouter>)`
       );
       return result;
     },
@@ -78,7 +103,7 @@ export const FIX_RULES: FixRule[] = [
       // Wrap render(<Component ... />) → render(<QueryClientProvider client={testQueryClient}><Component ... /></QueryClientProvider>)
       result = result.replace(
         /render\(\s*(<[A-Z]\w*[^]*?\/>\s*)\)/g,
-        (_, jsx) => `render(<QueryClientProvider client={testQueryClient}>${jsx.trim()}</QueryClientProvider>)`
+        (_match: string, jsx: string) => `render(<QueryClientProvider client={testQueryClient}>${jsx.trim()}</QueryClientProvider>)`
       );
       return result;
     },
@@ -115,7 +140,7 @@ export const FIX_RULES: FixRule[] = [
       // Add waitFor to existing @testing-library/react import
       let result = content.replace(
         /import\s*\{([^}]+)\}\s*from\s*["']@testing-library\/react["']/,
-        (_, imports) => `import { ${imports.trim()}, waitFor } from "@testing-library/react"`
+        (_match: string, imports: string) => `import { ${imports.trim()}, waitFor } from "@testing-library/react"`
       );
       // If no existing import was found, add a new one
       if (!result.includes('waitFor')) {
@@ -252,7 +277,7 @@ const testStore = configureStore({ reducer: (state = {}) => state });`;
       // Wrap render(<Component ... />) → render(<ReduxProvider store={testStore}><Component ... /></ReduxProvider>)
       result = result.replace(
         /render\(\s*(<[A-Z]\w*[^]*?\/>\s*)\)/g,
-        (_, jsx) => `render(<ReduxProvider store={testStore}>${jsx.trim()}</ReduxProvider>)`
+        (_match: string, jsx: string) => `render(<ReduxProvider store={testStore}>${jsx.trim()}</ReduxProvider>)`
       );
       return result;
     },
@@ -325,7 +350,7 @@ const testStore = configureStore({ reducer: (state = {}) => state });`;
         // Add Suspense to existing React import
         result = result.replace(
           /import\s+(React(?:\s*,\s*\{([^}]*)\})?)\s+from\s*["']react["']/,
-          (_, _full, namedImports) => {
+          (_match: string, _full: string, namedImports: string | undefined) => {
             if (namedImports) {
               return `import React, { ${namedImports.trim()}, Suspense } from "react"`;
             }
@@ -338,7 +363,7 @@ const testStore = configureStore({ reducer: (state = {}) => state });`;
       // Wrap render(<Component ... />) → render(<Suspense fallback={<div />}><Component ... /></Suspense>)
       result = result.replace(
         /render\(\s*(<[A-Z]\w*[^]*?\/>\s*)\)/g,
-        (_, jsx) => `render(<Suspense fallback={<div />}>${jsx.trim()}</Suspense>)`
+        (_match: string, jsx: string) => `render(<Suspense fallback={<div />}>${jsx.trim()}</Suspense>)`
       );
       return result;
     },
@@ -360,15 +385,15 @@ const testStore = configureStore({ reducer: (state = {}) => state });`;
   },
 
   // Rule 22: TypeScript diagnostic errors from ts-jest
+  // NOTE: @ts-nocheck suppression is forbidden. Instead, return null so the
+  // generator can attempt a targeted fix or the developer can inspect the error.
   {
     errorPattern: /TS\d{4}:|Type.*is not assignable|Property.*does not exist on type/i,
-    description: 'Add @ts-nocheck to suppress type errors',
-    apply(content) {
-      if (content.includes('@ts-nocheck')) return null;
-      return content.replace(
-        '/** @generated by react-testgen',
-        '// @ts-nocheck\n/** @generated by react-testgen'
-      );
+    description: 'Skip — TS errors must be fixed at source, not suppressed',
+    apply(_content: string) {
+      // Intentionally return null: blanket @ts-nocheck is forbidden.
+      // Let the next self-heal tier or the developer address the root cause.
+      return null;
     },
   },
 
@@ -418,7 +443,7 @@ const testStore = configureStore({ reducer: (state = {}) => state });`;
  *
  * @param attempt - Current retry attempt (1-5). Higher = more aggressive.
  *   Attempt 1-2: Apply specific matching rules
- *   Attempt 3: Add @ts-nocheck + try-catch wrapping
+ *   Attempt 3: try-catch wrapping (no blanket suppression)
  *   Attempt 4+: Simplify test to bare minimum
  */
 export function applyFixRules(
@@ -438,23 +463,12 @@ export function applyFixRules(
     }
   }
 
-  // Tier 2 (attempt >= 3): Add @ts-nocheck + try-catch wrapping
+  // Tier 2 (attempt >= 3): try-catch wrapping (no @ts-nocheck — blanket suppression is forbidden)
   if (attempt >= 3) {
-    let result = testContent;
-    if (!result.includes('@ts-nocheck')) {
-      result = result.replace(
-        '/** @generated by react-testgen',
-        '// @ts-nocheck\n/** @generated by react-testgen'
-      );
-    }
-    const wrapped = applyTryCatchWrap(result);
+    const wrapped = applyTryCatchWrap(testContent);
     if (wrapped && wrapped !== testContent) {
-      console.log('    Self-heal: escalated to @ts-nocheck + try-catch wrap');
+      console.log('    Self-heal: escalated to try-catch wrap');
       return wrapped;
-    }
-    if (result !== testContent) {
-      console.log('    Self-heal: added @ts-nocheck');
-      return result;
     }
   }
 
@@ -501,12 +515,11 @@ function simplifyTestFile(content: string): string | null {
 
   if (!renderHelper) return null;
 
-  // Strip existing @ts-nocheck from preamble to avoid duplication
+  // Strip existing @ts-nocheck from preamble (blanket suppression is forbidden)
   const cleanPreamble = preamble.replace(/\/\/\s*@ts-nocheck\s*\n?/g, '');
 
-  // Build simplified test with just one safe render
-  return `// @ts-nocheck
-${cleanPreamble}describe("${compName}", () => {
+  // Build simplified test with just one safe render (no @ts-nocheck)
+  return `${cleanPreamble}describe("${compName}", () => {
   ${renderHelper}
 
   it("renders without crashing", () => {
@@ -573,7 +586,7 @@ function wrapRenderUIInTryCatch(content: string): string {
   // Simple approach: wrap the entire `const { container } = renderUI()` pattern
   result = result.replace(
     /(\s+)const \{ container \} = renderUI\(([^)]*)\);(\s+)expect\(container\)\.toBeInTheDocument\(\);/g,
-    (_, indent, args, _sep) => {
+    (_match: string, indent: string, args: string, _sep: string) => {
       return [
         `${indent}let container: HTMLElement;`,
         `${indent}try {`,

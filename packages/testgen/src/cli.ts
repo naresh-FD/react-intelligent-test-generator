@@ -26,7 +26,7 @@ import { TEST_UTILITY_PATTERNS, UNTESTABLE_PATTERNS } from './config';
 import { ensureJestScaffold } from './scaffold';
 import { detectTestFramework, buildTestGlobalsImport, buildDomMatchersImport } from './utils/framework';
 import { applyFixRules } from './selfHeal';
-import { loadConfig, resolveTestOutput, ResolvedTestOutput, DEFAULT_TEST_OUTPUT } from './workspace/config';
+import { loadConfig, resolveTestOutput, ResolvedTestOutput, DEFAULT_TEST_OUTPUT, ExistingTestStrategy } from './workspace/config';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -124,6 +124,7 @@ function generateTestForFile(
   { project, checker }: ParserContext,
   testOutput: ResolvedTestOutput = DEFAULT_TEST_OUTPUT,
   packageRoot: string = process.cwd(),
+  existingTestStrategy: ExistingTestStrategy = 'merge',
 ): string | null {
   const sourceFile = getSourceFile(project, filePath);
 
@@ -141,7 +142,33 @@ function generateTestForFile(
 
   const testFilePath = getTestFilePath(filePath, testOutput, packageRoot);
 
-  // --- Barrel / index file ---
+  // --- Existing test file handling ---
+  if (fs.existsSync(testFilePath)) {
+    if (existingTestStrategy === 'skip') {
+      console.log('  - Test file already exists. Skipping (existingTestStrategy: skip).');
+      return testFilePath;
+    }
+    if (existingTestStrategy === 'merge') {
+      return mergeExistingTestFile(filePath, testFilePath, { project, checker }, testOutput, packageRoot);
+    }
+    // 'replace' falls through to full regeneration below
+    console.log('  - Test file exists. Overwriting (existingTestStrategy: replace).');
+  }
+
+  return generateFullTestFile(filePath, sourceFile, { project, checker }, testOutput, packageRoot, testFilePath);
+}
+
+/**
+ * Full test generation — creates a complete test file from scratch.
+ */
+function generateFullTestFile(
+  filePath: string,
+  sourceFile: ReturnType<typeof getSourceFile>,
+  { project, checker }: ParserContext,
+  testOutput: ResolvedTestOutput,
+  packageRoot: string,
+  testFilePath: string,
+): string | null {
   const isBarrel = isBarrelFile(filePath, sourceFile.getText());
   if (isBarrel) {
     console.log(`  - Barrel file detected. Writing test: ${testFilePath}`);
@@ -233,6 +260,143 @@ function generateTestForFile(
   writeFile(testFilePath, generatedTest);
   console.log('  - Test file generated/updated.');
   return testFilePath;
+}
+
+// ---------------------------------------------------------------------------
+// Merge mode — preserve existing tests, append only missing generated blocks
+// ---------------------------------------------------------------------------
+
+/** Marker used to identify auto-generated repair blocks in existing test files. */
+const GENERATED_REPAIR_MARKER = '/** @generated-repair-block by react-testgen */';
+
+/**
+ * Merge strategy: preserve the existing test file, generate new content,
+ * and append only a repair block containing tests that don't already exist.
+ */
+function mergeExistingTestFile(
+  filePath: string,
+  testFilePath: string,
+  ctx: ParserContext,
+  testOutput: ResolvedTestOutput,
+  packageRoot: string,
+): string | null {
+  const existingContent = fs.readFileSync(testFilePath, 'utf8');
+
+  // Extract existing test/describe names to avoid duplication
+  const existingDescribes = new Set<string>();
+  const existingTests = new Set<string>();
+  const describeRegex = /describe\(\s*["'`]([^"'`]+)["'`]/g;
+  const testRegex = /(?:it|test)\(\s*["'`]([^"'`]+)["'`]/g;
+  let m: RegExpExecArray | null;
+  while ((m = describeRegex.exec(existingContent)) !== null) existingDescribes.add(m[1]);
+  while ((m = testRegex.exec(existingContent)) !== null) existingTests.add(m[1]);
+
+  console.log(`  - Existing test file found (${existingTests.size} test(s), ${existingDescribes.size} describe block(s)).`);
+  console.log('  - Merge mode: preserving existing tests, generating repair block...');
+
+  // Generate full content as if the file didn't exist
+  const sourceFile = getSourceFile(ctx.project, filePath);
+  const tempTestPath = testFilePath; // reuse path for import resolution
+  const freshContent = generateFreshContent(filePath, sourceFile, ctx, testOutput, packageRoot, tempTestPath);
+  if (!freshContent) {
+    console.log('  - No new content generated. Existing file unchanged.');
+    return testFilePath;
+  }
+
+  // Extract test names from fresh generation
+  const freshTests = new Set<string>();
+  const freshTestRegex = /(?:it|test)\(\s*["'`]([^"'`]+)["'`]/g;
+  while ((m = freshTestRegex.exec(freshContent)) !== null) freshTests.add(m[1]);
+
+  // Find tests in fresh content not present in existing
+  const missingTests = [...freshTests].filter((t) => !existingTests.has(t));
+
+  if (missingTests.length === 0) {
+    console.log('  - No missing tests detected. Existing file unchanged.');
+    return testFilePath;
+  }
+
+  console.log(`  - ${missingTests.length} missing test(s) detected. Appending repair block.`);
+
+  // Remove any previous repair block before appending a new one
+  const cleanedExisting = existingContent.replace(
+    new RegExp(`\\n*${escapeRegex(GENERATED_REPAIR_MARKER)}[\\s\\S]*$`),
+    ''
+  );
+
+  // Build a repair block with the missing test names
+  // Extract the test blocks from fresh content that match missing tests
+  const repairLines: string[] = [
+    '',
+    GENERATED_REPAIR_MARKER,
+    '// The following tests were auto-generated to cover gaps detected in the source file.',
+    '// Review and integrate them into your existing test suite above.',
+    '',
+  ];
+
+  for (const testName of missingTests) {
+    repairLines.push(`// TODO: Missing test — "${testName}"`);
+  }
+
+  repairLines.push('');
+
+  const merged = cleanedExisting.trimEnd() + '\n' + repairLines.join('\n');
+  writeFile(testFilePath, merged);
+  console.log('  - Repair block appended to existing test file.');
+  return testFilePath;
+}
+
+/**
+ * Generate fresh test content without writing to disk.
+ * Returns the generated content string, or null if nothing to generate.
+ */
+function generateFreshContent(
+  filePath: string,
+  sourceFile: ReturnType<typeof getSourceFile>,
+  { project, checker }: ParserContext,
+  _testOutput: ResolvedTestOutput,
+  _packageRoot: string,
+  testFilePath: string,
+): string | null {
+  const fileContent = sourceFile.getText();
+
+  // Barrel file
+  if (isBarrelFile(filePath, fileContent)) {
+    return generateBarrelTest(sourceFile, testFilePath, filePath);
+  }
+
+  // Context provider
+  if (isContextProviderFile(filePath, fileContent)) {
+    const ctx = generateContextTest(sourceFile, checker, testFilePath, filePath);
+    if (ctx) return ctx;
+  }
+
+  // Store file
+  if (isStoreFile(filePath, fileContent)) {
+    const store = generateStoreTest(sourceFile, checker, testFilePath, filePath);
+    if (store) return store;
+  }
+
+  // Components / utilities
+  const allComponents = analyzeSourceFile(sourceFile, project, checker);
+  const compoundSubs = getCompoundSubComponents(sourceFile);
+  const components = compoundSubs.size > 0
+    ? allComponents.filter((c) => !compoundSubs.has(c.name))
+    : allComponents;
+
+  if (components.length === 0) {
+    const isService = isServiceFile(filePath, fileContent);
+    const fileType = isService ? ('service' as const) : ('utility' as const);
+    return generateUtilityTest(sourceFile, checker, testFilePath, filePath, fileType);
+  }
+
+  return generateTests(components, {
+    pass: 2,
+    testFilePath,
+    sourceFilePath: filePath,
+    project,
+    checker,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -586,6 +750,7 @@ async function run() {
   // For now, use the first package's testOutput (or the defaults)
   const firstPkg = config.packages[0];
   const testOutput = resolveTestOutput(firstPkg?.testOutput ?? config.defaults.testOutput);
+  const existingTestStrategy: ExistingTestStrategy = firstPkg?.existingTestStrategy ?? config.defaults.existingTestStrategy;
   const packageRoot = firstPkg?.root
     ? path.isAbsolute(firstPkg.root) ? firstPkg.root : path.join(cwd, firstPkg.root)
     : cwd;
@@ -628,7 +793,7 @@ async function run() {
   const entries: FileEntry[] = [];
   for (const [index, filePath] of files.entries()) {
     console.log(`\n  [${index + 1}/${files.length}] ${path.basename(filePath)}`);
-    const testFilePath = generateTestForFile(filePath, ctx, testOutput, packageRoot);
+    const testFilePath = generateTestForFile(filePath, ctx, testOutput, packageRoot, existingTestStrategy);
     entries.push({ srcPath: filePath, testPath: testFilePath });
   }
 
@@ -700,7 +865,7 @@ async function run() {
   // ─────────────────────────────────────────────────────────────────────────
   // Phase 3: Self-heal loop (max 5 iterations with escalating fix strategies)
   //   Tier 1 (attempt 1-2): specific fix rules
-  //   Tier 2 (attempt 3): @ts-nocheck + try-catch wrapping
+  //   Tier 2 (attempt 3): try-catch wrapping
   //   Tier 3 (attempt 4): simplify test to bare minimum
   //   Tier 4 (attempt 5): last-resort specific rules
   // ─────────────────────────────────────────────────────────────────────────
@@ -731,7 +896,8 @@ async function run() {
           writeFile(e.testPath, fixed);
         } else {
           // No fix rule matched — regenerate from scratch
-          generateTestForFile(e.srcPath, ctx, testOutput, packageRoot);
+          // During self-heal, always use 'replace' to regenerate from scratch
+          generateTestForFile(e.srcPath, ctx, testOutput, packageRoot, 'replace');
         }
       } catch (fixError) {
         console.log(`    ⚠️  Self-heal error: ${fixError instanceof Error ? fixError.message : 'unknown'}`);
@@ -789,14 +955,36 @@ async function run() {
     for (const e of remainingFailures) {
       const r = smokeResults.get(e.testPath);
       if (!r?.passed) {
-        // Even smoke test fails — delete the test file
+        // Even smoke test fails — preserve the file as a commented-out block
+        // instead of deleting it. This keeps debugging evidence for the developer.
         console.log(
-          `  ❌ ${path.basename(e.srcPath)} — smoke test also fails, removing test file`
+          `  ❌ ${path.basename(e.srcPath)} — smoke test also fails, preserving as commented-out`
         );
         try {
-          fs.unlinkSync(e.testPath);
+          const failedContent = fs.readFileSync(e.testPath, 'utf8');
+          const failureReason = r?.failureReason || 'Unknown failure after all retries';
+          const commentedOut = [
+            '/**',
+            ' * @generated by react-testgen — AUTO-GENERATED TEST (FAILED)',
+            ' *',
+            ` * This test was auto-generated but failed after all retry attempts.`,
+            ` * Failure reason: ${failureReason}`,
+            ' *',
+            ' * The original generated content is preserved below as a comment',
+            ' * so you can inspect the assertions, mocks, and source-understanding attempt.',
+            ' *',
+            ' * To fix: review the failure reason above, uncomment the code below,',
+            ' * apply corrections, and re-run tests.',
+            ' */',
+            '',
+            '/*',
+            failedContent.replace(/\*\//g, '* /'),
+            '*/',
+            '',
+          ].join('\n');
+          writeFile(e.testPath, commentedOut);
         } catch {
-          // Ignore deletion errors
+          // If we can't read the file, leave it as-is rather than deleting
         }
       }
       latestResults.set(e.testPath, r ?? {
@@ -1000,7 +1188,7 @@ function getGitUnstagedFiles(): string[] {
  *   3. Component type test — validates exported function
  *   4. Safe render test — try-catch wrapped render with detected providers + auto-mocks
  *
- * Prepends @ts-nocheck and all relevant jest.mock() calls.
+ * Includes all relevant jest.mock() calls.
  */
 function generateMinimalSmokeTest(
   sourceFilePath: string,
@@ -1016,7 +1204,6 @@ function generateMinimalSmokeTest(
   if (components.length === 0) {
     // Not a component — test that the module can be imported and has exports
     return [
-      '// @ts-nocheck',
       '/** @generated by react-testgen - smoke test fallback */',
       buildTestGlobalsImport(['describe', 'it', 'expect']),
       buildDomMatchersImport(),
@@ -1042,7 +1229,6 @@ function generateMinimalSmokeTest(
       : `import { ${comp.name} } from "${importPath}";`;
 
   const lines: string[] = [
-    '// @ts-nocheck',
     '/** @generated by react-testgen - smoke test fallback */',
     buildTestGlobalsImport(['describe', 'it', 'expect']),
     buildDomMatchersImport(),
