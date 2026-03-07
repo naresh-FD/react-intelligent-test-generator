@@ -250,7 +250,7 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
  * 2. The boundary catches errors and renders fallback UI
  * 3. Console errors are suppressed during the error test
  */
-function buildErrorBoundaryTestBlocks(component: ComponentInfo): string[] {
+function buildErrorBoundaryTestBlocks(_component: ComponentInfo): string[] {
   const blocks: string[] = [];
 
   // Define a helper component that always throws

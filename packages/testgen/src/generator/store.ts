@@ -7,7 +7,7 @@
 
 import { Node, SourceFile, SyntaxKind, TypeChecker } from 'ts-morph';
 import { relativeImport } from '../utils/path';
-import { buildDomMatchersImport, buildTestGlobalsImport, mockFn } from '../utils/framework';
+import { buildTestGlobalsImport } from '../utils/framework';
 
 // ---------------------------------------------------------------------------
 // Public entry point
