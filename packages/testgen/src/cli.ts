@@ -27,6 +27,14 @@ import { ensureJestScaffold } from './scaffold';
 import { detectTestFramework, buildTestGlobalsImport, buildDomMatchersImport } from './utils/framework';
 import { applyFixRules } from './selfHeal';
 import { loadConfig, resolveTestOutput, ResolvedTestOutput, DEFAULT_TEST_OUTPUT, ExistingTestStrategy } from './workspace/config';
+import {
+  evaluateFile,
+  buildScanReport,
+  formatReportAsJson,
+  formatReportAsMarkdown,
+  printEligibilitySummary,
+  type FileEligibilityResult,
+} from './eligibility';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,6 +50,8 @@ interface CliOptions {
   maxRetries?: number;
   /** Minimum line-coverage % to consider a test file passing (default 50) */
   coverageThreshold?: number;
+  /** Write an eligibility scan report (json, markdown, or both) */
+  report?: 'json' | 'markdown' | 'both';
 }
 
 interface JestRunResult {
@@ -91,6 +101,16 @@ function parseArgs(argv: string[]): CliOptions {
   const thresholdIndex = argv.indexOf('--coverage-threshold');
   if (thresholdIndex >= 0 && argv[thresholdIndex + 1]) {
     options.coverageThreshold = Number.parseInt(argv[thresholdIndex + 1], 10) || 50;
+  }
+
+  const reportIndex = argv.indexOf('--report');
+  if (reportIndex >= 0 && argv[reportIndex + 1]) {
+    const reportValue = argv[reportIndex + 1];
+    if (reportValue === 'json' || reportValue === 'markdown' || reportValue === 'both') {
+      options.report = reportValue;
+    } else {
+      options.report = 'both';
+    }
   }
 
   return options;
@@ -719,8 +739,8 @@ function printSummary(rows: SummaryRow[]): void {
     console.log(
       `${r.file.padEnd(fileW)}  ${icon} ${r.status.padEnd(12)} ${cov}  ${tests}  ${tries}`
     );
-    // Show failure reason on the next line for failed tests
-    if (r.status === 'fail' && r.failureReason) {
+    // Show failure reason on the next line for failed or skipped tests
+    if ((r.status === 'fail' || r.status === 'skipped') && r.failureReason) {
       console.log(`${''.padEnd(fileW)}     └─ ${r.failureReason}`);
     }
 
@@ -781,7 +801,60 @@ async function run() {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Phase 1: Generate ALL test files (fast — no Jest launches here)
+  // Phase 0: Eligibility scan — classify every file before generation
+  // ─────────────────────────────────────────────────────────────────────────
+  console.log(`\n🔍  Running eligibility scan on ${files.length} file(s)...`);
+
+  const eligibilityResults: FileEligibilityResult[] = [];
+  for (const filePath of files) {
+    try {
+      const sourceFile = getSourceFile(ctx.project, filePath);
+      const result = evaluateFile(sourceFile, filePath, testOutput, packageRoot);
+      eligibilityResults.push(result);
+    } catch {
+      // If AST parsing fails, classify as manual-review
+      eligibilityResults.push({
+        filePath,
+        fileKind: 'unknown',
+        action: 'manual-review',
+        confidence: 0,
+        testabilityScore: 0,
+        complexityScore: 100,
+        reasons: ['Failed to parse file for eligibility analysis'],
+        detectedSignals: ['parse-error'],
+      });
+    }
+  }
+
+  // Print eligibility summary
+  printEligibilitySummary(eligibilityResults, packageRoot);
+
+  // Write report files if requested
+  if (args.report) {
+    const scanReport = buildScanReport(eligibilityResults, packageRoot);
+    const reportDir = path.join(cwd, '.testgen-results');
+    fs.mkdirSync(reportDir, { recursive: true });
+
+    if (args.report === 'json' || args.report === 'both') {
+      const jsonPath = path.join(reportDir, 'eligibility-report.json');
+      fs.writeFileSync(jsonPath, formatReportAsJson(scanReport), 'utf8');
+      console.log(`\n📊 Eligibility report (JSON): ${jsonPath}`);
+    }
+    if (args.report === 'markdown' || args.report === 'both') {
+      const mdPath = path.join(reportDir, 'eligibility-report.md');
+      fs.writeFileSync(mdPath, formatReportAsMarkdown(scanReport, packageRoot), 'utf8');
+      console.log(`📊 Eligibility report (Markdown): ${mdPath}`);
+    }
+  }
+
+  // Build a lookup map from filePath → eligibility result
+  const eligibilityMap = new Map<string, FileEligibilityResult>();
+  for (const r of eligibilityResults) {
+    eligibilityMap.set(r.filePath, r);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Phase 1: Generate test files guided by eligibility results
   // ─────────────────────────────────────────────────────────────────────────
   console.log(`\n📝  Generating test files...`);
 
@@ -792,8 +865,30 @@ async function run() {
 
   const entries: FileEntry[] = [];
   for (const [index, filePath] of files.entries()) {
-    console.log(`\n  [${index + 1}/${files.length}] ${path.basename(filePath)}`);
-    const testFilePath = generateTestForFile(filePath, ctx, testOutput, packageRoot, existingTestStrategy);
+    const eligibility = eligibilityMap.get(filePath);
+    const basename = path.basename(filePath);
+    console.log(`\n  [${index + 1}/${files.length}] ${basename}`);
+
+    // --- Eligibility-driven skip/manual-review ---
+    if (eligibility) {
+      if (eligibility.action === 'skip-safe') {
+        console.log(`  - SKIP: ${eligibility.reasons[0] ?? 'safe to skip'}`);
+        entries.push({ srcPath: filePath, testPath: null });
+        continue;
+      }
+      if (eligibility.action === 'manual-review') {
+        console.log(`  - MANUAL REVIEW: ${eligibility.reasons[0] ?? 'needs human review'}`);
+        entries.push({ srcPath: filePath, testPath: null });
+        continue;
+      }
+      // Log the determined action
+      console.log(`  - Eligibility: ${eligibility.action} (${eligibility.fileKind}, confidence: ${eligibility.confidence})`);
+    }
+
+    // Determine existing-test strategy override from eligibility
+    const effectiveStrategy = eligibility?.action === 'merge-with-existing-test' ? 'merge' : existingTestStrategy;
+
+    const testFilePath = generateTestForFile(filePath, ctx, testOutput, packageRoot, effectiveStrategy);
     entries.push({ srcPath: filePath, testPath: testFilePath });
   }
 
@@ -817,14 +912,16 @@ async function run() {
 
   const summary: SummaryRow[] = [];
 
-  // Add skipped files to summary
+  // Add skipped files to summary (with eligibility reason)
   for (const e of skipped) {
+    const elig = eligibilityMap.get(e.srcPath);
     summary.push({
       file: path.basename(e.srcPath),
       status: 'skipped',
       coverage: 0,
       attempts: 0,
       numTests: 0,
+      failureReason: elig?.reasons[0],
     });
   }
 
