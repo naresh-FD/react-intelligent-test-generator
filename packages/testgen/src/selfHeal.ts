@@ -31,6 +31,9 @@
  *   - Swallowing all assertions
  */
 
+import { FailureContext, parseFailureContext } from './failureContext';
+import { buildDomMatchersImport, mockGlobalName, mockModuleFn } from './utils/framework';
+
 export interface FixRule {
   /** Pattern matching the error message */
   errorPattern: RegExp;
@@ -530,8 +533,15 @@ export function applyFixRules(
   testContent: string,
   errorMessage: string,
   sourceFilePath: string,
-  attempt: number = 1
+  attempt: number = 1,
+  failureContext: FailureContext = parseFailureContext(errorMessage)
 ): string | null {
+  const targeted = applyTargetedRepair(testContent, failureContext, sourceFilePath);
+  if (targeted && targeted !== testContent) {
+    console.log(`    Self-heal: applied targeted repair (${failureContext.kind})`);
+    return targeted;
+  }
+
   // Tier 1: Apply specific matching rules
   for (const rule of FIX_RULES) {
     if (rule.errorPattern.test(errorMessage)) {
@@ -552,8 +562,8 @@ export function applyFixRules(
     }
   }
 
-  // Tier 3 (attempt >= 4): Simplify test to bare minimum
-  if (attempt >= 4) {
+  // Tier 3 (attempt >= 5): Simplify test to bare minimum
+  if (attempt >= 5) {
     const simplified = simplifyTestFile(testContent);
     if (simplified && simplified !== testContent) {
       console.log('    Self-heal: escalated to simplified test');
@@ -562,6 +572,81 @@ export function applyFixRules(
   }
 
   return null;
+}
+
+
+function applyTargetedRepair(
+  content: string,
+  context: FailureContext,
+  _sourceFilePath: string
+): string | null {
+  if (context.kind === 'type-mismatch') {
+    return ensureTypeSafeRenderProps(content);
+  }
+
+  if (context.kind === 'provider-required') {
+    if (context.providerHint === 'router') {
+      return applyRouterProviderFix(content);
+    }
+    if (context.providerHint === 'query-client') {
+      return applyQueryProviderFix(content);
+    }
+    return applyTryCatchWrap(content);
+  }
+
+  if (context.kind === 'hook-shape') {
+    return applyHookShapeFix(content, context.missingProperty);
+  }
+
+  if (context.kind === 'matcher') {
+    return ensureDomMatchersImport(content);
+  }
+
+  if (context.kind === 'missing-module' && context.moduleName?.startsWith('.')) {
+    return normalizeBrokenRelativeImports(content);
+  }
+
+  return null;
+}
+
+function ensureTypeSafeRenderProps(content: string): string | null {
+  if (!content.includes('const defaultProps')) return null;
+  const narrowed = content.replace(
+    /const defaultProps\s*=\s*\{([\s\S]*?)\};/m,
+    (_m, body: string) => `const defaultProps = {${body}
+} as const;`
+  );
+  return narrowed === content ? null : narrowed;
+}
+
+function applyRouterProviderFix(content: string): string | null {
+  const rule = FIX_RULES.find((r) => r.description === 'Add MemoryRouter wrapper');
+  return rule ? rule.apply(content, '', '') : null;
+}
+
+function applyQueryProviderFix(content: string): string | null {
+  const rule = FIX_RULES.find((r) => r.description === 'Add QueryClientProvider wrapper');
+  return rule ? rule.apply(content, '', '') : null;
+}
+
+function applyHookShapeFix(content: string, missingProperty?: string): string | null {
+  const importMatch = content.match(/import\s*\{[^}]*\b(use[A-Z]\w+)\b[^}]*\}\s*from\s*["']([^"']+)["']/);
+  if (!importMatch) return null;
+  const [, hookName, hookPath] = importMatch;
+  if (content.includes(`mock("${hookPath}"`) || content.includes(`mock('${hookPath}'`)) return null;
+  const property = missingProperty ?? 'data';
+  const mockLine = `${mockModuleFn()}("${hookPath}", () => ({ ${hookName}: ${mockGlobalName()}.fn(() => ({ ${property}: [] })) }));`;
+  return addLineAfterImports(content, mockLine);
+}
+
+function ensureDomMatchersImport(content: string): string | null {
+  if (content.includes('@testing-library/jest-dom')) return null;
+  return addLineAfterImports(content, buildDomMatchersImport());
+}
+
+function normalizeBrokenRelativeImports(content: string): string | null {
+  const updated = content.replace(/from\s+["']\.\/\.\.\//g, 'from "../');
+  return updated === content ? null : updated;
 }
 
 // ---------------------------------------------------------------------------
