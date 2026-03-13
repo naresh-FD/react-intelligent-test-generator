@@ -877,9 +877,10 @@ async function run() {
         continue;
       }
       if (eligibility.action === 'manual-review') {
-        console.log(`  - MANUAL REVIEW: ${eligibility.reasons[0] ?? 'needs human review'}`);
-        entries.push({ srcPath: filePath, testPath: null });
-        continue;
+        // Instead of skipping entirely, generate a minimal safety test
+        // This ensures every testable file gets at least an import/export test
+        console.log(`  - MANUAL REVIEW → generating minimal test: ${eligibility.reasons[0] ?? 'needs human review'}`);
+        // Fall through to generation with minimal strategy
       }
       // Log the determined action
       console.log(`  - Eligibility: ${eligibility.action} (${eligibility.fileKind}, confidence: ${eligibility.confidence})`);
@@ -1380,12 +1381,51 @@ function generateMinimalSmokeTest(
   lines.push('  });');
   lines.push('');
 
+  // Build default props for required props to prevent crashes
+  const requiredProps = comp.props.filter((p: { name: string; isRequired: boolean }) => p.isRequired);
+  if (requiredProps.length > 0) {
+    const propEntries = requiredProps.map((p: { name: string; type: string; isCallback: boolean; isBoolean: boolean }) => {
+      if (p.isCallback || /^(on|handle|set)[A-Z]/.test(p.name)) return `${p.name}: jest.fn()`;
+      if (p.isBoolean || p.type?.includes('boolean')) return `${p.name}: false`;
+      if (p.type?.includes('[]') || p.type?.includes('Array') || /^(items|data|list|rows|options|results|records|entries|transactions|tabs)$/i.test(p.name)) return `${p.name}: []`;
+      if (p.type?.includes('number')) return `${p.name}: 0`;
+      if (p.name === 'children') return `children: React.createElement("div")`;
+      return `${p.name}: "test"`;
+    });
+    lines.push(`  const defaultProps = { ${propEntries.join(', ')} };`);
+    lines.push('');
+  }
+
+  // Add mock for custom hooks to prevent undefined.map errors
+  for (const hook of comp.hooks) {
+    if (!hook.importSource || hook.importSource === 'react' || hook.importSource.includes('@testing-library')) continue;
+    if (hook.importSource.includes('react-router') || hook.importSource.includes('@tanstack') || hook.importSource.includes('react-redux')) continue;
+    if (hook.importSource.startsWith('.') || hook.importSource.startsWith('@/') || hook.importSource.startsWith('~/')) {
+      // Mock hooks from relative imports
+      if (!lines.some(l => l.includes(`jest.mock("${hook.importSource}"`))) {
+        const hookMockReturn = /^use(Get|Fetch|Load|Query)/i.test(hook.name)
+          ? `{ data: [], loading: false, error: null }`
+          : /^use(Mobile|Tablet|iPad|Desktop|FirstRender)/i.test(hook.name)
+          ? `false`
+          : /^use(Navigate|Navigation)/i.test(hook.name)
+          ? `jest.fn()`
+          : `{ data: [], loading: false, error: null, value: null }`;
+        // Insert mock before the describe block
+        const descIdx = lines.indexOf(`describe("${comp.name}", () => {`);
+        if (descIdx >= 0) {
+          lines.splice(descIdx, 0, `jest.mock("${hook.importSource}", () => ({ ...jest.requireActual("${hook.importSource}"), ${hook.name}: jest.fn(() => (${hookMockReturn})) }));`, '');
+        }
+      }
+    }
+  }
+
   // Test 3: Safe render test with all detected providers
   lines.push('  it("renders without crashing", () => {');
   lines.push('    try {');
 
   // Build JSX with provider wrapping (innermost → outermost)
-  let jsx = `<${comp.name} />`;
+  const propsSpread = requiredProps.length > 0 ? ` {...defaultProps}` : '';
+  let jsx = `<${comp.name}${propsSpread} />`;
   if (comp.usesRouter) {
     jsx = `<MemoryRouter>${jsx}</MemoryRouter>`;
   }

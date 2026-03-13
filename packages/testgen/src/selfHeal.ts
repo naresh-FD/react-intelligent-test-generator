@@ -165,7 +165,48 @@ export const FIX_RULES: FixRule[] = [
     },
   },
 
-  // Rule 8: TypeError on null/undefined (common in context-consuming components)
+  // Rule 8: TypeError on null/undefined accessing array methods (.map, .filter, etc.)
+  // This happens when context/hook returns undefined data that's iterated on.
+  {
+    errorPattern: /TypeError: Cannot read propert(y|ies) of (null|undefined) \(reading '(map|filter|find|reduce|forEach|flatMap|some|every|includes|length|slice|splice|sort|concat|push|pop|shift|entries|keys|values)'\)/i,
+    description: 'Mock hooks/context to return arrays instead of undefined',
+    apply(content, error) {
+      const methodMatch = error.match(/reading '(\w+)'/);
+      const method = methodMatch?.[1] ?? 'map';
+      const isArrayMethod = ['map', 'filter', 'find', 'reduce', 'forEach', 'flatMap', 'some', 'every', 'includes', 'length', 'slice', 'splice', 'sort', 'concat', 'push', 'pop', 'shift', 'entries', 'keys', 'values'].includes(method);
+
+      // Strategy 1: Find hook imports and mock them to return safe data
+      const hookImportRegex = /import\s*\{[^}]*\b(use[A-Z]\w+)\b[^}]*\}\s*from\s*["']([^"']+)["']/g;
+      let modified = content;
+      let applied = false;
+      let match;
+
+      while ((match = hookImportRegex.exec(content)) !== null) {
+        const [, hookName, hookPath] = match;
+        // Skip testing-library hooks and React built-in hooks
+        if (hookPath.includes('@testing-library') || hookPath === 'react') continue;
+        // Skip already-mocked hooks
+        if (content.includes(`jest.mock("${hookPath}"`) || content.includes(`jest.mock('${hookPath}'`)) continue;
+
+        // Build a smart mock that returns safe defaults for common hook patterns
+        const mockReturnValue = buildSmartHookMock(hookName);
+        const mockLine = `jest.mock("${hookPath}", () => ({ ${hookName}: jest.fn(() => (${mockReturnValue})) }));`;
+        modified = addLineAfterImports(modified, mockLine);
+        applied = true;
+        break; // Apply one at a time for targeted fixing
+      }
+
+      if (applied && modified !== content) return modified;
+
+      // Strategy 2: If no hook to mock, check for direct context usage and wrap in try-catch
+      if (isArrayMethod) {
+        return applyTryCatchWrap(content);
+      }
+      return null;
+    },
+  },
+
+  // Rule 8b: Generic TypeError on null/undefined (non-array methods)
   {
     errorPattern: /TypeError: Cannot read propert(y|ies) of (null|undefined)/i,
     description: 'Wrap component render in ErrorBoundary-style try-catch',
@@ -384,6 +425,45 @@ const testStore = configureStore({ reducer: (state = {}) => state });`;
     },
   },
 
+  // Rule 22a: Module mock returns undefined — enhance jest.mock with return values
+  {
+    errorPattern: /TypeError.*is not a function|TypeError.*is not iterable/i,
+    description: 'Enhance existing jest.mock with proper return values',
+    apply(content, error) {
+      // Look for bare jest.mock("module") without factory and add a factory
+      const bareMockRegex = /jest\.mock\(["']([^"']+)["']\);/g;
+      let modified = content;
+      let applied = false;
+      let match;
+
+      while ((match = bareMockRegex.exec(content)) !== null) {
+        const [fullMatch, modulePath] = match;
+        // Skip well-known mocks (these are usually fine bare)
+        if (/\b(axios|recharts|framer-motion|react-router|react-hook-form)\b/.test(modulePath)) continue;
+
+        // Replace bare mock with factory that auto-mocks with safe returns
+        const replacement = `jest.mock("${modulePath}", () => {
+  const actual = jest.requireActual("${modulePath}");
+  const mocked: Record<string, unknown> = {};
+  for (const key of Object.keys(actual)) {
+    if (typeof actual[key] === "function") {
+      mocked[key] = jest.fn(() => ({ data: [], loading: false, error: null }));
+    } else {
+      mocked[key] = actual[key];
+    }
+  }
+  return { __esModule: true, ...mocked };
+});`;
+        modified = modified.replace(fullMatch, replacement);
+        applied = true;
+        break; // One at a time
+      }
+
+      if (applied && modified !== content) return modified;
+      return null;
+    },
+  },
+
   // Rule 22: TypeScript diagnostic errors from ts-jest
   // NOTE: @ts-nocheck suppression is forbidden. Instead, return null so the
   // generator can attempt a targeted fix or the developer can inspect the error.
@@ -534,6 +614,55 @@ function simplifyTestFile(content: string): string | null {
   });
 });
 `;
+}
+
+/**
+ * Build a smart mock return value for a React hook based on naming conventions.
+ * Common patterns: useTransactions → { transactions: [], loading: false }
+ */
+function buildSmartHookMock(hookName: string): string {
+  // Extract the resource name from the hook (e.g., useGetTransactions → transactions)
+  const nameMatch = hookName.match(/^use(?:Get|Fetch|Load|Query)?([A-Z]\w*)/);
+  const resource = nameMatch ? nameMatch[1] : '';
+  const resourceLower = resource.charAt(0).toLowerCase() + resource.slice(1);
+
+  // Common data-fetching hook patterns
+  if (/^use(Get|Fetch|Load|Query)/i.test(hookName)) {
+    return `{ data: [], ${resourceLower}: [], loading: false, isLoading: false, error: null, isError: false, refetch: jest.fn(), isFetching: false }`;
+  }
+
+  // React Query style hooks
+  if (/Query$/i.test(hookName)) {
+    return `{ data: [], isLoading: false, isError: false, error: null, refetch: jest.fn(), isFetching: false, isSuccess: true }`;
+  }
+
+  // Context hooks (useAuth, useTheme, etc.)
+  if (/^use(Auth|User)/i.test(hookName)) {
+    return `{ user: { id: "1", name: "Test User", email: "test@test.com" }, isAuthenticated: true, login: jest.fn(), logout: jest.fn(), loading: false }`;
+  }
+
+  // Navigation hooks
+  if (/^use(Navigate|Navigation|Router|History)/i.test(hookName)) {
+    return `jest.fn()`;
+  }
+
+  // Media query / responsive hooks
+  if (/^use(Mobile|Tablet|iPad|Desktop|MediaQuery|Responsive|Breakpoint)/i.test(hookName)) {
+    return `false`;
+  }
+
+  // Search hooks
+  if (/^useSearch/i.test(hookName)) {
+    return `{ query: "", results: [], search: jest.fn(), clear: jest.fn(), loading: false }`;
+  }
+
+  // Feature flag hooks
+  if (/^use(Feature|Flag|Toggle)/i.test(hookName)) {
+    return `{ enabled: false, isEnabled: false }`;
+  }
+
+  // Generic hook — return an object with safe defaults
+  return `{ data: [], loading: false, isLoading: false, error: null, ${resourceLower || 'value'}: [], refetch: jest.fn() }`;
 }
 
 /** Insert a line after all import statements */

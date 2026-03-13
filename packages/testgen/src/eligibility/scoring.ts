@@ -30,16 +30,16 @@ const T_PEN_BROWSER_APIS = -5;
 const T_PEN_NO_EXPORTS = -20;
 const T_PEN_HIGH_IMPORT = -5;
 
-/** Complexity — factors that increase complexity */
-const C_IMPORT_WEIGHT = 2;            // per import beyond 5
-const C_SERVICE_IMPORT_WEIGHT = 8;    // per service import
-const C_ASYNC_WEIGHT = 5;             // per async function
-const C_ROUTER_WEIGHT = 10;
-const C_STATE_MGMT_WEIGHT = 10;       // zustand / redux / jotai
-const C_CONTEXT_WEIGHT = 8;
-const C_SIDE_EFFECT_WEIGHT = 8;
-const C_THIRD_PARTY_WEIGHT = 2;       // per third-party import beyond 3
-const C_LINE_COUNT_WEIGHT = 0.05;     // per line beyond 100
+/** Complexity — factors that increase complexity (tuned down to reduce over-skipping) */
+const C_IMPORT_WEIGHT = 1.5;          // per import beyond 8 (was 5)
+const C_SERVICE_IMPORT_WEIGHT = 5;    // per service import (was 8)
+const C_ASYNC_WEIGHT = 3;             // per async function (was 5)
+const C_ROUTER_WEIGHT = 6;            // (was 10)
+const C_STATE_MGMT_WEIGHT = 6;        // zustand / redux / jotai (was 10)
+const C_CONTEXT_WEIGHT = 5;           // (was 8)
+const C_SIDE_EFFECT_WEIGHT = 5;       // (was 8)
+const C_THIRD_PARTY_WEIGHT = 1.5;     // per third-party import beyond 5 (was 3)
+const C_LINE_COUNT_WEIGHT = 0.03;     // per line beyond 150 (was 100)
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -93,8 +93,8 @@ export function computeTestabilityScore(signals: FileSignals, fileKind: FileKind
 export function computeComplexityScore(signals: FileSignals): number {
     let score = 0;
 
-    // Import complexity
-    const excessImports = Math.max(signals.totalImportCount - 5, 0);
+    // Import complexity (raised threshold from 5 to 8 — enterprise codebases have more imports)
+    const excessImports = Math.max(signals.totalImportCount - 8, 0);
     score += excessImports * C_IMPORT_WEIGHT;
 
     // Service imports are heavy complexity
@@ -116,12 +116,12 @@ export function computeComplexityScore(signals: FileSignals): number {
     if (signals.usesDynamicImport) score += C_SIDE_EFFECT_WEIGHT;
     if (signals.hasTopLevelSideEffects) score += C_SIDE_EFFECT_WEIGHT;
 
-    // Third-party density
-    const excessThirdParty = Math.max(signals.thirdPartyImportCount - 3, 0);
+    // Third-party density (raised threshold from 3 to 5)
+    const excessThirdParty = Math.max(signals.thirdPartyImportCount - 5, 0);
     score += excessThirdParty * C_THIRD_PARTY_WEIGHT;
 
-    // File size
-    const excessLines = Math.max(signals.lineCount - 100, 0);
+    // File size (raised threshold from 100 to 150 lines)
+    const excessLines = Math.max(signals.lineCount - 150, 0);
     score += excessLines * C_LINE_COUNT_WEIGHT;
 
     return clamp(Math.round(score), 0, 100);

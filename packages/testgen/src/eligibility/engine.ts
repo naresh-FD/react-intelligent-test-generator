@@ -24,13 +24,13 @@ import { DEFAULT_TEST_OUTPUT } from '../workspace/config';
 // ---------------------------------------------------------------------------
 
 /** Complexity above this triggers manual-review instead of full generation */
-const COMPLEXITY_MANUAL_REVIEW_THRESHOLD = 65;
+const COMPLEXITY_MANUAL_REVIEW_THRESHOLD = 75;
 
 /** Complexity above this downgrades from full to minimal generation */
-const COMPLEXITY_MINIMAL_THRESHOLD = 45;
+const COMPLEXITY_MINIMAL_THRESHOLD = 55;
 
 /** Confidence below this triggers manual-review for testable files */
-const CONFIDENCE_MANUAL_REVIEW_THRESHOLD = 35;
+const CONFIDENCE_MANUAL_REVIEW_THRESHOLD = 25;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -139,6 +139,11 @@ function determineAction(
 
     // ── Step 3: Constants ─────────────────────────────────────────────────
     if (fileKind === 'constants') {
+        // Constants with exported functions should still get tests
+        if (signals.functionExportCount > 0) {
+            reasons.push('Constants module with exported functions — generating minimal test');
+            return { action: 'generate-minimal-test', reasons };
+        }
         reasons.push('Constant-only module — no executable logic');
         return { action: 'skip-safe', reasons };
     }
