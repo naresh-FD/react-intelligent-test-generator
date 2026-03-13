@@ -26,6 +26,7 @@ import { TEST_UTILITY_PATTERNS, UNTESTABLE_PATTERNS } from './config';
 import { ensureJestScaffold } from './scaffold';
 import { detectTestFramework, buildTestGlobalsImport, buildDomMatchersImport } from './utils/framework';
 import { applyFixRules } from './selfHeal';
+import { parseFailureContext } from './failureContext';
 import { loadConfig, resolveTestOutput, ResolvedTestOutput, DEFAULT_TEST_OUTPUT, ExistingTestStrategy } from './workspace/config';
 import {
   evaluateFile,
@@ -989,7 +990,7 @@ async function run() {
       try {
         // Try applying deterministic fix rules first (pass attempt for escalation tiers)
         const testContent = fs.readFileSync(e.testPath, 'utf8');
-        const fixed = applyFixRules(testContent, errorMsg, e.srcPath, attempt);
+        const fixed = applyFixRules(testContent, errorMsg, e.srcPath, attempt, parseFailureContext(errorMsg));
         if (fixed) {
           writeFile(e.testPath, fixed);
         } else {

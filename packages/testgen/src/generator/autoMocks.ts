@@ -6,6 +6,7 @@
  * Each mock provides a minimal working stub that prevents crashes.
  */
 import { ComponentInfo } from '../analyzer';
+import { mockFn, mockGlobalName, mockModuleFn } from '../utils/framework';
 
 /**
  * Generate jest.mock() calls for third-party libraries detected in the component.
@@ -31,7 +32,7 @@ export function buildAutoMocks(component: ComponentInfo): string[] {
 
   // Mock service/API imports with smart return values
   for (const svcImport of component.serviceImports) {
-    mocks.push(`jest.mock("${svcImport}");`);
+    mocks.push(`${mockModuleFn()}("${svcImport}");`);
   }
 
   // Mock custom hooks that consume context/data to return safe defaults
@@ -52,9 +53,8 @@ export function buildAutoMocks(component: ComponentInfo): string[] {
     // Only mock hooks from relative imports (project-internal hooks)
     if (hook.importSource.startsWith('.') || hook.importSource.startsWith('@/') || hook.importSource.startsWith('~/')) {
       const mockReturn = buildHookMockReturnValue(hook.name);
-      mocks.push(`jest.mock("${hook.importSource}", () => ({
-  ...jest.requireActual("${hook.importSource}"),
-  ${hook.name}: jest.fn(() => (${mockReturn})),
+      mocks.push(`${mockModuleFn()}("${hook.importSource}", () => ({
+  ${hook.name}: ${mockGlobalName()}.fn(() => (${mockReturn})),
 }));`);
       mockedSources.add(hook.importSource);
     }
@@ -79,23 +79,23 @@ function buildHookMockReturnValue(hookName: string): string {
 
   // Data-fetching hooks
   if (/^use(Get|Fetch|Load|Query)/i.test(hookName)) {
-    return `{ data: [], ${resourceLower}: [], loading: false, isLoading: false, error: null, isError: false, refetch: jest.fn(), isFetching: false }`;
+    return `{ data: [], ${resourceLower}: [], loading: false, isLoading: false, error: null, isError: false, refetch: ${mockFn()}, isFetching: false }`;
   }
 
   // Context consumer hooks (useAuth, useTheme, useNotification, etc.)
   if (/^useAuth/i.test(hookName)) {
-    return `{ user: { id: "1", name: "Test User" }, isAuthenticated: true, login: jest.fn(), logout: jest.fn(), token: "mock-token" }`;
+    return `{ user: { id: "1", name: "Test User" }, isAuthenticated: true, login: ${mockFn()}, logout: ${mockFn()}, token: "mock-token" }`;
   }
   if (/^use(Theme|Style)/i.test(hookName)) {
-    return `{ theme: "light", toggleTheme: jest.fn() }`;
+    return `{ theme: "light", toggleTheme: ${mockFn()} }`;
   }
   if (/^use(Notification|Toast|Alert|Snackbar)/i.test(hookName)) {
-    return `{ show: jest.fn(), hide: jest.fn(), notifications: [] }`;
+    return `{ show: ${mockFn()}, hide: ${mockFn()}, notifications: [] }`;
   }
 
   // Navigation/routing hooks
   if (/^use(Navigate|Navigation|Router|History)/i.test(hookName)) {
-    return `jest.fn()`;
+    return `${mockFn()}`;
   }
 
   // Media query / responsive hooks
@@ -105,7 +105,7 @@ function buildHookMockReturnValue(hookName: string): string {
 
   // Search hooks
   if (/^useSearch/i.test(hookName)) {
-    return `{ query: "", results: [], search: jest.fn(), clear: jest.fn(), loading: false }`;
+    return `{ query: "", results: [], search: ${mockFn()}, clear: ${mockFn()}, loading: false }`;
   }
 
   // Feature/flag hooks
@@ -115,11 +115,11 @@ function buildHookMockReturnValue(hookName: string): string {
 
   // MDP/API call hooks (from the intrafi project)
   if (/^use(MDP|API|Http)/i.test(hookName)) {
-    return `{ data: null, loading: false, error: null, execute: jest.fn(), refetch: jest.fn() }`;
+    return `{ data: null, loading: false, error: null, execute: ${mockFn()}, refetch: ${mockFn()} }`;
   }
 
   // Generic hook — return safe object with common properties
-  return `{ data: [], ${resourceLower}: [], loading: false, isLoading: false, error: null, value: null, setValue: jest.fn(), refetch: jest.fn() }`;
+  return `{ data: [], ${resourceLower}: [], loading: false, isLoading: false, error: null, value: null, setValue: ${mockFn()}, refetch: ${mockFn()} }`;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,74 +127,67 @@ function buildHookMockReturnValue(hookName: string): string {
 // ---------------------------------------------------------------------------
 
 function buildFramerMotionMock(): string {
-  return `jest.mock("framer-motion", () => {
-  const React = require("react");
-  const motion = new Proxy({}, {
-    get: (_target, tag) => {
-      const comp = React.forwardRef((props, ref) => {
-        const { initial, animate, exit, transition, whileHover, whileTap, whileFocus,
-                whileInView, variants, layout, layoutId, drag, dragConstraints,
-                onDragEnd, onAnimationComplete, ...rest } = props;
-        return React.createElement(String(tag), { ...rest, ref });
-      });
-      comp.displayName = \`motion.\${String(tag)}\`;
-      return comp;
-    }
-  });
-  return {
-    __esModule: true,
-    motion,
-    AnimatePresence: ({ children }) => React.createElement(React.Fragment, null, children),
-    useAnimation: () => ({ start: jest.fn(), stop: jest.fn(), set: jest.fn() }),
-    useMotionValue: (init) => ({ get: () => init, set: jest.fn(), onChange: jest.fn() }),
-    useTransform: () => ({ get: () => 0, set: jest.fn() }),
-    useInView: () => true,
-    useScroll: () => ({ scrollY: { get: () => 0 }, scrollX: { get: () => 0 } }),
-    useSpring: (val) => ({ get: () => (typeof val === "number" ? val : 0), set: jest.fn() }),
-    useReducedMotion: () => false,
-  };
-});`;
+  return `${mockModuleFn()}("framer-motion", () => ({
+  __esModule: true,
+  motion: new Proxy({}, {
+    get: () => (props: Record<string, unknown>) => {
+      const { children, ...rest } = props;
+      return ({ type: "div", props: { ...rest, children } } as unknown);
+    },
+  }),
+  AnimatePresence: ({ children }: { children: unknown }) => children,
+  useAnimation: () => ({ start: ${mockFn()}, stop: ${mockFn()}, set: ${mockFn()} }),
+  useMotionValue: (init: unknown) => ({ get: () => init, set: ${mockFn()}, onChange: ${mockFn()} }),
+  useTransform: () => ({ get: () => 0, set: ${mockFn()} }),
+  useInView: () => true,
+  useScroll: () => ({ scrollY: { get: () => 0 }, scrollX: { get: () => 0 } }),
+  useSpring: (val: unknown) => ({ get: () => (typeof val === "number" ? val : 0), set: ${mockFn()} }),
+  useReducedMotion: () => false,
+}));`;
 }
 
 function buildRechartsMock(): string {
-  return `jest.mock("recharts", () => {
-  const React = require("react");
-  const MockChart = ({ children, ...props }) => React.createElement("div", { "data-testid": "mock-chart", ...props }, children);
-  const MockElement = (props) => React.createElement("div", props);
-  return {
-    __esModule: true,
-    ResponsiveContainer: ({ children }) => React.createElement("div", { style: { width: 500, height: 300 } }, typeof children === "function" ? children(500, 300) : children),
-    PieChart: MockChart, AreaChart: MockChart, BarChart: MockChart, LineChart: MockChart,
-    ComposedChart: MockChart, RadarChart: MockChart, RadialBarChart: MockChart, ScatterChart: MockChart,
-    Treemap: MockChart, Sankey: MockChart, FunnelChart: MockChart,
-    Pie: MockElement, Area: MockElement, Bar: MockElement, Line: MockElement,
-    XAxis: MockElement, YAxis: MockElement, ZAxis: MockElement,
-    CartesianGrid: MockElement, Tooltip: MockElement, Legend: MockElement,
-    Cell: MockElement, Label: MockElement, LabelList: MockElement,
-    Brush: MockElement, ReferenceLine: MockElement, ReferenceArea: MockElement,
-    Radar: MockElement, RadialBar: MockElement, Scatter: MockElement, Funnel: MockElement,
-  };
-});`;
+  return `${mockModuleFn()}("recharts", () => ({
+  __esModule: true,
+  ResponsiveContainer: ({ children }: { children: unknown }) => children,
+  PieChart: ({ children }: { children: unknown }) => children,
+  AreaChart: ({ children }: { children: unknown }) => children,
+  BarChart: ({ children }: { children: unknown }) => children,
+  LineChart: ({ children }: { children: unknown }) => children,
+  ComposedChart: ({ children }: { children: unknown }) => children,
+  RadarChart: ({ children }: { children: unknown }) => children,
+  RadialBarChart: ({ children }: { children: unknown }) => children,
+  ScatterChart: ({ children }: { children: unknown }) => children,
+  Treemap: ({ children }: { children: unknown }) => children,
+  Sankey: ({ children }: { children: unknown }) => children,
+  FunnelChart: ({ children }: { children: unknown }) => children,
+  Pie: "div", Area: "div", Bar: "div", Line: "div",
+  XAxis: "div", YAxis: "div", ZAxis: "div",
+  CartesianGrid: "div", Tooltip: "div", Legend: "div",
+  Cell: "div", Label: "div", LabelList: "div",
+  Brush: "div", ReferenceLine: "div", ReferenceArea: "div",
+  Radar: "div", RadialBar: "div", Scatter: "div", Funnel: "div",
+}));`;
 }
 
 function buildAxiosMock(): string {
-  return `jest.mock("axios", () => {
+  return `${mockModuleFn()}("axios", () => {
   const mockResponse = { data: {}, status: 200, statusText: "OK", headers: {}, config: {} };
   const mockInstance = {
-    get: jest.fn().mockResolvedValue(mockResponse),
-    post: jest.fn().mockResolvedValue(mockResponse),
-    put: jest.fn().mockResolvedValue(mockResponse),
-    delete: jest.fn().mockResolvedValue(mockResponse),
-    patch: jest.fn().mockResolvedValue(mockResponse),
-    request: jest.fn().mockResolvedValue(mockResponse),
-    interceptors: { request: { use: jest.fn(), eject: jest.fn() }, response: { use: jest.fn(), eject: jest.fn() } },
+    get: ${mockFn()}.mockResolvedValue(mockResponse),
+    post: ${mockFn()}.mockResolvedValue(mockResponse),
+    put: ${mockFn()}.mockResolvedValue(mockResponse),
+    delete: ${mockFn()}.mockResolvedValue(mockResponse),
+    patch: ${mockFn()}.mockResolvedValue(mockResponse),
+    request: ${mockFn()}.mockResolvedValue(mockResponse),
+    interceptors: { request: { use: ${mockFn()}, eject: ${mockFn()} }, response: { use: ${mockFn()}, eject: ${mockFn()} } },
     defaults: { headers: { common: {} } },
   };
   return {
     __esModule: true,
-    default: { ...mockInstance, create: jest.fn(() => ({ ...mockInstance })) },
+    default: { ...mockInstance, create: ${mockGlobalName()}.fn(() => ({ ...mockInstance })) },
     ...mockInstance,
-    create: jest.fn(() => ({ ...mockInstance })),
+    create: ${mockGlobalName()}.fn(() => ({ ...mockInstance })),
   };
 });`;
 }
