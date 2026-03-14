@@ -1,0 +1,29 @@
+{
+  "name": "weak-selector",
+  "description": "Button-like components should keep role-first generation and selector-strengthening healing coverage.",
+  "sourceFile": "src/components/SaveToolbar.tsx",
+  "expectedGeneratedSnippets": [
+    "screen.queryAllByRole(\"button\")"
+  ],
+  "healing": {
+    "failureText": "A better query is available, try this: getByRole('button', { name: /save changes/i })",
+    "expectedCategory": "selector-too-weak",
+    "expectedActionId": "strengthen-selector",
+    "seedTestContentPath": "seed-tests/weak-selector.test.tsx",
+    "expectedHealedSnippets": [
+      "screen.getByRole('button', { name: /save changes/i })"
+    ],
+    "forbiddenHealedSnippets": [
+      "screen.getByText('Save changes')"
+    ]
+  },
+  "traitOverrides": {
+    "selectorReplacements": [
+      {
+        "from": "screen.getByText('Save changes')",
+        "to": "screen.getByRole('button', { name: /save changes/i })",
+        "description": "Prefer role-based lookup for the action button."
+      }
+    ]
+  }
+}

@@ -31,7 +31,9 @@
  *   - Swallowing all assertions
  */
 
+import path from 'node:path';
 import { FailureContext, parseFailureContext } from './failureContext';
+import { RepairMemory, getPreferredRepairAction, getPromotedActionIds } from './repairMemory';
 import { buildDomMatchersImport, mockGlobalName, mockModuleFn } from './utils/framework';
 
 export interface FixRule {
@@ -41,6 +43,12 @@ export interface FixRule {
   description: string;
   /** Apply the fix to the test file content. Returns modified content or null if unfixable. */
   apply(testContent: string, errorMessage: string, sourceFilePath: string): string | null;
+}
+
+export interface RepairApplication {
+  content: string;
+  actionId: string;
+  origin: 'memory' | 'targeted' | 'rule' | 'promoted' | 'escalated';
 }
 
 // ---------------------------------------------------------------------------
@@ -592,10 +600,29 @@ export function applyFixRules(
   errorMessage: string,
   sourceFilePath: string,
   attempt: number = 1,
-  failureContext: FailureContext = parseFailureContext(errorMessage)
-): string | null {
-  const targeted = applyTargetedRepair(testContent, failureContext, sourceFilePath);
-  if (targeted && targeted !== testContent) {
+  failureContext: FailureContext = parseFailureContext(errorMessage),
+  repairMemory?: RepairMemory,
+  failureSignature?: string,
+): RepairApplication | null {
+  if (repairMemory && failureSignature) {
+    const preferredAction = getPreferredRepairAction(repairMemory, failureSignature);
+    if (preferredAction) {
+      const memoryGuided = applyRepairActionById(
+        preferredAction,
+        testContent,
+        errorMessage,
+        sourceFilePath,
+        failureContext,
+      );
+      if (memoryGuided && memoryGuided !== testContent) {
+        console.log(`    Self-heal: applied remembered repair (${preferredAction})`);
+        return { content: memoryGuided, actionId: preferredAction, origin: 'memory' };
+      }
+    }
+  }
+
+  const targeted = applyTargetedRepairWithMetadata(testContent, failureContext, sourceFilePath);
+  if (targeted && targeted.content !== testContent) {
     console.log(`    Self-heal: applied targeted repair (${failureContext.kind})`);
     return targeted;
   }
@@ -606,7 +633,7 @@ export function applyFixRules(
       const fixed = rule.apply(testContent, errorMessage, sourceFilePath);
       if (fixed && fixed !== testContent) {
         console.log(`    Self-heal: applied "${rule.description}"`);
-        return fixed;
+        return { content: fixed, actionId: getRuleActionId(rule.description), origin: 'rule' };
       }
     }
   }
@@ -616,7 +643,7 @@ export function applyFixRules(
     const wrapped = applyTryCatchWrap(testContent);
     if (wrapped && wrapped !== testContent) {
       console.log('    Self-heal: escalated to try-catch wrap');
-      return wrapped;
+      return { content: wrapped, actionId: 'escalated-try-catch-wrap', origin: 'escalated' };
     }
   }
 
@@ -625,46 +652,74 @@ export function applyFixRules(
     const simplified = simplifyTestFile(testContent);
     if (simplified && simplified !== testContent) {
       console.log('    Self-heal: escalated to simplified test');
-      return simplified;
+      return { content: simplified, actionId: 'escalated-simplified-test', origin: 'escalated' };
     }
   }
 
   return null;
 }
 
-
-function applyTargetedRepair(
+function applyTargetedRepairWithMetadata(
   content: string,
   context: FailureContext,
   _sourceFilePath: string
-): string | null {
+): RepairApplication | null {
   if (context.kind === 'type-mismatch') {
-    return ensureTypeSafeRenderProps(content);
+    return toRepairApplication(ensureTypeSafeRenderProps(content), 'targeted-type-safe-render-props', 'targeted');
   }
 
   if (context.kind === 'provider-required') {
     if (context.providerHint === 'router') {
-      return applyRouterProviderFix(content);
+      return toRepairApplication(applyRouterProviderFix(content), 'targeted-router-provider', 'targeted');
     }
     if (context.providerHint === 'query-client') {
-      return applyQueryProviderFix(content);
+      return toRepairApplication(applyQueryProviderFix(content), 'targeted-query-client-provider', 'targeted');
     }
-    return applyTryCatchWrap(content);
+    return toRepairApplication(applyTryCatchWrap(content), 'targeted-generic-provider-guard', 'targeted');
   }
 
   if (context.kind === 'hook-shape') {
-    return applyHookShapeFix(content, context.missingProperty);
+    return toRepairApplication(applyHookShapeFix(content, context.missingProperty), 'targeted-hook-shape', 'targeted');
   }
 
   if (context.kind === 'matcher') {
-    return ensureDomMatchersImport(content);
+    return toRepairApplication(ensureDomMatchersImport(content), 'targeted-dom-matchers', 'targeted');
   }
 
   if (context.kind === 'missing-module' && context.moduleName?.startsWith('.')) {
-    return normalizeBrokenRelativeImports(content);
+    return toRepairApplication(normalizeBrokenRelativeImports(content), 'targeted-relative-import', 'targeted');
   }
 
   return null;
+}
+
+export function applyPromotedRepairs(
+  testContent: string,
+  sourceFilePath: string,
+  sourceText: string,
+  repairMemory: RepairMemory,
+): { content: string; actionIds: string[] } {
+  let content = testContent;
+  const appliedActionIds: string[] = [];
+
+  for (const actionId of getPromotedActionIds(repairMemory)) {
+    if (!shouldApplyPromotedAction(actionId, content, sourceFilePath, sourceText)) {
+      continue;
+    }
+    const updated = applyRepairActionById(
+      actionId,
+      content,
+      '',
+      sourceFilePath,
+      parseFailureContext(''),
+    );
+    if (updated && updated !== content) {
+      content = updated;
+      appliedActionIds.push(actionId);
+    }
+  }
+
+  return { content, actionIds: appliedActionIds };
 }
 
 function ensureTypeSafeRenderProps(content: string): string | null {
@@ -675,6 +730,87 @@ function ensureTypeSafeRenderProps(content: string): string | null {
 } as const;`
   );
   return narrowed === content ? null : narrowed;
+}
+
+function getRuleActionId(description: string): string {
+  return description
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function toRepairApplication(
+  content: string | null,
+  actionId: string,
+  origin: RepairApplication['origin'],
+): RepairApplication | null {
+  if (!content) return null;
+  return { content, actionId, origin };
+}
+
+function applyRepairActionById(
+  actionId: string,
+  content: string,
+  errorMessage: string,
+  sourceFilePath: string,
+  failureContext: FailureContext,
+): string | null {
+  switch (actionId) {
+    case 'targeted-type-safe-render-props':
+      return ensureTypeSafeRenderProps(content);
+    case 'targeted-router-provider':
+      return applyRouterProviderFix(content);
+    case 'targeted-query-client-provider':
+      return applyQueryProviderFix(content);
+    case 'targeted-generic-provider-guard':
+    case 'escalated-try-catch-wrap':
+      return applyTryCatchWrap(content);
+    case 'targeted-hook-shape':
+      return applyHookShapeFix(content, failureContext.missingProperty);
+    case 'targeted-dom-matchers':
+      return ensureDomMatchersImport(content);
+    case 'targeted-relative-import':
+      return normalizeBrokenRelativeImports(content);
+    case 'escalated-simplified-test':
+      return simplifyTestFile(content);
+    default: {
+      const rule = FIX_RULES.find((entry) => getRuleActionId(entry.description) === actionId);
+      return rule ? rule.apply(content, errorMessage, sourceFilePath) : null;
+    }
+  }
+}
+
+function shouldApplyPromotedAction(
+  actionId: string,
+  testContent: string,
+  sourceFilePath: string,
+  sourceText: string,
+): boolean {
+  switch (actionId) {
+    case 'targeted-dom-matchers':
+      return testContent.includes('toBeInTheDocument') && !testContent.includes('@testing-library/jest-dom');
+    case 'targeted-type-safe-render-props':
+      return testContent.includes('const defaultProps');
+    case 'targeted-hook-shape':
+      return path.basename(sourceFilePath).startsWith('use') && testContent.includes('renderHook');
+    case 'add-memoryrouter-wrapper':
+    case 'targeted-router-provider':
+      return /useNavigate|useLocation|react-router|react-router-dom/.test(sourceText) && !testContent.includes('MemoryRouter');
+    case 'add-queryclientprovider-wrapper':
+    case 'targeted-query-client-provider':
+      return /useQuery|useMutation|useQueryClient|@tanstack\/react-query|react-query/.test(sourceText) &&
+        !testContent.includes('QueryClientProvider');
+    case 'add-redux-provider-wrapper':
+      return /useSelector|useDispatch|react-redux/.test(sourceText) && !testContent.includes('ReduxProvider');
+    case 'add-global-fetch-mock':
+      return /\bfetch\s*\(/.test(sourceText) && !testContent.includes('globalThis.fetch');
+    case 'add-localstorage-mock':
+      return /localStorage|sessionStorage/.test(sourceText) && !testContent.includes('mockStorage');
+    case 'add-crypto-randomuuid-polyfill':
+      return /randomUUID|crypto/.test(sourceText) && !testContent.includes('randomUUID');
+    default:
+      return false;
+  }
 }
 
 function applyRouterProviderFix(content: string): string | null {

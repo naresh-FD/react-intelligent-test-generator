@@ -57,3 +57,32 @@ export function parseFailureContext(errorOutput: string): FailureContext {
 
   return { kind: 'unknown', raw };
 }
+
+export function buildFailureSignature(context: FailureContext): string {
+  switch (context.kind) {
+    case 'missing-module':
+      return `missing-module:${context.moduleName ?? 'unknown'}`;
+    case 'type-mismatch':
+      return 'type-mismatch';
+    case 'provider-required':
+      return `provider-required:${context.providerHint ?? 'generic'}`;
+    case 'hook-shape':
+      return `hook-shape:${context.hookName ?? 'unknown'}:${context.missingProperty ?? 'unknown'}`;
+    case 'matcher':
+      return 'matcher:dom';
+    case 'unknown':
+    default:
+      return `unknown:${normalizeUnknownFailure(context.raw)}`;
+  }
+}
+
+function normalizeUnknownFailure(raw: string): string {
+  const line = (raw ?? '')
+    .split('\n')
+    .map((entry) => entry.trim())
+    .find((entry) => entry.length > 0) ?? 'unknown';
+  return line
+    .replace(/[A-Z]:\\[^ ]+/g, '<path>')
+    .replace(/\d+/g, '#')
+    .slice(0, 120);
+}

@@ -1,0 +1,18 @@
+{
+  "name": "missing-provider-wrapper",
+  "description": "Components that consume a custom context should keep provider-aware healing coverage.",
+  "sourceFile": "src/components/ThemeBadge.tsx",
+  "expectedGeneratedSnippets": [
+    "ThemeContext.Provider"
+  ],
+  "healing": {
+    "failureText": "Error: useTheme must be used within ThemeProvider",
+    "expectedCategory": "missing-provider-wrapper",
+    "expectedActionId": "wrap-required-providers",
+    "seedTestContentPath": "seed-tests/missing-provider-wrapper.test.tsx",
+    "expectedHealedSnippets": [
+      "import { ThemeProvider } from \"../../providers/theme\";",
+      "<ThemeProvider><ThemeBadge /></ThemeProvider>"
+    ]
+  }
+}

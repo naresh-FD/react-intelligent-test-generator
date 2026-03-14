@@ -58,6 +58,39 @@ export interface FormElementInfo {
   options?: string[]; // for select elements
 }
 
+export type PreferredQueryStyle = 'role-first' | 'text-first';
+export type PreferredTimingStyle = 'async-first' | 'sync-first';
+export type PreferredRenderStyle = 'provider-wrapped-render' | 'direct-render';
+export type PreferredInteractionStyle = 'event-heavy' | 'basic';
+export type ProviderSignal = 'router' | 'context' | 'react-query' | 'redux' | 'portal';
+
+export interface TestingPreferenceProfile {
+  queryStyle: PreferredQueryStyle;
+  timingStyle: PreferredTimingStyle;
+  renderStyle: PreferredRenderStyle;
+  interactionStyle: PreferredInteractionStyle;
+}
+
+export interface ComponentTraitProfile {
+  usesRouter: boolean;
+  usesNavigation: boolean;
+  usesContext: boolean;
+  usesAsyncData: boolean;
+  usesRedux: boolean;
+  usesReactQuery: boolean;
+  usesForms: boolean;
+  usesTabs: boolean;
+  usesModalDialog: boolean;
+  usesTableOrList: boolean;
+  usesPortal: boolean;
+  hasConditionalRenderingBranches: boolean;
+  providerSignals: ProviderSignal[];
+  contextCount: number;
+  hookCount: number;
+  conditionalBranchCount: number;
+  testing: TestingPreferenceProfile;
+}
+
 export interface ComponentInfo {
   name: string;
   exportType: 'default' | 'named';
@@ -98,6 +131,8 @@ export interface ComponentInfo {
   thirdPartyImports: string[];
   /** Service/API module imports that need mocking */
   serviceImports: string[];
+  /** Structured trait metadata for smarter generation and self-heal decisions */
+  traits: ComponentTraitProfile;
 }
 
 export function analyzeSourceFile(
@@ -139,6 +174,10 @@ export function analyzeSourceFile(
       const tagName = getTagName(node);
       return !!tagName && isRouterTag(tagName);
     });
+    const usesRouterLink = jsxNodes.some((node) => {
+      const tagName = getTagName(node);
+      return tagName === 'Link' || tagName === 'NavLink';
+    });
     // Also detect react-router hook usage (useLocation, useParams, useSearchParams, etc.)
     const usesRouterHook =
       fileUsesIdentifierCall(sourceFile, 'useLocation') ||
@@ -146,7 +185,6 @@ export function analyzeSourceFile(
       fileUsesIdentifierCall(sourceFile, 'useSearchParams') ||
       fileUsesIdentifierCall(sourceFile, 'useMatch') ||
       fileUsesIdentifierCall(sourceFile, 'useRouteLoaderData');
-    const usesRouter = usesRouterJsx || usesRouterHook;
     const usesAuthHook =
       fileUsesNamedImport(sourceFile, 'useAuth') || fileUsesIdentifierCall(sourceFile, 'useAuth');
 
@@ -158,6 +196,7 @@ export function analyzeSourceFile(
     const usesNavigation =
       fileUsesIdentifierCall(sourceFile, 'useNavigate') ||
       fileUsesIdentifierCall(sourceFile, 'useHistory');
+    const usesRouter = usesRouterJsx || usesRouterLink || usesRouterHook || usesNavigation;
     const isClassComponent = Node.isClassDeclaration(candidate);
     const isErrorBoundary =
       isClassComponent &&
@@ -189,6 +228,27 @@ export function analyzeSourceFile(
     const hasAsyncEffect = detectAsyncEffect(candidate);
     const thirdPartyImports = detectThirdPartyImports(sourceFile);
     const serviceImports = detectServiceImports(sourceFile);
+    const traits = buildComponentTraitProfile({
+      candidate,
+      sourceFile,
+      jsxNodes,
+      buttons,
+      inputs,
+      selects,
+      forms,
+      links,
+      conditionalElements,
+      hooks,
+      contexts,
+      usesRouter,
+      usesNavigation,
+      usesReactQuery,
+      usesRedux,
+      usesPortal,
+      usesReactHookForm,
+      hasAsyncEffect,
+      serviceImports,
+    });
 
     components.push({
       name,
@@ -219,6 +279,7 @@ export function analyzeSourceFile(
       hasAsyncEffect,
       thirdPartyImports,
       serviceImports,
+      traits,
     });
   }
 
@@ -559,6 +620,202 @@ function analyzeJsxNodes(
   }
 
   return { buttons, inputs, selects, forms, links, conditionalElements };
+}
+
+function buildComponentTraitProfile(params: {
+  candidate: Node;
+  sourceFile: SourceFile;
+  jsxNodes: Node[];
+  buttons: SelectorInfo[];
+  inputs: SelectorInfo[];
+  selects: FormElementInfo[];
+  forms: FormElementInfo[];
+  links: SelectorInfo[];
+  conditionalElements: ConditionalElementInfo[];
+  hooks: HookUsage[];
+  contexts: ContextUsage[];
+  usesRouter: boolean;
+  usesNavigation: boolean;
+  usesReactQuery: boolean;
+  usesRedux: boolean;
+  usesPortal: boolean;
+  usesReactHookForm: boolean;
+  hasAsyncEffect: boolean;
+  serviceImports: string[];
+}): ComponentTraitProfile {
+  const usesContext =
+    params.contexts.length > 0 ||
+    params.candidate
+      .getDescendantsOfKind(SyntaxKind.CallExpression)
+      .some((call) => call.getExpression().getText() === 'useContext');
+  const usesForms =
+    params.usesReactHookForm ||
+    params.forms.length > 0 ||
+    params.inputs.length > 0 ||
+    params.selects.length > 0;
+  const usesTabs = detectTabs(params.jsxNodes);
+  const usesModalDialog = detectModalDialog(params.jsxNodes);
+  const usesTableOrList = detectTableOrList(params.jsxNodes);
+  const conditionalBranchCount = detectConditionalBranchCount(params.candidate);
+  const hasConditionalRenderingBranches =
+    conditionalBranchCount > 0 || params.conditionalElements.length > 0;
+  const usesAsyncData =
+    params.usesReactQuery ||
+    params.hasAsyncEffect ||
+    detectAsyncDataUsage(params.candidate, params.serviceImports);
+  const providerSignals: ProviderSignal[] = [];
+
+  if (params.usesRouter || params.usesNavigation) {
+    providerSignals.push('router');
+  }
+  if (usesContext) {
+    providerSignals.push('context');
+  }
+  if (params.usesReactQuery) {
+    providerSignals.push('react-query');
+  }
+  if (params.usesRedux) {
+    providerSignals.push('redux');
+  }
+  if (params.usesPortal) {
+    providerSignals.push('portal');
+  }
+
+  const explicitRoles = countExplicitRoles(params.jsxNodes);
+  const interactiveCount =
+    params.buttons.length +
+    params.inputs.length +
+    params.selects.length +
+    params.links.length +
+    params.forms.length;
+  const queryStyle: PreferredQueryStyle =
+    interactiveCount > 0 || usesTabs || usesModalDialog || usesTableOrList || explicitRoles > 0
+      ? 'role-first'
+      : 'text-first';
+  const timingStyle: PreferredTimingStyle = usesAsyncData ? 'async-first' : 'sync-first';
+  const renderStyle: PreferredRenderStyle =
+    providerSignals.length > 0 ? 'provider-wrapped-render' : 'direct-render';
+  const interactionStyle: PreferredInteractionStyle =
+    usesForms || usesTabs || usesModalDialog || params.usesNavigation || interactiveCount >= 2
+      ? 'event-heavy'
+      : 'basic';
+
+  return {
+    usesRouter: params.usesRouter,
+    usesNavigation: params.usesNavigation,
+    usesContext,
+    usesAsyncData,
+    usesRedux: params.usesRedux,
+    usesReactQuery: params.usesReactQuery,
+    usesForms,
+    usesTabs,
+    usesModalDialog,
+    usesTableOrList,
+    usesPortal: params.usesPortal,
+    hasConditionalRenderingBranches,
+    providerSignals,
+    contextCount: params.contexts.length,
+    hookCount: params.hooks.length,
+    conditionalBranchCount,
+    testing: {
+      queryStyle,
+      timingStyle,
+      renderStyle,
+      interactionStyle,
+    },
+  };
+}
+
+function detectTabs(nodes: Node[]): boolean {
+  return nodes.some((node) => {
+    const tagName = getTagName(node);
+    const role = normalizeAttr(getAttributes(node).role);
+    return (
+      tagName != null &&
+      /^(Tabs|Tab|TabList|TabPanel|TabPanels|TabsList|TabsTrigger|TabsContent)$/i.test(tagName)
+    ) || role === 'tab' || role === 'tablist' || role === 'tabpanel';
+  });
+}
+
+function detectModalDialog(nodes: Node[]): boolean {
+  return nodes.some((node) => {
+    const tagName = getTagName(node);
+    const role = normalizeAttr(getAttributes(node).role);
+    return (
+      tagName != null &&
+      /^(Dialog|DialogContent|Modal|Drawer|Sheet|Popover|AlertDialog|DialogPortal)$/i.test(tagName)
+    ) || role === 'dialog' || role === 'alertdialog';
+  });
+}
+
+function detectTableOrList(nodes: Node[]): boolean {
+  return nodes.some((node) => {
+    const tagName = getTagName(node);
+    if (!tagName) return false;
+
+    const lowerTag = tagName.toLowerCase();
+    return (
+      ['table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'ul', 'ol', 'li', 'dl', 'dt', 'dd'].includes(lowerTag) ||
+      /^(Table|DataTable|TableBody|TableHead|TableRow|TableCell|List|ListItem|VirtualList)$/i.test(tagName)
+    );
+  });
+}
+
+function detectConditionalBranchCount(candidate: Node): number {
+  return candidate.getDescendants().filter((descendant) => {
+    if (Node.isConditionalExpression(descendant)) {
+      return isNodeInsideJsx(descendant);
+    }
+
+    return (
+      Node.isBinaryExpression(descendant) &&
+      descendant.getOperatorToken().getKind() === SyntaxKind.AmpersandAmpersandToken &&
+      isNodeInsideJsx(descendant)
+    );
+  }).length;
+}
+
+function detectAsyncDataUsage(candidate: Node, serviceImports: string[]): boolean {
+  const networkExpressionPattern = /(?:^|\.)(fetch|get|post|put|patch|delete|request)$/;
+  return candidate.getDescendantsOfKind(SyntaxKind.CallExpression).some((call) => {
+    const expressionText = call.getExpression().getText();
+    if (expressionText === 'fetch' || /^useSWR/.test(expressionText)) {
+      return true;
+    }
+
+    if (networkExpressionPattern.test(expressionText)) {
+      return true;
+    }
+
+    if (serviceImports.length > 0 && (expressionText.includes('Service') || expressionText.includes('Client'))) {
+      return true;
+    }
+
+    return false;
+  });
+}
+
+function countExplicitRoles(nodes: Node[]): number {
+  return nodes.filter((node) => {
+    const role = normalizeAttr(getAttributes(node).role);
+    return Boolean(role);
+  }).length;
+}
+
+function isNodeInsideJsx(node: Node): boolean {
+  let current: Node | undefined = node;
+  while (current) {
+    if (
+      Node.isJsxExpression(current) ||
+      Node.isJsxElement(current) ||
+      Node.isJsxSelfClosingElement(current) ||
+      Node.isJsxFragment(current)
+    ) {
+      return true;
+    }
+    current = current.getParent();
+  }
+  return false;
 }
 
 function getTagName(node: Node): string | null {

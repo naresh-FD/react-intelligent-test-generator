@@ -1,0 +1,14 @@
+{
+  "name": "bad-import-mock-pattern",
+  "description": "Missing external modules should stay covered by deterministic virtual-module mocking.",
+  "sourceFile": "src/components/ExternalWidgetCard.tsx",
+  "healing": {
+    "failureText": "Cannot find module 'fancy-widget-lib' from '<path>/ExternalWidgetCard.tsx'",
+    "expectedCategory": "bad-import-resolution",
+    "expectedActionId": "mock-missing-external-module",
+    "seedTestContentPath": "seed-tests/bad-import-mock-pattern.test.tsx",
+    "expectedHealedSnippets": [
+      "jest.mock(\"fancy-widget-lib\", () => ({ __esModule: true, default: () => null }), { virtual: true });"
+    ]
+  }
+}

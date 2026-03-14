@@ -7,7 +7,7 @@ Usage:
   npm run testgen:smart       # generate + run jest + retry on failure (--all --verify)
   npm run testgen:smart:file  # single file with verify
     --verify                  # run jest after each generated test, retry on fail
-    --max-retries <n>         # self-heal retry iterations on failing files (default: 5, 0=no retry)
+    --max-retries <n>         # self-heal retry iterations on failing files (default: 3, 0=no retry)
     --coverage-threshold <n>  # minimum line coverage % to consider passing (default: 50)
     --files-from <path>       # read a JSON array of file paths for batch benchmarking
     --config <path>           # override react-testgen.config.json
@@ -30,8 +30,6 @@ import { generateStoreTest } from './generator/store';
 import { TEST_UTILITY_PATTERNS, UNTESTABLE_PATTERNS } from './config';
 import { ensureJestScaffold } from './scaffold';
 import { detectTestFramework, buildTestGlobalsImport, buildDomMatchersImport } from './utils/framework';
-import { applyFixRules } from './selfHeal';
-import { parseFailureContext } from './failureContext';
 import { loadConfig, resolveTestOutput, ResolvedTestOutput, DEFAULT_TEST_OUTPUT, ExistingTestStrategy } from './workspace/config';
 import {
   evaluateFile,
@@ -41,6 +39,35 @@ import {
   printEligibilitySummary,
   type FileEligibilityResult,
 } from './eligibility';
+import { classifyFailure } from './selfHeal/failureClassifier';
+import {
+  addHealReportFailureSignature,
+  appendHealReportAttempt,
+  appendPromotedHealReportAction,
+  buildHealReport,
+  createHealAttempt,
+  createHealReportEntry,
+  finalizeHealReportEntry,
+  formatHealReportSummary,
+  getDefaultHealReportPath,
+  setHealReportInitialStatus,
+  writeHealReportJson,
+} from './selfHeal/healReport';
+import { getPromotedRepairsForGeneration, refreshPromotedEntries } from './selfHeal/promotion';
+import { chooseRepairStrategy, NOOP_REPAIR_ACTION } from './selfHeal/repairEngine';
+import { buildRepairTraitsFromComponents } from './selfHeal/repairTraits';
+import {
+  loadHealingMemory,
+  saveHealingMemory,
+  recordHealingAttempt,
+  rankRepairsForFailure,
+} from './selfHeal/healingMemory';
+import type {
+  HealReportEntry,
+  FailureSignature as HealingFailureSignature,
+  RepairAction,
+  RepairPatchOperation,
+} from './selfHeal/types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -53,7 +80,7 @@ interface CliOptions {
   all?: boolean;
   /** Run jest after all generated test files and retry failing ones */
   verify?: boolean;
-  /** Self-heal retry iterations on failing files (default 5, 0 = no retry) */
+  /** Self-heal retry iterations on failing files (default 3, 0 = no retry) */
   maxRetries?: number;
   /** Minimum line-coverage % to consider a test file passing (default 50) */
   coverageThreshold?: number;
@@ -90,8 +117,16 @@ interface JestSuiteResult {
   status?: string;
   message?: string;
   summary?: string;
+  failureMessage?: string;
   testResults?: JestAssertionResult[];
   assertionResults?: JestAssertionResult[];
+  numPassingTests?: number;
+  numFailingTests?: number;
+  testExecError?: {
+    message?: string;
+    code?: string;
+    moduleName?: string;
+  };
 }
 
 interface JestAggregatedRunResult {
@@ -103,7 +138,7 @@ interface JestRunCLIResult {
   results: JestAggregatedRunResult;
 }
 
-type VerifyStatus = 'pass' | 'fail' | 'low-coverage' | 'skipped' | 'generated' | 'smoke-fallback';
+type VerifyStatus = 'pass' | 'fail' | 'low-coverage' | 'skipped' | 'generated';
 
 type ParserContext = ReturnType<typeof createParser>;
 const SUPPORTED_SOURCE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx']);
@@ -870,29 +905,25 @@ function runJestSerial(
     try {
       if (fs.existsSync(resultFile)) {
         const jestOut = JSON.parse(fs.readFileSync(resultFile, 'utf8')) as {
-          testResults?: Array<{
-            testFilePath?: string;
-            name?: string;
-            status?: string;
-            message?: string;
-            summary?: string;
-            testResults?: Array<{ status?: string; failureMessages?: string[] }>;
-            assertionResults?: Array<{ status?: string; failureMessages?: string[] }>;
-          }>;
+          testResults?: JestSuiteResult[];
         };
         const suite = (jestOut.testResults ?? [])[0];
         if (suite) {
           const testItems = suite.testResults ?? suite.assertionResults ?? [];
-          const numFailing = testItems.filter((t) => t.status === 'failed').length;
-          const numPassing = testItems.filter((t) => t.status === 'passed').length;
+          const numFailing = testItems.filter((t) => t.status === 'failed').length || suite.numFailingTests || 0;
+          const numPassing = testItems.filter((t) => t.status === 'passed').length || suite.numPassingTests || 0;
           const numTests = numPassing + numFailing;
+          const hasSuiteExecutionFailure = Boolean(suite.failureMessage || suite.testExecError);
           const passed =
-            typeof suite.status === 'string' ? suite.status === 'passed' && numFailing === 0 : numFailing === 0;
+            typeof suite.status === 'string'
+              ? suite.status === 'passed' && numFailing === 0 && !hasSuiteExecutionFailure
+              : numFailing === 0 && !hasSuiteExecutionFailure;
           let failureReason = '';
           if (!passed) {
             const firstFailure = testItems.find((t) => t.status === 'failed' && t.failureMessages?.length);
             failureReason =
               (firstFailure?.failureMessages?.[0] && extractFailureReason(firstFailure.failureMessages[0])) ||
+              (suite.failureMessage && extractFailureReason(suite.failureMessage)) ||
               (suite.message && extractFailureReason(suite.message)) ||
               (suite.summary && extractFailureReason(suite.summary)) ||
               suiteResult.failureReason;
@@ -902,6 +933,7 @@ function runJestSerial(
             passed,
             numTests,
             numFailed: numFailing,
+            errorOutput: passed ? '' : suite.failureMessage ?? suiteResult.errorOutput,
             failureReason,
           };
         }
@@ -1107,17 +1139,21 @@ function buildJestResultMapFromAggregate({
     if (!matchedTestPath) continue;
 
     const testItems = suite.testResults ?? suite.assertionResults ?? [];
-    const numFailing = testItems.filter((t) => t.status === 'failed').length;
-    const numPassing = testItems.filter((t) => t.status === 'passed').length;
+    const numFailing = testItems.filter((t) => t.status === 'failed').length || suite.numFailingTests || 0;
+    const numPassing = testItems.filter((t) => t.status === 'passed').length || suite.numPassingTests || 0;
     const numTests = numPassing + numFailing;
+    const hasSuiteExecutionFailure = Boolean(suite.failureMessage || suite.testExecError);
     const passed =
-      typeof suite.status === 'string' ? suite.status === 'passed' && numFailing === 0 : numFailing === 0;
+      typeof suite.status === 'string'
+        ? suite.status === 'passed' && numFailing === 0 && !hasSuiteExecutionFailure
+        : numFailing === 0 && !hasSuiteExecutionFailure;
 
     let failureReason = '';
     if (!passed) {
       const firstFailure = testItems.find((t) => t.status === 'failed' && t.failureMessages?.length);
       failureReason =
         (firstFailure?.failureMessages?.[0] && extractFailureReason(firstFailure.failureMessages[0])) ||
+        (suite.failureMessage && extractFailureReason(suite.failureMessage)) ||
         (suite.message && extractFailureReason(suite.message)) ||
         (suite.summary && extractFailureReason(suite.summary)) ||
         globalFailureReason;
@@ -1129,7 +1165,7 @@ function buildJestResultMapFromAggregate({
       numFailed: numFailing,
       coverage: 0,
       coverageCollected: false,
-      errorOutput: passed ? '' : errorOutput,
+      errorOutput: passed ? '' : suite.failureMessage ?? errorOutput,
       failureReason,
     });
   }
@@ -1210,7 +1246,6 @@ const STATUS_ICON: Record<VerifyStatus, string> = {
   'low-coverage': '⚠️ ',
   skipped: '⏭️ ',
   generated: '📝',
-  'smoke-fallback': '🔸',
 };
 
 interface SummaryRow {
@@ -1220,6 +1255,14 @@ interface SummaryRow {
   attempts: number;
   numTests: number;
   failureReason?: string;
+  structuredFailure?: {
+    category: string;
+    confidence: number;
+    evidence: string;
+    fingerprint: string;
+    repairActionId?: string;
+    repairStrategyId?: string;
+  };
 }
 
 interface SummaryAggregate {
@@ -1229,7 +1272,6 @@ interface SummaryAggregate {
   lowCoverage: number;
   skipped: number;
   generated: number;
-  smokeFallback: number;
 }
 
 interface SummaryJsonPayload {
@@ -1245,6 +1287,25 @@ interface SummaryJsonPayload {
   rows: SummaryRow[];
 }
 
+type AnalyzedComponent = ReturnType<typeof analyzeSourceFile>[number];
+
+interface SourceHealingMetadata {
+  repairTraits?: import('./selfHeal/types').ComponentTraits;
+  componentPattern: string;
+  componentNames: string[];
+}
+
+interface PendingHealingAttempt {
+  signature: HealingFailureSignature;
+  action: RepairAction;
+  componentPattern: string;
+  structuredFailure: SummaryRow['structuredFailure'];
+  strategyId?: string;
+  reason: string;
+  explanation?: string;
+  attemptNumber: number;
+}
+
 function buildSummaryAggregate(rows: SummaryRow[]): SummaryAggregate {
   const aggregate: SummaryAggregate = {
     total: rows.length,
@@ -1253,7 +1314,6 @@ function buildSummaryAggregate(rows: SummaryRow[]): SummaryAggregate {
     lowCoverage: 0,
     skipped: 0,
     generated: 0,
-    smokeFallback: 0,
   };
 
   for (const row of rows) {
@@ -1261,7 +1321,6 @@ function buildSummaryAggregate(rows: SummaryRow[]): SummaryAggregate {
     else if (row.status === 'fail') aggregate.fail++;
     else if (row.status === 'low-coverage') aggregate.lowCoverage++;
     else if (row.status === 'generated') aggregate.generated++;
-    else if (row.status === 'smoke-fallback') aggregate.smokeFallback++;
     else aggregate.skipped++;
   }
 
@@ -1349,6 +1408,194 @@ function printSummary(rows: SummaryRow[]): void {
   console.log(header);
 }
 
+function analyzeFileForHealing(
+  filePath: string,
+  testFilePath: string,
+  ctx: ParserContext,
+): SourceHealingMetadata {
+  const sourceFile = getSourceFile(ctx.project, filePath);
+  const allComponents = analyzeSourceFile(sourceFile, ctx.project, ctx.checker);
+  const compoundSubs = getCompoundSubComponents(sourceFile);
+  const components = compoundSubs.size > 0
+    ? allComponents.filter((component) => !compoundSubs.has(component.name))
+    : allComponents;
+
+  return {
+    repairTraits: buildRepairTraitsFromComponents(components, filePath, testFilePath),
+    componentPattern: normalizeSlashes(path.relative(process.cwd(), filePath)),
+    componentNames: components.map((component) => component.name),
+  };
+}
+
+function applyRepairPatchOperations(
+  content: string,
+  operations: RepairPatchOperation[] = [],
+): string | null {
+  if (operations.length === 0) {
+    return null;
+  }
+
+  let updatedContent = content;
+
+  for (const operation of operations) {
+    switch (operation.type) {
+      case 'replace-text':
+        if (operation.before && operation.after && updatedContent.includes(operation.before)) {
+          updatedContent = updatedContent.replace(operation.before, operation.after);
+        }
+        break;
+      case 'insert-import':
+      case 'insert-setup':
+        if (operation.after && !updatedContent.includes(operation.after)) {
+          updatedContent = insertLineAfterImports(updatedContent, operation.after);
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  return updatedContent === content ? null : updatedContent;
+}
+
+function applyHealingDecision(
+  entry: { srcPath: string; testPath: string },
+  ctx: ParserContext,
+  testOutput: ResolvedTestOutput,
+  packageRoot: string,
+  decision: ReturnType<typeof chooseRepairStrategy>,
+): { action: RepairAction; wroteContent: boolean } {
+  const currentContent = fs.readFileSync(entry.testPath, 'utf8');
+
+  if (decision.updatedContent && decision.updatedContent !== currentContent) {
+    writeFile(entry.testPath, decision.updatedContent);
+    return { action: decision.action, wroteContent: true };
+  }
+
+  const patchedContent = applyRepairPatchOperations(currentContent, decision.generatorPatch);
+  if (patchedContent && patchedContent !== currentContent) {
+    writeFile(entry.testPath, patchedContent);
+    return { action: decision.action, wroteContent: true };
+  }
+
+  generateTestForFile(entry.srcPath, ctx, testOutput, packageRoot, 'replace');
+  const regeneratedContent = fs.readFileSync(entry.testPath, 'utf8');
+  return {
+    action: {
+      id: 'regenerate-from-source',
+      kind: 'regenerate',
+      description: 'Regenerate the test from source metadata',
+      deterministic: true,
+      safeToPromote: true,
+    },
+    wroteContent: regeneratedContent !== currentContent,
+  };
+}
+
+function applyPromotedGenerationDefaults(
+  entry: { srcPath: string; testPath: string },
+  healingMemoryState: ReturnType<typeof loadHealingMemory>,
+  metadata: SourceHealingMetadata | undefined,
+): Array<{
+  action: RepairAction;
+  strategyId?: string;
+  trigger: 'component-pattern' | 'trait';
+}> {
+  if (!metadata) {
+    return [];
+  }
+
+  const currentContent = fs.readFileSync(entry.testPath, 'utf8');
+  const promotedRepairs = getPromotedRepairsForGeneration({
+    state: healingMemoryState,
+    testContent: currentContent,
+    componentTraits: metadata.repairTraits,
+    componentPattern: metadata.componentPattern,
+    sourceFilePath: entry.srcPath,
+    testFilePath: entry.testPath,
+  });
+  if (promotedRepairs.length === 0) {
+    return [];
+  }
+
+  let updatedContent = currentContent;
+  const appliedPromotions: Array<{
+    action: RepairAction;
+    strategyId?: string;
+    trigger: 'component-pattern' | 'trait';
+  }> = [];
+
+  for (const promotedRepair of promotedRepairs) {
+    const nextContent =
+      promotedRepair.decision.updatedContent ??
+      applyRepairPatchOperations(updatedContent, promotedRepair.decision.generatorPatch) ??
+      updatedContent;
+    if (nextContent === updatedContent) {
+      continue;
+    }
+    updatedContent = nextContent;
+    appliedPromotions.push({
+      action: promotedRepair.decision.action,
+      strategyId: promotedRepair.decision.strategyId,
+      trigger: promotedRepair.trigger,
+    });
+  }
+
+  if (updatedContent !== currentContent) {
+    writeFile(entry.testPath, updatedContent);
+  }
+
+  return appliedPromotions;
+}
+
+function insertLineAfterImports(content: string, line: string): string {
+  const lines = content.split('\n');
+  let lastImportIndex = -1;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index].trim().startsWith('import ')) {
+      lastImportIndex = index;
+    }
+  }
+
+  if (lastImportIndex === -1) {
+    return `${line}\n${content}`;
+  }
+
+  lines.splice(lastImportIndex + 1, 0, line);
+  return lines.join('\n');
+}
+
+function deriveVerifyStatus(result: JestRunResult | undefined, coverageThreshold: number): VerifyStatus {
+  if (!result || !result.passed) {
+    return 'fail';
+  }
+  if (result.coverageCollected && result.coverage < coverageThreshold) {
+    return 'low-coverage';
+  }
+  return 'pass';
+}
+
+function ensureHealReportEntry(
+  entries: Map<string, HealReportEntry>,
+  entry: { srcPath: string; testPath: string },
+  metadata?: SourceHealingMetadata,
+): HealReportEntry {
+  const existing = entries.get(entry.testPath);
+  if (existing) {
+    return existing;
+  }
+
+  const created = createHealReportEntry({
+    sourceFilePath: entry.srcPath,
+    testFilePath: entry.testPath,
+    fileName: path.basename(entry.srcPath),
+    componentNames: metadata?.componentNames ?? [],
+  });
+  entries.set(entry.testPath, created);
+  return created;
+}
+
 // ---------------------------------------------------------------------------
 // Main — 3-phase batch architecture
 // ---------------------------------------------------------------------------
@@ -1374,10 +1621,11 @@ async function run() {
 
   const ctx = createParser();
   const files = resolveTargetFiles(args);
+  let healingMemory = refreshPromotedEntries(loadHealingMemory());
 
   // maxRetries controls how many self-heal iterations to run on failing tests.
   // 0 = no retry, ≥1 = up to N retry batches with escalating fix strategies.
-  const maxRetries = args.maxRetries ?? 5;
+  const maxRetries = args.maxRetries ?? 3;
   const coverageThreshold = args.coverageThreshold ?? 50;
 
   console.log(`Found ${files.length} file(s) to process.`);
@@ -1456,6 +1704,8 @@ async function run() {
   }
 
   const entries: FileEntry[] = [];
+  const healingMetadataByTestPath = new Map<string, SourceHealingMetadata>();
+  const healReportEntries = new Map<string, HealReportEntry>();
   for (const [index, filePath] of files.entries()) {
     const eligibility = eligibilityMap.get(filePath);
     const basename = path.basename(filePath);
@@ -1482,6 +1732,39 @@ async function run() {
     const effectiveStrategy = eligibility?.action === 'merge-with-existing-test' ? 'merge' : existingTestStrategy;
 
     const testFilePath = generateTestForFile(filePath, ctx, testOutput, packageRoot, effectiveStrategy);
+    if (testFilePath) {
+      let healingMetadata: SourceHealingMetadata | undefined;
+      try {
+        healingMetadata = analyzeFileForHealing(filePath, testFilePath, ctx);
+        healingMetadataByTestPath.set(testFilePath, healingMetadata);
+      } catch {
+        // Best-effort metadata collection only.
+      }
+      ensureHealReportEntry(
+        healReportEntries,
+        { srcPath: filePath, testPath: testFilePath },
+        healingMetadata,
+      );
+      const promotedActions = applyPromotedGenerationDefaults(
+        { srcPath: filePath, testPath: testFilePath },
+        healingMemory,
+        healingMetadata,
+      );
+      if (promotedActions.length > 0) {
+        console.log(
+          `  - Applied promoted defaults: ${promotedActions.map((item) => `${item.action.id} (${item.trigger})`).join(', ')}`
+        );
+        let reportEntry = ensureHealReportEntry(
+          healReportEntries,
+          { srcPath: filePath, testPath: testFilePath },
+          healingMetadata,
+        );
+        for (const promotedAction of promotedActions) {
+          reportEntry = appendPromotedHealReportAction(reportEntry, promotedAction);
+        }
+        healReportEntries.set(testFilePath, reportEntry);
+      }
+    }
     entries.push({ srcPath: filePath, testPath: testFilePath });
   }
 
@@ -1557,21 +1840,43 @@ async function run() {
     generated.map((e) => e.srcPath)
   );
 
-  // Partition into passing and needing-retry
-  const pass1Passed = generated.filter((e) => {
-    const r = pass1Results.get(e.testPath);
-    return r && r.passed && (!r.coverageCollected || r.coverage >= coverageThreshold);
+  // Partition into passing and needing-heal
+  const firstPassPassed = generated.filter((entry) => {
+    const result = pass1Results.get(entry.testPath);
+    return Boolean(result?.passed && (!result.coverageCollected || result.coverage >= coverageThreshold));
   });
-  const pass1Failed = generated.filter((e) => {
-    const r = pass1Results.get(e.testPath);
-    return !r || !r.passed || (r.coverageCollected && r.coverage < coverageThreshold);
+  const firstPassLowCoverage = generated.filter((entry) => {
+    const result = pass1Results.get(entry.testPath);
+    return Boolean(result?.passed && result.coverageCollected && result.coverage < coverageThreshold);
+  });
+  const functionalFailures = generated.filter((entry) => {
+    const result = pass1Results.get(entry.testPath);
+    return !result || !result.passed;
   });
 
-  console.log(`\n  ✅ ${pass1Passed.length} passed  |  🔄 ${pass1Failed.length} need retry`);
+  console.log(
+    `\n  ✅ ${firstPassPassed.length} passed  |  ⚠️ ${firstPassLowCoverage.length} low coverage  |  🔄 ${functionalFailures.length} need heal`
+  );
 
-  // Add first-pass passing files to summary
-  for (const e of pass1Passed) {
+  const attemptCounts = new Map<string, number>(generated.map((entry) => [entry.testPath, 1]));
+  const latestResults = new Map(pass1Results);
+  const latestStructuredFailures = new Map<string, SummaryRow['structuredFailure']>();
+  const selfHealMaxRetries = Math.max(0, Math.min(maxRetries, 3));
+
+  for (const e of firstPassPassed) {
     const r = pass1Results.get(e.testPath)!;
+    const reportEntry = ensureHealReportEntry(
+      healReportEntries,
+      e,
+      healingMetadataByTestPath.get(e.testPath),
+    );
+    healReportEntries.set(
+      e.testPath,
+      finalizeHealReportEntry(
+        setHealReportInitialStatus(reportEntry, 'pass'),
+        { finalStatus: 'pass' },
+      ),
+    );
     summary.push({
       file: path.basename(e.srcPath),
       status: 'pass',
@@ -1581,16 +1886,54 @@ async function run() {
     });
   }
 
+  for (const e of firstPassLowCoverage) {
+    const r = pass1Results.get(e.testPath)!;
+    const reportEntry = ensureHealReportEntry(
+      healReportEntries,
+      e,
+      healingMetadataByTestPath.get(e.testPath),
+    );
+    healReportEntries.set(
+      e.testPath,
+      finalizeHealReportEntry(
+        setHealReportInitialStatus(reportEntry, 'low-coverage'),
+        {
+          finalStatus: 'low-coverage',
+          remainingBlocker: 'Verification passed but coverage stayed below the configured threshold.',
+        },
+      ),
+    );
+    summary.push({
+      file: path.basename(e.srcPath),
+      status: 'low-coverage',
+      coverage: r.coverage,
+      attempts: 1,
+      numTests: r.numTests,
+    });
+  }
+
+  for (const e of functionalFailures) {
+    const result = pass1Results.get(e.testPath);
+    const failure = classifyFailure(result?.errorOutput || result?.failureReason || '');
+    const reportEntry = ensureHealReportEntry(
+      healReportEntries,
+      e,
+      healingMetadataByTestPath.get(e.testPath),
+    );
+    healReportEntries.set(
+      e.testPath,
+      addHealReportFailureSignature(
+        setHealReportInitialStatus(reportEntry, 'fail'),
+        failure,
+      ),
+    );
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
-  // Phase 3: Self-heal loop (max 5 iterations with escalating fix strategies)
-  //   Tier 1 (attempt 1-2): specific fix rules
-  //   Tier 2 (attempt 3): try-catch wrapping
-  //   Tier 3 (attempt 4): simplify test to bare minimum
-  //   Tier 4 (attempt 5): last-resort specific rules
+  // Phase 3: Bounded self-heal loop on functional failures only
   // ─────────────────────────────────────────────────────────────────────────
-  let remainingFailures = [...pass1Failed];
-  const latestResults = new Map(pass1Results);
-  const selfHealMaxRetries = Math.min(maxRetries, 5); // Cap at 5 iterations (allows all escalation tiers)
+  let remainingFailures = [...functionalFailures];
+  const pendingRepairRecords = new Map<string, PendingHealingAttempt>();
 
   for (
     let attempt = 1;
@@ -1601,51 +1944,178 @@ async function run() {
       `\n🔄  Self-heal attempt ${attempt}/${selfHealMaxRetries} on ${remainingFailures.length} file(s)...`
     );
 
+    pendingRepairRecords.clear();
+
     for (const e of remainingFailures) {
       const prev = latestResults.get(e.testPath);
-      const errorMsg = prev?.failureReason || prev?.errorOutput || '';
+      const failureOutput = prev?.errorOutput || prev?.failureReason || '';
+      const failure = classifyFailure(failureOutput);
+      const metadata = healingMetadataByTestPath.get(e.testPath) ?? analyzeFileForHealing(e.srcPath, e.testPath, ctx);
+      healingMetadataByTestPath.set(e.testPath, metadata);
+      let reportEntry = ensureHealReportEntry(healReportEntries, e, metadata);
+      reportEntry = addHealReportFailureSignature(reportEntry, failure);
+      healReportEntries.set(e.testPath, reportEntry);
+
+      const structuredFailure: SummaryRow['structuredFailure'] = {
+        category: failure.category,
+        confidence: failure.confidence,
+        evidence: failure.evidence,
+        fingerprint: failure.fingerprint,
+      };
+      latestStructuredFailures.set(e.testPath, structuredFailure);
+
+      const memoryRankings = rankRepairsForFailure(healingMemory, failure, metadata.componentPattern)
+        .map((ranking) => ({
+          actionId: ranking.entry.action.id,
+          score: ranking.score,
+        }));
       const reason = prev?.failureReason ? ` — ${prev.failureReason}` : '';
-      console.log(`  - ${path.basename(e.srcPath)}${reason}`);
+      console.log(`  - ${path.basename(e.srcPath)} [${failure.category}]${reason}`);
 
       try {
-        // Try applying deterministic fix rules first (pass attempt for escalation tiers)
         const testContent = fs.readFileSync(e.testPath, 'utf8');
-        const fixed = applyFixRules(testContent, errorMsg, e.srcPath, attempt, parseFailureContext(errorMsg));
-        if (fixed) {
-          writeFile(e.testPath, fixed);
-        } else {
-          // No fix rule matched — regenerate from scratch
-          // During self-heal, always use 'replace' to regenerate from scratch
-          generateTestForFile(e.srcPath, ctx, testOutput, packageRoot, 'replace');
+        const decision = chooseRepairStrategy({
+          testContent,
+          failure,
+          componentTraits: metadata.repairTraits,
+          sourceFilePath: e.srcPath,
+          testFilePath: e.testPath,
+          generationMetadata: {
+            componentPattern: metadata.componentPattern,
+            componentNames: metadata.componentNames,
+            attemptNumber: String(attempt),
+          },
+          memoryRankedActions: memoryRankings,
+        });
+        structuredFailure.repairActionId = decision.action.id;
+        structuredFailure.repairStrategyId = decision.strategyId;
+        latestStructuredFailures.set(e.testPath, structuredFailure);
+
+        if (!decision.applied || decision.action.id === NOOP_REPAIR_ACTION.id) {
+          healingMemory = refreshPromotedEntries(recordHealingAttempt(healingMemory, {
+            signature: failure,
+            action: decision.action,
+            success: false,
+            componentPattern: metadata.componentPattern,
+          }));
+          healReportEntries.set(
+            e.testPath,
+            appendHealReportAttempt(reportEntry, createHealAttempt({
+              attemptNumber: attempt,
+              failure,
+              action: decision.action,
+              strategyId: decision.strategyId,
+              applied: false,
+              success: false,
+              reason: decision.reason,
+              explanation: decision.explanation,
+            })),
+          );
+          console.log(`    No deterministic repair available: ${decision.reason}`);
+          continue;
         }
+
+        const applied = applyHealingDecision(
+          { srcPath: e.srcPath, testPath: e.testPath },
+          ctx,
+          testOutput,
+          packageRoot,
+          decision,
+        );
+        if (!applied.wroteContent) {
+          healingMemory = refreshPromotedEntries(recordHealingAttempt(healingMemory, {
+            signature: failure,
+            action: applied.action,
+            success: false,
+            componentPattern: metadata.componentPattern,
+          }));
+          healReportEntries.set(
+            e.testPath,
+            appendHealReportAttempt(reportEntry, createHealAttempt({
+              attemptNumber: attempt,
+              failure,
+              action: applied.action,
+              strategyId: decision.strategyId,
+              applied: false,
+              success: false,
+              reason: 'Deterministic repair produced no test-file change.',
+              explanation: decision.explanation,
+            })),
+          );
+          console.log(`    Skipped rerun because ${applied.action.id} produced no file change.`);
+          continue;
+        }
+        structuredFailure.repairActionId = applied.action.id;
+        latestStructuredFailures.set(e.testPath, structuredFailure);
+        pendingRepairRecords.set(e.testPath, {
+          signature: failure,
+          action: applied.action,
+          componentPattern: metadata.componentPattern,
+          structuredFailure,
+          strategyId: decision.strategyId,
+          reason: decision.reason,
+          explanation: decision.explanation,
+          attemptNumber: attempt,
+        });
+        attemptCounts.set(e.testPath, (attemptCounts.get(e.testPath) ?? 1) + 1);
+        console.log(`    Applied ${decision.strategyId} → ${applied.action.id}`);
       } catch (fixError) {
         console.log(`    ⚠️  Self-heal error: ${fixError instanceof Error ? fixError.message : 'unknown'}`);
-        // Continue to next file — don't let one file crash the entire batch
       }
     }
 
+    const retryTargets = remainingFailures.filter((entry) => pendingRepairRecords.has(entry.testPath));
+    if (retryTargets.length === 0) {
+      console.log('  - No actionable deterministic repairs were found for the remaining failures.');
+      break;
+    }
+
     console.log(
-      `\n🚀  Re-running Jest on ${remainingFailures.length} file(s) (batch run ${attempt + 1})...`
+      `\n🚀  Re-running Jest on ${retryTargets.length} repaired file(s) (batch run ${attempt + 1})...`
     );
     const retryResults = await runJestBatchInProcess(
-      remainingFailures.map((e) => e.testPath),
-      remainingFailures.map((e) => e.srcPath)
+      retryTargets.map((e) => e.testPath),
+      retryTargets.map((e) => e.srcPath)
     );
 
-    // Update latest results
     for (const [key, val] of retryResults) {
       latestResults.set(key, val);
     }
 
-    // Partition into passed and still-failing
-    const nowPassed = remainingFailures.filter((e) => {
-      const r = retryResults.get(e.testPath);
-      return r && r.passed;
-    });
-    remainingFailures = remainingFailures.filter((e) => {
-      const r = retryResults.get(e.testPath);
-      return !r || !r.passed;
-    });
+    for (const e of retryTargets) {
+      const appliedRepair = pendingRepairRecords.get(e.testPath);
+      if (!appliedRepair) continue;
+      const retryResult = retryResults.get(e.testPath);
+      healingMemory = refreshPromotedEntries(recordHealingAttempt(healingMemory, {
+        signature: appliedRepair.signature,
+        action: appliedRepair.action,
+        success: Boolean(retryResult?.passed),
+        componentPattern: appliedRepair.componentPattern,
+      }));
+      latestStructuredFailures.set(e.testPath, appliedRepair.structuredFailure);
+      const reportEntry = ensureHealReportEntry(
+        healReportEntries,
+        e,
+        healingMetadataByTestPath.get(e.testPath),
+      );
+      healReportEntries.set(
+        e.testPath,
+        appendHealReportAttempt(reportEntry, createHealAttempt({
+          attemptNumber: appliedRepair.attemptNumber,
+          failure: appliedRepair.signature,
+          action: appliedRepair.action,
+          strategyId: appliedRepair.strategyId,
+          applied: true,
+          success: Boolean(retryResult?.passed),
+          reason: appliedRepair.reason,
+          explanation: appliedRepair.explanation,
+        })),
+      );
+      pendingRepairRecords.delete(e.testPath);
+    }
+
+    const nowPassed = retryTargets.filter((e) => Boolean(retryResults.get(e.testPath)?.passed));
+    remainingFailures = retryTargets.filter((e) => !retryResults.get(e.testPath)?.passed);
 
     console.log(
       `  ✅ ${nowPassed.length} fixed  |  🔄 ${remainingFailures.length} still failing`
@@ -1653,111 +2123,74 @@ async function run() {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Phase 4: "Never commit red tests" — replace remaining failures with smoke tests
-  // ─────────────────────────────────────────────────────────────────────────
-  if (remainingFailures.length > 0) {
-    console.log(
-      `\n🔸  Replacing ${remainingFailures.length} failing test(s) with smoke tests...`
-    );
-    for (const e of remainingFailures) {
-      console.log(`  - ${path.basename(e.srcPath)} → smoke test fallback`);
-      const smokeTest = generateMinimalSmokeTest(e.srcPath, e.testPath, ctx, testOutput, packageRoot);
-      writeFile(e.testPath, smokeTest);
-    }
-
-    // Verify smoke tests pass
-    const smokeResults = await runJestBatchInProcess(
-      remainingFailures.map((e) => e.testPath),
-      remainingFailures.map((e) => e.srcPath)
-    );
-
-    for (const e of remainingFailures) {
-      const r = smokeResults.get(e.testPath);
-      if (!r?.passed) {
-        // Even smoke test fails — preserve the file as a commented-out block
-        // instead of deleting it. This keeps debugging evidence for the developer.
-        console.log(
-          `  ❌ ${path.basename(e.srcPath)} — smoke test also fails, preserving as commented-out`
-        );
-        try {
-          const failedContent = fs.readFileSync(e.testPath, 'utf8');
-          const failureReason = r?.failureReason || 'Unknown failure after all retries';
-          const commentedOut = [
-            '/**',
-            ' * @generated by react-testgen — AUTO-GENERATED TEST (FAILED)',
-            ' *',
-            ` * This test was auto-generated but failed after all retry attempts.`,
-            ` * Failure reason: ${failureReason}`,
-            ' *',
-            ' * The original generated content is preserved below as a comment',
-            ' * so you can inspect the assertions, mocks, and source-understanding attempt.',
-            ' *',
-            ' * To fix: review the failure reason above, uncomment the code below,',
-            ' * apply corrections, and re-run tests.',
-            ' */',
-            '',
-            '/*',
-            failedContent.replace(/\*\//g, '* /'),
-            '*/',
-            '',
-          ].join('\n');
-          writeFile(e.testPath, commentedOut);
-        } catch {
-          // If we can't read the file, leave it as-is rather than deleting
-        }
-      }
-      latestResults.set(e.testPath, r ?? {
-        passed: false,
-        numTests: 0,
-        numFailed: 0,
-        coverage: 0,
-        coverageCollected: false,
-        errorOutput: '',
-        failureReason: 'Smoke test failed',
-      });
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
   // Build summary for all files that went through retry/self-heal
   // ─────────────────────────────────────────────────────────────────────────
-  for (const e of pass1Failed) {
+  for (const e of functionalFailures) {
     const r = latestResults.get(e.testPath);
     if (!r) {
+      const reportEntry = ensureHealReportEntry(
+        healReportEntries,
+        e,
+        healingMetadataByTestPath.get(e.testPath),
+      );
+      healReportEntries.set(
+        e.testPath,
+        finalizeHealReportEntry(reportEntry, {
+          finalStatus: 'fail',
+          remainingBlocker: 'No Jest result was produced for the generated test file.',
+        }),
+      );
       summary.push({
         file: path.basename(e.srcPath),
         status: 'fail',
         coverage: 0,
-        attempts: selfHealMaxRetries + 1,
+        attempts: attemptCounts.get(e.testPath) ?? 1,
         numTests: 0,
+        structuredFailure: latestStructuredFailures.get(e.testPath),
       });
       continue;
     }
 
-    // Check if this was a smoke-test fallback
-    const isSmokeFile = remainingFailures.some((f) => f.testPath === e.testPath);
-    let status: VerifyStatus;
-    if (!r.passed) {
-      status = 'fail';
-    } else if (isSmokeFile) {
-      status = 'smoke-fallback';
-    } else if (r.coverageCollected && r.coverage < coverageThreshold) {
-      status = 'low-coverage';
-    } else {
-      status = 'pass';
-    }
+    const status = deriveVerifyStatus(r, coverageThreshold);
+    const reportEntry = ensureHealReportEntry(
+      healReportEntries,
+      e,
+      healingMetadataByTestPath.get(e.testPath),
+    );
+    healReportEntries.set(
+      e.testPath,
+      finalizeHealReportEntry(reportEntry, {
+        finalStatus: status,
+        remainingBlocker: status === 'fail'
+          ? (r.failureReason || latestStructuredFailures.get(e.testPath)?.evidence || 'Verification still fails after healing.')
+          : status === 'low-coverage'
+            ? 'Verification passed but coverage stayed below the configured threshold.'
+            : undefined,
+      }),
+    );
 
     summary.push({
       file: path.basename(e.srcPath),
       status,
       coverage: r.coverage,
-      attempts: selfHealMaxRetries + 1,
+      attempts: attemptCounts.get(e.testPath) ?? 1,
       numTests: r.numTests,
       failureReason: r.failureReason || undefined,
+      structuredFailure: status === 'fail' ? latestStructuredFailures.get(e.testPath) : undefined,
     });
   }
 
   printSummary(summary);
+
+  const healReport = buildHealReport(
+    generated
+      .map((entry) => healReportEntries.get(entry.testPath))
+      .filter((entry): entry is HealReportEntry => Boolean(entry)),
+  );
+  console.log(formatHealReportSummary(healReport));
+  const healReportPath = getDefaultHealReportPath(cwd);
+  writeHealReportJson(healReportPath, healReport);
+  console.log(`📄 Heal report JSON: ${healReportPath}`);
 
   if (args.summaryJson) {
     writeSummaryJson(args.summaryJson, summary, {
@@ -1770,7 +2203,12 @@ async function run() {
     });
   }
 
-  // Exit with non-zero code only if there are hard failures (not smoke-fallback)
+  const memorySaved = saveHealingMemory(healingMemory);
+  if (!memorySaved) {
+    console.warn('Warning: healing memory could not be persisted to disk.');
+  }
+
+  // Exit with non-zero code only if there are unresolved verification failures.
   const hasFailures = summary.some((r) => r.status === 'fail');
   if (hasFailures) process.exit(1);
 }
@@ -1952,236 +2390,6 @@ function writeTrackedPlaceholderTest(sourceFilePath: string, testFilePath: strin
   writeFile(testFilePath, placeholder);
   console.log(`  - Placeholder test file generated/updated: ${testFilePath}`);
   return testFilePath;
-}
-
-// ---------------------------------------------------------------------------
-// "Never commit red tests" — tiered smoke test fallback
-// ---------------------------------------------------------------------------
-
-/**
- * Generate a tiered smoke test that is guaranteed to pass.
- * Includes:
- *   1. Module import test — validates file can be parsed
- *   2. Export shape test — checks named exports exist
- *   3. Component type test — validates exported function
- *   4. Safe render test — try-catch wrapped render with detected providers + auto-mocks
- *
- * Includes all relevant jest.mock() calls.
- */
-function generateMinimalSmokeTest(
-  sourceFilePath: string,
-  testFilePath: string,
-  ctx: ParserContext,
-  _testOutput: ResolvedTestOutput = DEFAULT_TEST_OUTPUT,
-  _packageRoot: string = process.cwd(),
-): string {
-  const importPath = relativeImport(testFilePath, sourceFilePath);
-  const sourceFile = getSourceFile(ctx.project, sourceFilePath);
-  const components = analyzeSourceFile(sourceFile, ctx.project, ctx.checker);
-
-  if (components.length === 0) {
-    // Not a component — test that the module can be imported and has exports
-    return [
-      '/** @generated by react-testgen - smoke test fallback */',
-      buildTestGlobalsImport(['describe', 'it', 'expect']),
-      buildDomMatchersImport(),
-      `import * as Module from "${importPath}";`,
-      '',
-      'describe("module", () => {',
-      '  it("can be imported without errors", () => {',
-      '    expect(Module).toBeDefined();',
-      '  });',
-      '',
-      '  it("has expected export shape", () => {',
-      '    expect(Object.keys(Module).length).toBeGreaterThanOrEqual(0);',
-      '  });',
-      '});',
-      '',
-    ].join('\n');
-  }
-
-  const comp = components[0];
-  const compImport =
-    comp.exportType === 'default'
-      ? `import ${comp.name} from "${importPath}";`
-      : `import { ${comp.name} } from "${importPath}";`;
-
-  const lines: string[] = [
-    '/** @generated by react-testgen - smoke test fallback */',
-    buildTestGlobalsImport(['describe', 'it', 'expect']),
-    buildDomMatchersImport(),
-    'import React from "react";',
-    'import { render } from "@testing-library/react";',
-  ];
-
-  // Add provider imports based on detected dependencies
-  if (comp.usesRouter) {
-    lines.push('import { MemoryRouter } from "react-router-dom";');
-  }
-  if (comp.usesReactQuery) {
-    lines.push('import { QueryClient, QueryClientProvider } from "@tanstack/react-query";');
-    lines.push('const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });');
-  }
-  if (comp.usesRedux) {
-    lines.push('import { Provider as ReduxProvider } from "react-redux";');
-    lines.push('import { configureStore } from "@reduxjs/toolkit";');
-    lines.push('const testStore = configureStore({ reducer: (state = {}) => state });');
-  }
-
-  lines.push(compImport);
-  lines.push(`import * as Module from "${importPath}";`);
-  lines.push('');
-
-  // Add auto-mocks for third-party libraries
-  if (comp.usesFramerMotion) {
-    lines.push(buildSmokeFramerMock());
-  }
-  if (comp.usesRecharts) {
-    lines.push(buildSmokeRechartsMock());
-  }
-  if (comp.thirdPartyImports.includes('axios')) {
-    lines.push(buildSmokeAxiosMock());
-  }
-  for (const svcImport of comp.serviceImports) {
-    lines.push(`jest.mock("${svcImport}");`);
-  }
-
-  lines.push('');
-  lines.push(`describe("${comp.name}", () => {`);
-
-  // Test 1: Module import test
-  lines.push('  it("module can be imported", () => {');
-  lines.push('    expect(Module).toBeDefined();');
-  lines.push('  });');
-  lines.push('');
-
-  // Test 2: Component type test
-  lines.push(`  it("is a valid component", () => {`);
-  lines.push(`    expect(typeof ${comp.name}).toBe("function");`);
-  lines.push('  });');
-  lines.push('');
-
-  // Build default props for required props to prevent crashes
-  const requiredProps = comp.props.filter((p: { name: string; isRequired: boolean }) => p.isRequired);
-  if (requiredProps.length > 0) {
-    const propEntries = requiredProps.map((p: { name: string; type: string; isCallback: boolean; isBoolean: boolean }) => {
-      if (p.isCallback || /^(on|handle|set)[A-Z]/.test(p.name)) return `${p.name}: jest.fn()`;
-      if (p.isBoolean || p.type?.includes('boolean')) return `${p.name}: false`;
-      if (p.type?.includes('[]') || p.type?.includes('Array') || /^(items|data|list|rows|options|results|records|entries|transactions|tabs)$/i.test(p.name)) return `${p.name}: []`;
-      if (p.type?.includes('number')) return `${p.name}: 0`;
-      if (p.name === 'children') return `children: React.createElement("div")`;
-      return `${p.name}: "test"`;
-    });
-    lines.push(`  const defaultProps = { ${propEntries.join(', ')} };`);
-    lines.push('');
-  }
-
-  // Add mock for custom hooks to prevent undefined.map errors
-  for (const hook of comp.hooks) {
-    if (!hook.importSource || hook.importSource === 'react' || hook.importSource.includes('@testing-library')) continue;
-    if (hook.importSource.includes('react-router') || hook.importSource.includes('@tanstack') || hook.importSource.includes('react-redux')) continue;
-    if (hook.importSource.startsWith('.') || hook.importSource.startsWith('@/') || hook.importSource.startsWith('~/')) {
-      // Mock hooks from relative imports
-      if (!lines.some(l => l.includes(`jest.mock("${hook.importSource}"`))) {
-        const hookMockReturn = /^use(Get|Fetch|Load|Query)/i.test(hook.name)
-          ? `{ data: [], loading: false, error: null }`
-          : /^use(Mobile|Tablet|iPad|Desktop|FirstRender)/i.test(hook.name)
-          ? `false`
-          : /^use(Navigate|Navigation)/i.test(hook.name)
-          ? `jest.fn()`
-          : `{ data: [], loading: false, error: null, value: null }`;
-        // Insert mock before the describe block
-        const descIdx = lines.indexOf(`describe("${comp.name}", () => {`);
-        if (descIdx >= 0) {
-          lines.splice(descIdx, 0, `jest.mock("${hook.importSource}", () => ({ ...jest.requireActual("${hook.importSource}"), ${hook.name}: jest.fn(() => (${hookMockReturn})) }));`, '');
-        }
-      }
-    }
-  }
-
-  // Test 3: Safe render test with all detected providers
-  lines.push('  it("renders without crashing", () => {');
-  lines.push('    try {');
-
-  // Build JSX with provider wrapping (innermost → outermost)
-  const propsSpread = requiredProps.length > 0 ? ` {...defaultProps}` : '';
-  let jsx = `<${comp.name}${propsSpread} />`;
-  if (comp.usesRouter) {
-    jsx = `<MemoryRouter>${jsx}</MemoryRouter>`;
-  }
-  if (comp.usesReactQuery) {
-    jsx = `<QueryClientProvider client={testQueryClient}>${jsx}</QueryClientProvider>`;
-  }
-  if (comp.usesRedux) {
-    jsx = `<ReduxProvider store={testStore}>${jsx}</ReduxProvider>`;
-  }
-
-  // Portal support: add target div
-  if (comp.usesPortal) {
-    lines.push('      if (!document.getElementById("portal-root")) {');
-    lines.push('        const el = document.createElement("div");');
-    lines.push('        el.id = "portal-root";');
-    lines.push('        document.body.appendChild(el);');
-    lines.push('      }');
-  }
-
-  lines.push(`      const { container } = render(${jsx});`);
-  lines.push('      expect(container).toBeInTheDocument();');
-  lines.push('    } catch {');
-  lines.push('      // Component may require providers not available in test environment');
-  lines.push('      expect(true).toBe(true);');
-  lines.push('    }');
-  lines.push('  });');
-  lines.push('});');
-  lines.push('');
-
-  return lines.join('\n');
-}
-
-// ---------------------------------------------------------------------------
-// Compact smoke-test mock builders (self-contained, no external imports)
-// ---------------------------------------------------------------------------
-
-function buildSmokeFramerMock(): string {
-  return `jest.mock("framer-motion", () => {
-  const React = require("react");
-  const motion = new Proxy({}, {
-    get: (_target, tag) => React.forwardRef((props, ref) => React.createElement(String(tag), { ref }))
-  });
-  return {
-    __esModule: true, motion,
-    AnimatePresence: ({ children }) => children,
-    useAnimation: () => ({ start: jest.fn(), stop: jest.fn() }),
-    useMotionValue: (v) => ({ get: () => v, set: jest.fn(), onChange: jest.fn() }),
-    useTransform: () => ({ get: () => 0, set: jest.fn() }),
-    useInView: () => true,
-    useScroll: () => ({ scrollY: { get: () => 0 }, scrollX: { get: () => 0 } }),
-    useSpring: (v) => ({ get: () => (typeof v === "number" ? v : 0), set: jest.fn() }),
-    useReducedMotion: () => false,
-  };
-});`;
-}
-
-function buildSmokeRechartsMock(): string {
-  return `jest.mock("recharts", () => {
-  const React = require("react");
-  const Stub = (props) => React.createElement("div", props);
-  return {
-    __esModule: true,
-    ResponsiveContainer: ({ children }) => React.createElement("div", null, typeof children === "function" ? children(500, 300) : children),
-    PieChart: Stub, AreaChart: Stub, BarChart: Stub, LineChart: Stub, ComposedChart: Stub,
-    Pie: Stub, Area: Stub, Bar: Stub, Line: Stub, XAxis: Stub, YAxis: Stub,
-    CartesianGrid: Stub, Tooltip: Stub, Legend: Stub, Cell: Stub,
-  };
-});`;
-}
-
-function buildSmokeAxiosMock(): string {
-  return `jest.mock("axios", () => {
-  const r = { data: {}, status: 200, statusText: "OK", headers: {}, config: {} };
-  const m = { get: jest.fn().mockResolvedValue(r), post: jest.fn().mockResolvedValue(r), put: jest.fn().mockResolvedValue(r), delete: jest.fn().mockResolvedValue(r), patch: jest.fn().mockResolvedValue(r), request: jest.fn().mockResolvedValue(r), interceptors: { request: { use: jest.fn(), eject: jest.fn() }, response: { use: jest.fn(), eject: jest.fn() } }, defaults: { headers: { common: {} } } };
-  return { __esModule: true, default: { ...m, create: jest.fn(() => ({ ...m })) }, ...m, create: jest.fn(() => ({ ...m })) };
-});`;
 }
 
 async function main(): Promise<void> {

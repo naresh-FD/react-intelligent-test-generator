@@ -1,0 +1,17 @@
+{
+  "name": "missing-jest-dom-matcher",
+  "description": "Generated tests should keep the jest-dom import, and healing should recover it if missing.",
+  "sourceFile": "src/components/StatusBanner.tsx",
+  "expectedGeneratedSnippets": [
+    "import \"@testing-library/jest-dom/jest-globals\";"
+  ],
+  "healing": {
+    "failureText": "TypeError: expect(...).toBeInTheDocument is not a function",
+    "expectedCategory": "missing-jest-dom-matcher",
+    "expectedActionId": "add-jest-dom-import",
+    "seedTestContentPath": "seed-tests/missing-jest-dom-matcher.test.tsx",
+    "expectedHealedSnippets": [
+      "import '@testing-library/jest-dom';"
+    ]
+  }
+}

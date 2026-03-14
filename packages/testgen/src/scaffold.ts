@@ -508,6 +508,64 @@ afterAll(() => {
 `;
 }
 
+function normalizeLineEndings(content: string): string {
+  return content.replace(/\r\n/g, '\n');
+}
+
+function hasBaseSetupContent(content: string): boolean {
+  return content.includes(`import '@testing-library/jest-dom';`)
+    && content.includes('Mock window.matchMedia (required by many UI components and recharts)')
+    && content.includes('Mock ResizeObserver (required by recharts and similar libs)');
+}
+
+function hasEnhancedPolyfills(content: string): boolean {
+  return content.includes('Mock window.scrollTo (used by many router/scroll components)')
+    && content.includes('const createMockStorage = (): Storage => {')
+    && content.includes('const SUPPRESSED_PATTERNS = [');
+}
+
+function collapseRepeatedBlock(content: string, block: string): string {
+  let next = normalizeLineEndings(content);
+  const normalizedBlock = normalizeLineEndings(block).trim();
+  const firstIndex = next.indexOf(normalizedBlock);
+  if (firstIndex === -1) {
+    return next;
+  }
+
+  const duplicateIndex = next.indexOf(normalizedBlock, firstIndex + normalizedBlock.length);
+  if (duplicateIndex === -1) {
+    return next;
+  }
+
+  while (true) {
+    const repeatedIndex = next.indexOf(normalizedBlock, firstIndex + normalizedBlock.length);
+    if (repeatedIndex === -1) {
+      break;
+    }
+    next = `${next.slice(0, repeatedIndex).trimEnd()}\n\n${next.slice(repeatedIndex + normalizedBlock.length).trimStart()}`;
+  }
+
+  return next.endsWith('\n') ? next : `${next}\n`;
+}
+
+function normalizeSetupTestsContent(existingContent: string): string {
+  const baseBlock = buildSetupTestsContent().trim();
+  const enhancedBlock = buildEnhancedPolyfills().trim();
+  let next = normalizeLineEndings(existingContent).trim();
+
+  if (!hasBaseSetupContent(next)) {
+    next = next.length > 0 ? `${next}\n\n${baseBlock}` : baseBlock;
+  }
+
+  if (!hasEnhancedPolyfills(next)) {
+    next = `${next}\n\n${enhancedBlock}`;
+  } else {
+    next = collapseRepeatedBlock(next, enhancedBlock);
+  }
+
+  return `${next.trimEnd()}\n`;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -523,26 +581,24 @@ afterAll(() => {
  *  - src/test-utils/ErrorBoundary.tsx
  */
 export function ensureJestScaffold(rootDir: string, testOutput: ResolvedTestOutput = DEFAULT_TEST_OUTPUT): void {
-  if (hasJestConfig(rootDir)) return;
-
   const configPath = path.join(rootDir, 'jest.config.cjs');
-  fs.writeFileSync(configPath, buildJestConfigContent(rootDir, testOutput), 'utf8');
-  console.log('  Created jest.config.cjs (no Jest config was found)');
+  if (!hasJestConfig(rootDir)) {
+    fs.writeFileSync(configPath, buildJestConfigContent(rootDir, testOutput), 'utf8');
+    console.log('  Created jest.config.cjs (no Jest config was found)');
+  }
 
   const setupDir = path.join(rootDir, 'src', 'test-utils');
   const setupPath = path.join(setupDir, 'setupTests.ts');
   if (!fs.existsSync(setupPath)) {
     fs.mkdirSync(setupDir, { recursive: true });
-    fs.writeFileSync(setupPath, buildSetupTestsContent(), 'utf8');
+    fs.writeFileSync(setupPath, normalizeSetupTestsContent(''), 'utf8');
     console.log('  Created src/test-utils/setupTests.ts');
-  }
-
-  // Append enhanced polyfills to setupTests if not already present
-  if (fs.existsSync(setupPath)) {
+  } else {
     const existingContent = fs.readFileSync(setupPath, 'utf8');
-    if (!existingContent.includes('scrollTo') && !existingContent.includes('createObjectURL')) {
-      fs.appendFileSync(setupPath, buildEnhancedPolyfills(), 'utf8');
-      console.log('  Enhanced src/test-utils/setupTests.ts with additional polyfills');
+    const normalizedContent = normalizeSetupTestsContent(existingContent);
+    if (normalizedContent !== existingContent) {
+      fs.writeFileSync(setupPath, normalizedContent, 'utf8');
+      console.log('  Normalized src/test-utils/setupTests.ts support scaffolding');
     }
   }
 
