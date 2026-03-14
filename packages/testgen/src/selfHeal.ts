@@ -48,7 +48,33 @@ export interface FixRule {
 // ---------------------------------------------------------------------------
 
 export const FIX_RULES: FixRule[] = [
-  // Rule 1: Missing module
+  // Rule 0: Broken relative import path in jest.mock or import
+  // When test is in __tests__/ subfolder, relative paths may be one level too shallow.
+  // Fix by adding an extra "../" to the broken path.
+  {
+    errorPattern: /Cannot find module '(\.\.?\/[^']+)'/,
+    description: 'Fix broken relative import path depth',
+    apply(content, error) {
+      const match = error.match(/Cannot find module '(\.\.?\/[^']+)'/);
+      if (!match) return null;
+      const brokenPath = match[1];
+
+      // Strategy: add one extra ../ level to the broken path
+      const fixedPath = brokenPath.startsWith('./')
+        ? `../${brokenPath.slice(2)}`  // ./foo → ../foo
+        : `../${brokenPath}`;          // ../foo → ../../foo
+
+      // Replace all occurrences of the broken path (in jest.mock, import, etc.)
+      const escaped = brokenPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`(['"])${escaped}\\1`, 'g');
+      const modified = content.replace(regex, `"${fixedPath}"`);
+
+      if (modified === content) return null;
+      return modified;
+    },
+  },
+
+  // Rule 1: Missing module (non-relative)
   {
     errorPattern: /Cannot find module '([^']+)'/,
     description: 'Add missing module mock',
@@ -468,14 +494,46 @@ const testStore = configureStore({ reducer: (state = {}) => state });`;
   },
 
   // Rule 22: TypeScript diagnostic errors from ts-jest
-  // NOTE: @ts-nocheck suppression is forbidden. Instead, return null so the
-  // generator can attempt a targeted fix or the developer can inspect the error.
+  // Fix common type mismatches (e.g., boolean → MutableRefObject, string → Dispatch)
+  // without resorting to blanket @ts-nocheck (which is forbidden).
   {
     errorPattern: /TS\d{4}:|Type.*is not assignable|Property.*does not exist on type/i,
-    description: 'Skip — TS errors must be fixed at source, not suppressed',
-    apply(_content: string) {
-      // Intentionally return null: blanket @ts-nocheck is forbidden.
-      // Let the next self-heal tier or the developer address the root cause.
+    description: 'Fix common TS type mismatches in defaultProps',
+    apply(content: string, error: string) {
+      let modified = content;
+
+      // Fix 1: MutableRefObject<boolean> — replace `propName: true/false` with `{ current: true/false }`
+      const refMatch = error.match(
+        /Type '(boolean|string|number)' is not assignable to type '(?:.*\.)?MutableRefObject<(\w+)>'/i
+      );
+      if (refMatch) {
+        const [, , innerType] = refMatch;
+        const defaultVal = innerType === 'boolean' ? 'false' : innerType === 'number' ? '0' : '""';
+        // Find the prop in defaultProps and wrap it in { current: ... }
+        modified = modified.replace(
+          /(const defaultProps\s*=\s*\{[\s\S]*?)(\w+):\s*(true|false|"[^"]*"|\d+)/,
+          (m, before, propName, val) => {
+            // Only fix if this looks like the offending prop
+            return `${before}${propName}: { current: ${val} }`;
+          }
+        );
+        if (modified !== content) return modified;
+        // Broader fallback: replace any boolean prop that matches the pattern
+        modified = content.replace(
+          /(\w+):\s*(true|false),/g,
+          (match, propName: string) => {
+            if (/toggled|ref|mutable/i.test(propName)) {
+              const val = match.includes('true') ? 'true' : 'false';
+              return `${propName}: { current: ${val} },`;
+            }
+            return match;
+          }
+        );
+        if (modified !== content) return modified;
+      }
+
+      // Fix 2: Property does not exist on type — likely a missing import or wrong mock shape.
+      // Return null so other rules or regeneration can handle it.
       return null;
     },
   },

@@ -239,20 +239,34 @@ export function mockValueForProp(prop: PropInfo): string {
   if (type.includes('=>') || prop.isCallback) return mockFn();
 
   // TypeScript utility generic types - check on original (non-lowercased) type
+  // Use \b word boundary to handle ts-morph resolved forms like import("react").MutableRefObject<>
   const trimmedOrig = prop.type.trim();
-  if (/^(Partial|Required|Readonly)</.test(trimmedOrig)) return '{}';
-  if (/^Map</.test(trimmedOrig)) return 'new Map()';
-  if (/^Set</.test(trimmedOrig)) return 'new Set()';
-  if (/^WeakMap</.test(trimmedOrig)) return 'new WeakMap()';
-  if (/^WeakSet</.test(trimmedOrig)) return 'new WeakSet()';
-  if (/^Promise</.test(trimmedOrig)) return 'Promise.resolve(undefined as any)';
-  if (/^(React\.)?Ref</.test(trimmedOrig) || /^(React\.)?MutableRefObject</.test(trimmedOrig)) return '{ current: null }';
-  if (/^React\.Dispatch</.test(trimmedOrig)) return mockFn();
+  if (/\b(Partial|Required|Readonly)</.test(trimmedOrig) && !trimmedOrig.includes('=>')) return '{}';
+  if (/\bMap</.test(trimmedOrig) && !trimmedOrig.includes('=>')) return 'new Map()';
+  if (/\bSet</.test(trimmedOrig) && !trimmedOrig.includes('=>') && !/\bReadonlySet/.test(trimmedOrig)) return 'new Set()';
+  if (/\bWeakMap</.test(trimmedOrig)) return 'new WeakMap()';
+  if (/\bWeakSet</.test(trimmedOrig)) return 'new WeakSet()';
+  if (/\bPromise</.test(trimmedOrig) && !trimmedOrig.includes('=>')) return 'Promise.resolve(undefined as any)';
+  // Ref types — handle all resolution formats:
+  //   MutableRefObject<T>, React.MutableRefObject<T>, import("react").MutableRefObject<T>
+  //   RefObject<T>, Ref<T>, and union variants (e.g. MutableRefObject<T> | undefined)
+  if (/\bMutableRefObject</.test(trimmedOrig) || /\bRefObject</.test(trimmedOrig)) {
+    // Extract the inner type to provide a sensible default for `current`
+    const innerMatch = trimmedOrig.match(/(?:Mutable)?RefObject<(.+?)>/);
+    const inner = innerMatch?.[1]?.trim();
+    if (inner === 'boolean') return '{ current: false }';
+    if (inner === 'number') return '{ current: 0 }';
+    if (inner === 'string') return '{ current: "" }';
+    if (inner === 'HTMLElement' || inner?.startsWith('HTML')) return '{ current: null }';
+    return '{ current: null }';
+  }
+  if (/\bRef</.test(trimmedOrig) && !trimmedOrig.includes('=>')) return '{ current: null }';
+  if (/\bDispatch</.test(trimmedOrig) && !trimmedOrig.includes('=>')) return mockFn();
   // Array<T> generic syntax → empty array
-  if (/^(readonly\s+)?Array</.test(trimmedOrig)) return '[]';
-  if (/^ReadonlyArray</.test(trimmedOrig)) return '[]';
+  if (/\bArray</.test(trimmedOrig) && !trimmedOrig.includes('=>')) return '[]';
+  if (/\bReadonlyArray</.test(trimmedOrig)) return '[]';
   // Record<K,V> generic → empty object
-  if (/^Record</.test(trimmedOrig)) return '{}';
+  if (/\bRecord</.test(trimmedOrig) && !trimmedOrig.includes('=>')) return '{}';
   // Intersection types A & B → empty object satisfying both shapes
   if (trimmedOrig.includes(' & ') && !trimmedOrig.includes('=>')) return '{}';
 

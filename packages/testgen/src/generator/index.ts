@@ -80,7 +80,10 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
   if (options.project && options.checker) {
     for (const component of components) {
       if (component.contexts.length > 0) {
-        const info = buildContextRenderInfo(component, options.project, options.checker);
+        const info = buildContextRenderInfo(component, options.project, options.checker, {
+          sourceFilePath: options.sourceFilePath,
+          testFilePath: options.testFilePath,
+        });
         contextRenderInfoMap.set(component.name, info);
         allContextImports.push(...info.contextImports);
       }
@@ -102,7 +105,10 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
   // Auto-mocks for third-party libraries (placed between imports and describe blocks)
   const allAutoMocks: string[] = [];
   for (const component of components) {
-    const mocks = buildAutoMocks(component);
+    const mocks = buildAutoMocks(component, {
+      sourceFilePath: options.sourceFilePath,
+      testFilePath: options.testFilePath,
+    });
     for (const mock of mocks) {
       // Deduplicate: same jest.mock() call shouldn't appear twice
       if (!allAutoMocks.some((existing) => existing === mock)) {

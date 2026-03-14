@@ -5,14 +5,47 @@
  * These mocks are placed between imports and describe blocks in generated tests.
  * Each mock provides a minimal working stub that prevents crashes.
  */
+import path from 'node:path';
 import { ComponentInfo } from '../analyzer';
 import { mockFn, mockGlobalName, mockModuleFn } from '../utils/framework';
+
+/**
+ * Recompute a relative import path so it is correct from the test file's directory
+ * rather than the source file's directory.
+ *
+ * When testFile is in a `__tests__/` subfolder, source-relative paths like
+ * `../../context/Foo` need an extra `../` to account for the deeper nesting.
+ */
+function rebaseRelativeImport(
+  importSource: string,
+  sourceFilePath: string,
+  testFilePath: string,
+): string {
+  if (!importSource.startsWith('.')) return importSource;
+
+  const sourceDir = path.dirname(sourceFilePath);
+  const testDir = path.dirname(testFilePath);
+
+  // Resolve the import to an absolute path from the source file's perspective
+  const absoluteTarget = path.resolve(sourceDir, importSource);
+
+  // Compute the relative path from the test file's directory
+  let rebased = path.relative(testDir, absoluteTarget).split('\\').join('/');
+  if (!rebased.startsWith('.')) rebased = `./${rebased}`;
+
+  return rebased;
+}
+
+export interface AutoMockOptions {
+  sourceFilePath?: string;
+  testFilePath?: string;
+}
 
 /**
  * Generate jest.mock() calls for third-party libraries detected in the component.
  * Mocks are deterministic and prevent side effects (API calls, animations, canvas).
  */
-export function buildAutoMocks(component: ComponentInfo): string[] {
+export function buildAutoMocks(component: ComponentInfo, options: AutoMockOptions = {}): string[] {
   const mocks: string[] = [];
 
   // Mock framer-motion (Proxy-based: motion.div, motion.span, etc.)
@@ -32,7 +65,10 @@ export function buildAutoMocks(component: ComponentInfo): string[] {
 
   // Mock service/API imports with smart return values
   for (const svcImport of component.serviceImports) {
-    mocks.push(`${mockModuleFn()}("${svcImport}");`);
+    const resolvedPath = (options.sourceFilePath && options.testFilePath)
+      ? rebaseRelativeImport(svcImport, options.sourceFilePath, options.testFilePath)
+      : svcImport;
+    mocks.push(`${mockModuleFn()}("${resolvedPath}");`);
   }
 
   // Mock custom hooks that consume context/data to return safe defaults
@@ -52,8 +88,11 @@ export function buildAutoMocks(component: ComponentInfo): string[] {
 
     // Only mock hooks from relative imports (project-internal hooks)
     if (hook.importSource.startsWith('.') || hook.importSource.startsWith('@/') || hook.importSource.startsWith('~/')) {
+      const resolvedPath = (options.sourceFilePath && options.testFilePath)
+        ? rebaseRelativeImport(hook.importSource, options.sourceFilePath, options.testFilePath)
+        : hook.importSource;
       const mockReturn = buildHookMockReturnValue(hook.name);
-      mocks.push(`${mockModuleFn()}("${hook.importSource}", () => ({
+      mocks.push(`${mockModuleFn()}("${resolvedPath}", () => ({
   ${hook.name}: ${mockGlobalName()}.fn(() => (${mockReturn})),
 }));`);
       mockedSources.add(hook.importSource);

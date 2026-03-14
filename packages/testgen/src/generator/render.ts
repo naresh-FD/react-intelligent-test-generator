@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { ComponentInfo, ContextUsage } from '../analyzer';
 import { getRenderFunctionName } from './templates';
 import { ContextMockValue, generateContextMockValue } from './contextValues';
@@ -13,13 +14,36 @@ export interface ContextRenderInfo {
 }
 
 /**
+ * Recompute a relative import so it resolves correctly from the test file directory.
+ */
+function rebaseImportPath(
+  importPath: string,
+  sourceFilePath?: string,
+  testFilePath?: string,
+): string {
+  if (!importPath.startsWith('.') || !sourceFilePath || !testFilePath) return importPath;
+  const sourceDir = path.dirname(sourceFilePath);
+  const testDir = path.dirname(testFilePath);
+  const absoluteTarget = path.resolve(sourceDir, importPath);
+  let rebased = path.relative(testDir, absoluteTarget).split('\\').join('/');
+  if (!rebased.startsWith('.')) rebased = `./${rebased}`;
+  return rebased;
+}
+
+export interface ContextRenderOptions {
+  sourceFilePath?: string;
+  testFilePath?: string;
+}
+
+/**
  * Build mock declarations and import lines for context-consuming components.
  * Returns empty arrays if the component uses no contexts.
  */
 export function buildContextRenderInfo(
   component: ComponentInfo,
   project: Project,
-  checker: TypeChecker
+  checker: TypeChecker,
+  options: ContextRenderOptions = {},
 ): ContextRenderInfo {
   const mockDeclarations: string[] = [];
   const contextImports: string[] = [];
@@ -37,9 +61,13 @@ export function buildContextRenderInfo(
     mockDeclarations.push(mock.mockDeclaration);
 
     // The import for the context object (e.g., import { AuthContext } from "...")
-    // We need to import the raw context object, not the provider
+    // Rebase the import path so it resolves correctly from the test file directory
     const contextName = ctx.contextName;
-    const importPath = mock.importPath;
+    const importPath = rebaseImportPath(
+      mock.importPath,
+      options.sourceFilePath,
+      options.testFilePath,
+    );
     if (contextName && importPath) {
       contextImports.push(`import { ${contextName} } from "${importPath}";`);
     }
