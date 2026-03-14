@@ -34,7 +34,9 @@ export function isTestFile(filePath: string, output?: ResolvedTestOutput): boole
   // Check suffix-based detection (.test.tsx, .spec.ts, etc.)
   if (
     normalized.endsWith(`${suffix}.tsx`) ||
-    normalized.endsWith(`${suffix}.ts`)
+    normalized.endsWith(`${suffix}.ts`) ||
+    normalized.endsWith(`${suffix}.jsx`) ||
+    normalized.endsWith(`${suffix}.js`)
   ) {
     return true;
   }
@@ -47,7 +49,14 @@ export function isTestFile(filePath: string, output?: ResolvedTestOutput): boole
 
   // Backwards compat: always recognise __tests__ and .test files
   if (normalized.includes('/__tests__/')) return true;
-  if (normalized.endsWith('.test.tsx') || normalized.endsWith('.test.ts')) return true;
+  if (
+    normalized.endsWith('.test.tsx') ||
+    normalized.endsWith('.test.ts') ||
+    normalized.endsWith('.test.jsx') ||
+    normalized.endsWith('.test.js')
+  ) {
+    return true;
+  }
 
   return false;
 }
@@ -59,7 +68,7 @@ export function scanSourceFiles(options: ScanSourceFilesOptions = {}): string[] 
   if (!fs.existsSync(scanRoot)) return [];
 
   const files = listFilesRecursive(scanRoot);
-  const include = options.include ?? ['src/**/*.{ts,tsx}'];
+  const include = options.include ?? ['src/**/*.{js,jsx,ts,tsx}'];
   const exclude = options.exclude ?? [
     '**/__tests__/**',
     '**/*.test.*',
@@ -70,7 +79,8 @@ export function scanSourceFiles(options: ScanSourceFilesOptions = {}): string[] 
 
   return files.filter((filePath) => {
     if (isTestFile(filePath)) return false;
-    if (!filePath.endsWith('.ts') && !filePath.endsWith('.tsx')) return false;
+    const ext = path.extname(filePath).toLowerCase();
+    if (!['.js', '.jsx', '.ts', '.tsx'].includes(ext)) return false;
     const rel = normalizeSlashes(path.relative(packageRoot, filePath));
     const includeMatch = include.length === 0 || include.some((pattern) => matchGlob(rel, pattern));
     if (!includeMatch) return false;
@@ -98,7 +108,7 @@ export function getTestFilePath(
   const dir = path.dirname(sourceFilePath);
   const ext = path.extname(sourceFilePath);
   const base = path.basename(sourceFilePath, ext);
-  const testExt = ext === '.ts' ? `${cfg.suffix}.ts` : `${cfg.suffix}.tsx`;
+  const testExt = ext === '.ts' || ext === '.js' ? `${cfg.suffix}.ts` : `${cfg.suffix}.tsx`;
   const testFileName = `${base}${testExt}`;
 
   switch (cfg.strategy) {

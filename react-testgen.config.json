@@ -2,7 +2,7 @@
   "version": 1,
   "defaults": {
     "include": [
-      "src/**/*.{ts,tsx}"
+      "src/**/*.{js,jsx,ts,tsx}"
     ],
     "exclude": [
       "**/__tests__/**",
@@ -28,7 +28,7 @@
       "name": "expense-manager",
       "root": "examples/expense-manager",
       "include": [
-        "src/**/*.{ts,tsx}"
+        "src/**/*.{js,jsx,ts,tsx}"
       ],
       "framework": "jest",
       "renderHelper": "src/test-utils/renderWithProviders.tsx"

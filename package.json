@@ -19,6 +19,7 @@
     "testgen:smart": "npm --workspace examples/expense-manager run testgen:smart",
     "testgen:smart:file": "npm --workspace examples/expense-manager run testgen:smart:file",
     "testgen:smart:git": "npm --workspace examples/expense-manager run testgen:smart:git",
+    "benchmark:testgen": "powershell -NoProfile -ExecutionPolicy Bypass -File packages/testgen/scripts/run-benchmark.ps1",
     "sonar": "npx sonarqube-scanner"
   }
 }

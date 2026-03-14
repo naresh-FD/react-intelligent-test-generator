@@ -55,6 +55,7 @@ __tests__/
 
 # Testgen verify output (temporary jest results + coverage snapshots)
 .testgen-results/
+.testgen-bench/
 
 # Misc
 *.local

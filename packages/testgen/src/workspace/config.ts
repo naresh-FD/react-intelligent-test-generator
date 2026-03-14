@@ -121,7 +121,7 @@ export interface TestgenConfig {
 }
 
 const DEFAULTS: TestgenDefaults = {
-  include: ['src/**/*.{ts,tsx}'],
+  include: ['src/**/*.{js,jsx,ts,tsx}'],
   exclude: ['**/__tests__/**', '**/*.test.*', '**/dist/**', '**/build/**', '**/coverage/**'],
   framework: 'auto',
   renderHelper: 'auto',

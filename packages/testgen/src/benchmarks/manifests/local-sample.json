@@ -1,0 +1,30 @@
+{
+  "name": "local-sample",
+  "description": "Low-memory benchmark manifest using the example apps already present in this workspace.",
+  "scenarios": [
+    {
+      "id": "expense-manager",
+      "cwd": "examples/expense-manager",
+      "description": "Mix of component, layout, protected route, hook, and context files.",
+      "files": [
+        "src/components/common/Button.tsx",
+        "src/components/layout/MainLayout.tsx",
+        "src/components/ProtectedRoute.tsx",
+        "src/hooks/useExpenses.ts",
+        "src/contexts/AuthContext.tsx"
+      ]
+    },
+    {
+      "id": "banking-dashboard",
+      "cwd": "examples/banking-dashboard",
+      "description": "Mix of dashboard, upload flow, parser utility, hook, and Radix-heavy UI component.",
+      "files": [
+        "src/components/Dashboard.tsx",
+        "src/components/FileUploader.tsx",
+        "src/lib/csvParser.ts",
+        "src/hooks/use-toast.tsx",
+        "src/components/ui/command.tsx"
+      ]
+    }
+  ]
+}

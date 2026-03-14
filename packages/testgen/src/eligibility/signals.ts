@@ -110,7 +110,7 @@ export function extractSignals(
         // --- Naming ---
         isPascalCase: /^[A-Z]/.test(basename),
         startsWithUse: /^use[A-Z]/.test(basename),
-        isIndexFile: /^index\.(ts|tsx)$/.test(basenameWithExt),
+        isIndexFile: /^index\.(js|jsx|ts|tsx)$/.test(basenameWithExt),
         isAppEntry: detectAppEntry(filePath, basenameWithExt),
     };
 }
@@ -162,10 +162,10 @@ function detectConfigFile(filePath: string): boolean {
 
 function detectAppEntry(filePath: string, basenameWithExt: string): boolean {
     const normalized = filePath.replaceAll('\\', '/');
-    // main.tsx / index.tsx at src root, or App.tsx
-    if (/^(main|App)\.(ts|tsx)$/.test(basenameWithExt)) return true;
-    // index.tsx directly under src/ (not deeply nested)
-    if (basenameWithExt === 'index.tsx') {
+    // main.tsx / index.tsx / main.jsx / index.jsx at src root, or App.tsx/App.jsx
+    if (/^(main|App)\.(js|jsx|ts|tsx)$/.test(basenameWithExt)) return true;
+    // index file directly under src/ (not deeply nested)
+    if (/^index\.(js|jsx|ts|tsx)$/.test(basenameWithExt)) {
         const parts = normalized.split('/');
         const srcIndex = parts.lastIndexOf('src');
         if (srcIndex >= 0 && parts.length - srcIndex <= 2) return true;

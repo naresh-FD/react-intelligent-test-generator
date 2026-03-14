@@ -186,7 +186,8 @@ function normalizePath(filePath: string): string {
 function isEligibleSource(filePath: string): boolean {
   if (!fs.existsSync(filePath)) return false;
   if (isTestFile(filePath)) return false;
-  return filePath.endsWith('.ts') || filePath.endsWith('.tsx');
+  const ext = path.extname(filePath).toLowerCase();
+  return ext === '.js' || ext === '.jsx' || ext === '.ts' || ext === '.tsx';
 }
 
 function isFileInPackage(filePath: string, packageRoot: string): boolean {
