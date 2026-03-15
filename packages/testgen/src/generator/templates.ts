@@ -1,14 +1,15 @@
 import { relativeImport, resolveRenderHelper } from '../utils/path';
 import { ComponentInfo } from '../analyzer';
 import { buildDomMatchersImport, buildTestGlobalsImport, mockGlobalName } from '../utils/framework';
+import type { RepairPlan } from '../healer/knowledge-base';
 
 export interface TemplateOptions {
   testFilePath: string;
   sourceFilePath: string;
   usesUserEvent: boolean;
   needsScreen: boolean;
-  /** Additional import lines for context objects (e.g., import { AuthContext } from "...") */
-  contextImports?: string[];
+  /** Repair plan from the self-healing system. */
+  repairPlan?: RepairPlan;
 }
 
 export function buildHeader(): string {
@@ -21,55 +22,46 @@ export function buildImports(components: ComponentInfo[], options: TemplateOptio
   const componentImport = relativeImport(options.testFilePath, options.sourceFilePath);
 
   const imports: string[] = [];
-  // Check if a custom render helper exists in this project
-  const renderHelper = resolveRenderHelper(options.sourceFilePath);
-  const hasCustomRender = renderHelper !== null;
-  const renderFnsByComponent = new Map(
-    components.map((component) => [component.name, getRenderFunctionName(component, options.sourceFilePath)]),
+  const needsPlainRender = components.some((c) => c.usesRouter);
+  const needsProviders = components.some((c) => !c.usesRouter);
+  const needsMockGlobal = components.some((c) => c.props.some((p) => p.isCallback));
+
+  // Check if repair plan forces renderWithProviders
+  const forceCustomRender = options.repairPlan?.actions.some(
+    (a) => a.kind === 'use-render-helper' && a.helper === 'renderWithProviders'
   );
-  const needsPlainRender = components.some((c) => renderFnsByComponent.get(c.name) === 'render');
-  const needsProviders = components.some((c) => renderFnsByComponent.get(c.name) !== 'render');
-  const hasContextMocks = (options.contextImports ?? []).length > 0;
-  const needsMockGlobal = hasContextMocks || components.some((c) => c.props.some((p) => p.isCallback));
 
   const testGlobals = ['describe', 'it', 'expect'];
   if (needsMockGlobal) testGlobals.push(mockGlobalName());
   imports.push(buildTestGlobalsImport(testGlobals));
   imports.push(buildDomMatchersImport());
 
-  if (needsPlainRender || !hasCustomRender) {
+  // Check if a custom render helper exists in this project
+  const renderHelper = resolveRenderHelper(options.sourceFilePath);
+  const hasCustomRender = renderHelper !== null;
+
+  if ((needsPlainRender || !hasCustomRender) && !forceCustomRender) {
     // Use plain render from RTL (either for router components, or when custom render doesn't exist)
     const rtlImports = ['render'];
     if (options.needsScreen) rtlImports.push('screen');
+    // Check if repair plan needs async handling imports
+    if (options.repairPlan?.actions.some((a) => a.kind === 'add-async-handling')) {
+      const strategy = options.repairPlan.actions.find((a) => a.kind === 'add-async-handling');
+      if (strategy && 'strategy' in strategy) {
+        if (strategy.strategy === 'waitFor' && !rtlImports.includes('waitFor')) {
+          rtlImports.push('waitFor');
+        }
+        if (strategy.strategy === 'act' && !rtlImports.includes('act')) {
+          rtlImports.push('act');
+        }
+      }
+    }
     imports.push(`import { ${rtlImports.join(', ')} } from "@testing-library/react";`);
   }
 
-  // Add MemoryRouter import when components use router hooks with plain render
-  const needsMemoryRouter = needsPlainRender && components.some(
-    (c) => c.usesRouter && renderFnsByComponent.get(c.name) === 'render'
-  );
-  if (needsMemoryRouter) {
-    imports.push('import { MemoryRouter } from "react-router-dom";');
-  }
-
-  // Add QueryClientProvider import when components use React Query
-  const needsQueryClient = components.some((c) => c.usesReactQuery);
-  if (needsQueryClient) {
-    imports.push('import { QueryClient, QueryClientProvider } from "@tanstack/react-query";');
-    imports.push('const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });');
-  }
-
-  // Add Redux Provider import when components use Redux hooks
-  const needsRedux = components.some((c) => c.usesRedux);
-  if (needsRedux) {
-    imports.push('import { Provider as ReduxProvider } from "react-redux";');
-    imports.push('import { configureStore } from "@reduxjs/toolkit";');
-    imports.push('const testStore = configureStore({ reducer: (state = {}) => state });');
-  }
-
-  if (needsProviders && hasCustomRender) {
-    const testUtilsImport = relativeImport(options.testFilePath, renderHelper.path);
-    const renderFnName = renderHelper.exportName;
+  if ((needsProviders && hasCustomRender) || (forceCustomRender && hasCustomRender)) {
+    const testUtilsImport = relativeImport(options.testFilePath, renderHelper!.path);
+    const renderFnName = renderHelper!.exportName;
     const testingImports = [renderFnName];
     if (!needsPlainRender && options.needsScreen) testingImports.push('screen');
     imports.push(`import { ${testingImports.join(', ')} } from "${testUtilsImport}";`);
@@ -77,23 +69,6 @@ export function buildImports(components: ComponentInfo[], options: TemplateOptio
 
   if (options.usesUserEvent) {
     imports.push('import userEvent from "@testing-library/user-event";');
-  }
-
-  // Context imports — when components consume React Context
-  const contextImports = options.contextImports ?? [];
-  if (contextImports.length > 0) {
-    // Add React import if not already present (needed for Context.Provider JSX)
-    if (!imports.some((i) => i.includes('from "react"') || i.includes("from 'react'"))) {
-      imports.push('import React from "react";');
-    }
-    // Deduplicate context imports
-    const seen = new Set<string>();
-    for (const ci of contextImports) {
-      if (!seen.has(ci)) {
-        seen.add(ci);
-        imports.push(ci);
-      }
-    }
   }
 
   if (defaultComponents.length > 0 && namedComponents.length > 0) {
@@ -110,6 +85,32 @@ export function buildImports(components: ComponentInfo[], options: TemplateOptio
     );
   }
 
+  // Apply repair plan: add extra imports (idempotent — deduplicated)
+  if (options.repairPlan) {
+    const existingImportText = imports.join('\n');
+    for (const action of options.repairPlan.actions) {
+      if (action.kind === 'ensure-import' && action.module !== 'unknown') {
+        const importLine = action.symbol
+          ? `import { ${action.symbol} } from "${action.module}";`
+          : `import "${action.module}";`;
+        // Idempotent: don't add if already present
+        if (!existingImportText.includes(action.module)) {
+          imports.push(importLine);
+        }
+      }
+      if (action.kind === 'add-wrapper') {
+        // Add import for wrapper component if not already imported
+        if (!existingImportText.includes(action.importFrom)) {
+          if (action.wrapper === 'QueryClientProvider') {
+            imports.push(`import { QueryClientProvider, QueryClient } from "${action.importFrom}";`);
+          } else {
+            imports.push(`import { ${action.wrapper} } from "${action.importFrom}";`);
+          }
+        }
+      }
+    }
+  }
+
   return imports.join('\n');
 }
 
@@ -118,6 +119,7 @@ export function buildImports(components: ComponentInfo[], options: TemplateOptio
  * Returns the actual export name from the detected render helper.
  */
 export function getRenderFunctionName(component: ComponentInfo, sourceFilePath: string): string {
+  if (component.usesRouter) return 'render';
   const helper = resolveRenderHelper(sourceFilePath);
   return helper ? helper.exportName : 'render';
 }

@@ -1,194 +1,66 @@
-import path from 'node:path';
-import { ComponentInfo, ContextUsage } from '../analyzer';
+import { ComponentInfo } from '../analyzer';
 import { getRenderFunctionName } from './templates';
-import { ContextMockValue, generateContextMockValue } from './contextValues';
-import { Project, TypeChecker } from 'ts-morph';
+import { resolveRenderHelper } from '../utils/path';
+import type { RepairPlan } from '../healer/knowledge-base';
 
-export interface ContextRenderInfo {
-  /** Mock value declarations to place before renderUI */
-  mockDeclarations: string[];
-  /** Context import lines to add to the file header */
-  contextImports: string[];
-  /** All generated ContextMockValue objects (for variant tests) */
-  contextMocks: ContextMockValue[];
-}
-
-/**
- * Recompute a relative import so it resolves correctly from the test file directory.
- */
-function rebaseImportPath(
-  importPath: string,
-  sourceFilePath?: string,
-  testFilePath?: string,
-): string {
-  if (!importPath.startsWith('.') || !sourceFilePath || !testFilePath) return importPath;
-  const sourceDir = path.dirname(sourceFilePath);
-  const testDir = path.dirname(testFilePath);
-  const absoluteTarget = path.resolve(sourceDir, importPath);
-  let rebased = path.relative(testDir, absoluteTarget).split('\\').join('/');
-  if (!rebased.startsWith('.')) rebased = `./${rebased}`;
-  return rebased;
-}
-
-export interface ContextRenderOptions {
-  sourceFilePath?: string;
-  testFilePath?: string;
-}
-
-/**
- * Build mock declarations and import lines for context-consuming components.
- * Returns empty arrays if the component uses no contexts.
- */
-export function buildContextRenderInfo(
-  component: ComponentInfo,
-  project: Project,
-  checker: TypeChecker,
-  options: ContextRenderOptions = {},
-): ContextRenderInfo {
-  const mockDeclarations: string[] = [];
-  const contextImports: string[] = [];
-  const contextMocks: ContextMockValue[] = [];
-
-  if (component.contexts.length === 0) {
-    return { mockDeclarations, contextImports, contextMocks };
-  }
-
-  for (const ctx of component.contexts) {
-    const mock = generateContextMockValue(ctx, project, checker);
-    if (!mock) continue;
-
-    contextMocks.push(mock);
-    mockDeclarations.push(mock.mockDeclaration);
-
-    // The import for the context object (e.g., import { AuthContext } from "...")
-    // Rebase the import path so it resolves correctly from the test file directory
-    const contextName = ctx.contextName;
-    const importPath = rebaseImportPath(
-      mock.importPath,
-      options.sourceFilePath,
-      options.testFilePath,
-    );
-    if (contextName && importPath) {
-      contextImports.push(`import { ${contextName} } from "${importPath}";`);
-    }
-  }
-
-  return { mockDeclarations, contextImports, contextMocks };
-}
-
-/**
- * Build the renderUI helper for component tests.
- * Enhanced to wrap components in Context.Provider when they consume contexts.
- */
 export function buildRenderHelper(
   component: ComponentInfo,
   sourceFilePath?: string,
-  contextMocks?: ContextMockValue[]
+  repairPlan?: RepairPlan
 ): string {
   const renderFn = sourceFilePath
     ? getRenderFunctionName(component, sourceFilePath)
     : 'render';
 
+  // Check if repair plan says to use renderWithProviders
+  // But only if the project actually has a custom render helper
+  const hasCustomRender = sourceFilePath ? resolveRenderHelper(sourceFilePath) !== null : false;
+  const useCustomRender = hasCustomRender && repairPlan?.actions.some(
+    (a) => a.kind === 'use-render-helper' && a.helper === 'renderWithProviders'
+  );
+  const effectiveRenderFn = useCustomRender ? 'renderWithProviders' : renderFn;
+
+  // Collect wrappers from repair plan (MemoryRouter, QueryClientProvider, etc.)
+  const wrapperActions = repairPlan?.actions.filter((a) => a.kind === 'add-wrapper') ?? [];
+
   const renderOptions: string[] = [];
   // Only add auth options for known custom render functions (not plain 'render')
-  if (renderFn !== 'render' && component.usesAuthHook) {
+  if (effectiveRenderFn !== 'render' && component.usesAuthHook) {
     renderOptions.push('withAuthProvider: false');
     const authState = deriveAuthState(component);
     renderOptions.push(`authState: ${authState}`);
   }
   const optionsSuffix = renderOptions.length > 0 ? `, { ${renderOptions.join(', ')} }` : '';
 
-  // When the component uses router hooks and we're using plain `render`,
-  // wrap the JSX in <MemoryRouter>
-  const needsRouterWrap = component.usesRouter && renderFn === 'render';
+  // Build the JSX element
+  const propsSpread = component.props.length > 0 ? ' {...defaultProps} {...props}' : '';
+  const paramsDecl = component.props.length > 0 ? '(props = {})' : '()';
+  let jsx = `<${component.name}${propsSpread} />`;
 
-  // Build the component JSX
-  const compJsx = component.props.length > 0
-    ? `<${component.name} {...defaultProps} {...props} />`
-    : `<${component.name} />`;
+  // Wrap with repair-plan wrappers (idempotent — each wrapper applied once)
+  for (const action of wrapperActions) {
+    if (action.kind === 'add-wrapper') {
+      // Don't double-wrap if the render function already provides this wrapper
+      // (e.g., renderWithProviders already includes MemoryRouter)
+      if (effectiveRenderFn !== 'render') continue;
 
-  // Build context provider wrapping
-  const contextWrapping = buildContextProviderJsx(component.contexts, contextMocks);
-
-  // Compose the full JSX with wrapping layers (outermost → innermost → component)
-  let fullJsx = compJsx;
-
-  // Wrap with context providers (innermost wrapping)
-  if (contextWrapping.openTags.length > 0) {
-    fullJsx = `${contextWrapping.openTags.join('')}${fullJsx}${contextWrapping.closeTags.join('')}`;
-  }
-
-  // Wrap with MemoryRouter
-  if (needsRouterWrap) {
-    fullJsx = `<MemoryRouter>${fullJsx}</MemoryRouter>`;
-  }
-
-  // Wrap with QueryClientProvider (proactive — detected at analysis time)
-  if (component.usesReactQuery) {
-    fullJsx = `<QueryClientProvider client={testQueryClient}>${fullJsx}</QueryClientProvider>`;
-  }
-
-  // Wrap with Redux Provider (proactive — detected at analysis time)
-  if (component.usesRedux) {
-    fullJsx = `<ReduxProvider store={testStore}>${fullJsx}</ReduxProvider>`;
-  }
-
-  const params = component.props.length > 0 ? '(props = {})' : '()';
-
-  // Portal-using components need a multi-line renderUI with DOM setup
-  if (component.usesPortal) {
-    return [
-      `const renderUI = ${params} => {`,
-      '  if (!document.getElementById("portal-root")) {',
-      '    const el = document.createElement("div");',
-      '    el.id = "portal-root";',
-      '    document.body.appendChild(el);',
-      '  }',
-      `  return ${renderFn}(${fullJsx}${optionsSuffix});`,
-      '};',
-    ].join('\n');
+      if (action.wrapper === 'QueryClientProvider') {
+        jsx = `<QueryClientProvider client={new QueryClient()}>${jsx}</QueryClientProvider>`;
+      } else {
+        jsx = `<${action.wrapper}>${jsx}</${action.wrapper}>`;
+      }
+    }
   }
 
   return [
-    `const renderUI = ${params} =>`,
-    `  ${renderFn}(${fullJsx}${optionsSuffix});`,
+    `const renderUI = ${paramsDecl} =>`,
+    `  ${effectiveRenderFn}(${jsx}${optionsSuffix});`,
   ].join('\n');
-}
-
-interface ContextJsxWrapping {
-  openTags: string[];
-  closeTags: string[];
-}
-
-/**
- * Build JSX wrapper tags for context providers.
- * Uses Context.Provider with mock values for deterministic, side-effect-free testing.
- */
-function buildContextProviderJsx(
-  contexts: ContextUsage[],
-  contextMocks?: ContextMockValue[]
-): ContextJsxWrapping {
-  const openTags: string[] = [];
-  const closeTags: string[] = [];
-
-  if (!contextMocks || contextMocks.length === 0) {
-    return { openTags, closeTags };
-  }
-
-  // Map context names to their mock variable names
-  for (const ctx of contexts) {
-    const mock = contextMocks.find((m) => m.importName === ctx.contextName);
-    if (!mock) continue;
-
-    openTags.push(`<${ctx.contextName}.Provider value={${mock.mockVarName}}>`);
-    closeTags.unshift(`</${ctx.contextName}.Provider>`);
-  }
-
-  return { openTags, closeTags };
 }
 
 function deriveAuthState(component: ComponentInfo): string {
   const name = component.name;
+  // Check for common auth-related route patterns generically
   if (
     /public/i.test(name) ||
     /login/i.test(name) ||

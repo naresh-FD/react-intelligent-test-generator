@@ -1,8 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { ROOT_DIR, detectSrcDir } from '../config';
+import { ROOT_DIR, TESTS_DIR_NAME, detectSrcDir } from '../config';
 import { exists, listFilesRecursive } from '../fs';
-import { ResolvedTestOutput, DEFAULT_TEST_OUTPUT } from '../workspace/config';
 
 export interface ScanSourceFilesOptions {
   packageRoot?: string;
@@ -16,13 +15,7 @@ interface GenerationContext {
 }
 
 let _activeContext: GenerationContext | null = null;
-export interface ResolvedRenderHelper {
-  path: string;
-  exportName: string;
-  isAsync: boolean;
-}
-
-const _cachedRenderHelper = new Map<string, ResolvedRenderHelper | null>();
+const _cachedRenderHelper = new Map<string, { path: string; exportName: string } | null>();
 
 function normalizeSlashes(value: string): string {
   return value.split('\\').join('/');
@@ -32,39 +25,13 @@ export function setPathResolutionContext(context: GenerationContext | null): voi
   _activeContext = context;
 }
 
-export function isTestFile(filePath: string, output?: ResolvedTestOutput): boolean {
+export function isTestFile(filePath: string): boolean {
   const normalized = normalizeSlashes(filePath);
-  const cfg = output ?? DEFAULT_TEST_OUTPUT;
-  const suffix = cfg.suffix; // '.test' or '.spec'
-
-  // Check suffix-based detection (.test.tsx, .spec.ts, etc.)
-  if (
-    normalized.endsWith(`${suffix}.tsx`) ||
-    normalized.endsWith(`${suffix}.ts`) ||
-    normalized.endsWith(`${suffix}.jsx`) ||
-    normalized.endsWith(`${suffix}.js`)
-  ) {
-    return true;
-  }
-
-  // Check directory-based detection (e.g. /__tests__/, /specs/, /tests/)
-  if (cfg.strategy === 'subfolder' || cfg.strategy === 'mirror') {
-    const dir = cfg.directory || '__tests__';
-    if (normalized.includes(`/${dir}/`)) return true;
-  }
-
-  // Backwards compat: always recognise __tests__ and .test files
-  if (normalized.includes('/__tests__/')) return true;
-  if (
+  return (
+    normalized.includes(`/${TESTS_DIR_NAME}/`) ||
     normalized.endsWith('.test.tsx') ||
-    normalized.endsWith('.test.ts') ||
-    normalized.endsWith('.test.jsx') ||
-    normalized.endsWith('.test.js')
-  ) {
-    return true;
-  }
-
-  return false;
+    normalized.endsWith('.test.ts')
+  );
 }
 
 export function scanSourceFiles(options: ScanSourceFilesOptions = {}): string[] {
@@ -74,7 +41,7 @@ export function scanSourceFiles(options: ScanSourceFilesOptions = {}): string[] 
   if (!fs.existsSync(scanRoot)) return [];
 
   const files = listFilesRecursive(scanRoot);
-  const include = options.include ?? ['src/**/*.{js,jsx,ts,tsx}'];
+  const include = options.include ?? ['src/**/*.{ts,tsx}'];
   const exclude = options.exclude ?? [
     '**/__tests__/**',
     '**/*.test.*',
@@ -85,8 +52,7 @@ export function scanSourceFiles(options: ScanSourceFilesOptions = {}): string[] 
 
   return files.filter((filePath) => {
     if (isTestFile(filePath)) return false;
-    const ext = path.extname(filePath).toLowerCase();
-    if (!['.js', '.jsx', '.ts', '.tsx'].includes(ext)) return false;
+    if (!filePath.endsWith('.ts') && !filePath.endsWith('.tsx')) return false;
     const rel = normalizeSlashes(path.relative(packageRoot, filePath));
     const includeMatch = include.length === 0 || include.some((pattern) => matchGlob(rel, pattern));
     if (!includeMatch) return false;
@@ -94,57 +60,12 @@ export function scanSourceFiles(options: ScanSourceFilesOptions = {}): string[] 
   });
 }
 
-/**
- * Compute the test file path for a given source file.
- *
- * Supports three strategies via `output`:
- *   - **colocated**: test file next to source  (Button.tsx → Button.test.tsx)
- *   - **subfolder**: test in a subdirectory     (Button.tsx → __tests__/Button.test.tsx)
- *   - **mirror**:    separate root mirroring src structure
- *                    (src/components/Button.tsx → tests/components/Button.test.tsx)
- *
- * When called without `output`, defaults to subfolder + __tests__ + .test (backwards compatible).
- */
-export function getTestFilePath(
-  sourceFilePath: string,
-  output?: ResolvedTestOutput,
-  packageRoot?: string,
-): string {
-  const cfg = output ?? DEFAULT_TEST_OUTPUT;
+export function getTestFilePath(sourceFilePath: string): string {
   const dir = path.dirname(sourceFilePath);
   const ext = path.extname(sourceFilePath);
   const base = path.basename(sourceFilePath, ext);
-  const testExt = ext === '.ts' || ext === '.js' ? `${cfg.suffix}.ts` : `${cfg.suffix}.tsx`;
-  const testFileName = `${base}${testExt}`;
-
-  switch (cfg.strategy) {
-    case 'colocated':
-      return path.join(dir, testFileName);
-
-    case 'subfolder':
-      return path.join(dir, cfg.directory || '__tests__', testFileName);
-
-    case 'mirror': {
-      const root = packageRoot ?? ROOT_DIR;
-      const srcRootAbs = path.join(root, cfg.srcRoot);
-      const rel = normalizeSlashes(path.relative(srcRootAbs, sourceFilePath));
-
-      // Edge case: source file is NOT under srcRoot (relative path starts with ..)
-      if (rel.startsWith('..')) {
-        console.warn(
-          `[testgen] Warning: "${sourceFilePath}" is outside srcRoot "${cfg.srcRoot}". Falling back to subfolder strategy.`
-        );
-        return path.join(dir, cfg.directory || '__tests__', testFileName);
-      }
-
-      // Strip the source filename, keep directory structure
-      const relDir = path.dirname(rel);
-      return path.join(root, cfg.directory || 'tests', relDir, testFileName);
-    }
-
-    default:
-      return path.join(dir, cfg.directory || '__tests__', testFileName);
-  }
+  const testExt = ext === '.ts' ? '.test.ts' : '.test.tsx';
+  return path.join(dir, TESTS_DIR_NAME, `${base}${testExt}`);
 }
 
 export function relativeImport(fromFile: string, toFile: string): string {
@@ -160,15 +81,15 @@ export function relativeImport(fromFile: string, toFile: string): string {
  */
 export function resolveRenderHelper(
   sourceFilePath: string
-): ResolvedRenderHelper | null {
+): { path: string; exportName: string } | null {
   const packageRoot = _activeContext?.packageRoot ?? ROOT_DIR;
   const override = _activeContext?.renderHelperOverride ?? 'auto';
 
   if (override !== 'auto') {
     const abs = path.isAbsolute(override) ? override : path.join(packageRoot, override);
     if (exists(abs)) {
-      const helper = detectRenderExport(abs);
-      if (helper) return { path: abs, exportName: helper.exportName, isAsync: helper.isAsync };
+      const exportName = detectRenderExport(abs);
+      if (exportName) return { path: abs, exportName };
     }
   }
 
@@ -182,7 +103,7 @@ export function resolveRenderHelper(
   return result;
 }
 
-function findRenderHelper(packageRoot: string): ResolvedRenderHelper | null {
+function findRenderHelper(packageRoot: string): { path: string; exportName: string } | null {
   const srcDir = detectSrcDir(packageRoot);
   const dirsToCheck = getRenderHelperDirsToCheck(srcDir, packageRoot);
   const directMatch = findRenderHelperInDirs(dirsToCheck);
@@ -208,14 +129,14 @@ function collectRenderHelperDirs(dirsToCheck: string[], baseDir: string): void {
 
 function findRenderHelperInDirs(
   dirsToCheck: string[]
-): ResolvedRenderHelper | null {
+): { path: string; exportName: string } | null {
   for (const dir of dirsToCheck) {
     for (const fileName of RENDER_HELPER_FILE_NAMES) {
       for (const ext of ['.tsx', '.ts', '.jsx', '.js']) {
         const filePath = path.join(dir, `${fileName}${ext}`);
         if (!exists(filePath)) continue;
-        const helper = detectRenderExport(filePath);
-        if (helper) return { path: filePath, exportName: helper.exportName, isAsync: helper.isAsync };
+        const exportName = detectRenderExport(filePath);
+        if (exportName) return { path: filePath, exportName };
       }
     }
   }
@@ -234,15 +155,15 @@ function isEligibleRenderHelperCandidate(filePath: string): boolean {
   );
 }
 
-function findRenderHelperBySourceScan(srcDir: string): ResolvedRenderHelper | null {
+function findRenderHelperBySourceScan(srcDir: string): { path: string; exportName: string } | null {
   if (!exists(srcDir)) return null;
 
   try {
     const allFiles = listFilesRecursive(srcDir);
     const candidates = allFiles.filter(isEligibleRenderHelperCandidate);
     for (const filePath of candidates) {
-      const helper = detectRenderExport(filePath);
-      if (helper) return { path: filePath, exportName: helper.exportName, isAsync: helper.isAsync };
+      const exportName = detectRenderExport(filePath);
+      if (exportName) return { path: filePath, exportName };
     }
   } catch {
     return null;
@@ -251,23 +172,19 @@ function findRenderHelperBySourceScan(srcDir: string): ResolvedRenderHelper | nu
   return null;
 }
 
-function detectRenderExport(filePath: string): { exportName: string; isAsync: boolean } | null {
+function detectRenderExport(filePath: string): string | null {
   try {
     const content = fs.readFileSync(filePath, 'utf8');
     const exportPatterns = [
-      /export\s+(async\s+)?function\s+(renderWithProviders|customRender|renderWithWrapper|renderWithContext)\b/,
-      /export\s+const\s+(renderWithProviders|customRender|renderWithWrapper|renderWithContext)\s*=\s*(async\s*)?/,
+      /export\s+(?:async\s+)?function\s+(renderWithProviders|customRender|renderWithWrapper|renderWithContext)\b/,
+      /export\s+const\s+(renderWithProviders|customRender|renderWithWrapper|renderWithContext)\b/,
       /export\s*\{[^}]*(renderWithProviders|customRender|renderWithWrapper|renderWithContext)[^}]*\}/,
       /(?:module\.)?exports\.(renderWithProviders|customRender|renderWithWrapper|renderWithContext)\b/,
     ];
 
     for (const pattern of exportPatterns) {
       const match = pattern.exec(content);
-      if (match) {
-        const exportName = match[2] ?? match[1];
-        const isAsync = /\basync\b/.test(match[1] ?? '') || /\basync\b/.test(match[3] ?? '');
-        return { exportName, isAsync: isAsync || isAsyncRenderExport(content, exportName) };
-      }
+      if (match) return match[1];
     }
 
     if (
@@ -279,8 +196,13 @@ function detectRenderExport(filePath: string): { exportName: string; isAsync: bo
     ) {
       const customExportMatch = /export\s+(?:const|function)\s+(render\w+)/.exec(content);
       if (customExportMatch) {
-        const exportName = customExportMatch[1];
-        return { exportName, isAsync: isAsyncRenderExport(content, exportName) };
+        // Skip async render helpers — our generator doesn't handle async render functions
+        const asyncCheck = new RegExp(
+          `export\\s+const\\s+${customExportMatch[1]}\\s*=\\s*async\\b|` +
+          `export\\s+async\\s+function\\s+${customExportMatch[1]}\\b`
+        );
+        if (asyncCheck.test(content)) return null;
+        return customExportMatch[1];
       }
     }
 
@@ -288,15 +210,6 @@ function detectRenderExport(filePath: string): { exportName: string; isAsync: bo
   } catch {
     return null;
   }
-}
-
-function isAsyncRenderExport(content: string, exportName: string): boolean {
-  const escaped = exportName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return (
-    new RegExp(`export\\s+async\\s+function\\s+${escaped}\\b`).test(content) ||
-    new RegExp(`export\\s+const\\s+${escaped}\\s*=\\s*async\\b`).test(content) ||
-    new RegExp(`const\\s+${escaped}\\s*=\\s*async\\b`).test(content)
-  );
 }
 
 /**

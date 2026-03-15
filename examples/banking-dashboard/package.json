@@ -21,6 +21,9 @@
     "testgen:smart": "ts-node ../../packages/testgen/src/cli.ts --all --verify",
     "testgen:smart:file": "ts-node ../../packages/testgen/src/cli.ts --file --verify",
     "testgen:smart:git": "ts-node ../../packages/testgen/src/cli.ts --git-unstaged --verify",
+    "testgen:heal": "ts-node ../../packages/testgen/src/cli.ts --all --heal",
+    "testgen:heal:file": "ts-node ../../packages/testgen/src/cli.ts --heal --file",
+    "testgen:heal:git": "ts-node ../../packages/testgen/src/cli.ts --git-unstaged --heal",
     "docs:generate": "node scripts/docs/generate-docs.mjs"
   },
   "dependencies": {

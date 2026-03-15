@@ -1,10 +1,5 @@
 import { ComponentInfo, SelectorInfo } from '../analyzer';
-import { mockFn, mockGlobalName } from '../utils/framework';
-
-/** Quote prop names that are not valid JS identifiers (e.g. aria-*, data-*) */
-function safePropKey(name: string): string {
-  return /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name) ? name : `"${name}"`;
-}
+import { mockFn } from '../utils/framework';
 
 export interface ConditionalTestCase {
   title: string;
@@ -15,7 +10,7 @@ export interface ConditionalTestCase {
 export function buildRenderAssertions(component: ComponentInfo): string[] {
   const lines: string[] = [
     'const { container } = renderUI();',
-    'expect(container).toBeInTheDocument();',
+    'expect(container).toBeTruthy();',
   ];
 
   // Only assert elements that use specific selectors (testid, label, text, placeholder)
@@ -23,25 +18,25 @@ export function buildRenderAssertions(component: ComponentInfo): string[] {
   // (component may conditionally render based on context/hook state)
   for (const button of component.buttons) {
     if (button.strategy !== 'role') {
-      lines.push(`expect(${selectorQuery(button, 'query')}).toBeInTheDocument();`);
+      lines.push(`expect(${selectorQuery(button)}).toBeInTheDocument();`);
     }
   }
 
   for (const input of component.inputs) {
     if (input.strategy !== 'role') {
-      lines.push(`expect(${selectorQuery(input, 'query')}).toBeInTheDocument();`);
+      lines.push(`expect(${selectorQuery(input)}).toBeInTheDocument();`);
     }
   }
 
   for (const select of component.selects) {
     if (select.selector.strategy !== 'role') {
-      lines.push(`expect(${selectorQuery(select.selector, 'query')}).toBeInTheDocument();`);
+      lines.push(`expect(${selectorQuery(select.selector)}).toBeInTheDocument();`);
     }
   }
 
   for (const link of component.links.slice(0, 4)) {
     if (link.strategy !== 'role') {
-      lines.push(`expect(${selectorQuery(link, 'query')}).toBeInTheDocument();`);
+      lines.push(`expect(${selectorQuery(link)}).toBeInTheDocument();`);
     }
   }
 
@@ -59,10 +54,9 @@ export function buildInteractionTests(component: ComponentInfo): string[] {
       [
         'const user = userEvent.setup();',
         'const { container } = renderUI();',
-        `const target = ${selectorQuery(button, 'query')};`,
-        'if (!target) return;',
+        `const target = ${selectorQuery(button)};`,
         'await user.click(target);',
-        'expect(container).toBeInTheDocument();',
+        'expect(container).toBeTruthy();',
       ].join('\n')
     );
   }
@@ -74,8 +68,7 @@ export function buildInteractionTests(component: ComponentInfo): string[] {
       [
         'const user = userEvent.setup();',
         'renderUI();',
-        `const target = ${selectorQuery(input, 'query')} as HTMLInputElement | null;`,
-        'if (!target) return;',
+        `const target = ${selectorQuery(input)} as HTMLInputElement;`,
         'await user.clear(target);',
         'await user.type(target, "test");',
         'expect(target.value).toContain("test");',
@@ -90,8 +83,7 @@ export function buildInteractionTests(component: ComponentInfo): string[] {
       [
         'const user = userEvent.setup();',
         'renderUI();',
-        `const target = ${selectorQuery(select.selector, 'query')} as HTMLSelectElement | null;`,
-        'if (!target) return;',
+        `const target = ${selectorQuery(select.selector)} as HTMLSelectElement;`,
         'if (target.options.length > 0) {',
         '  await user.selectOptions(target, target.options[0]?.value || "");',
         '  expect(target.value).toBeDefined();',
@@ -107,10 +99,9 @@ export function buildInteractionTests(component: ComponentInfo): string[] {
       [
         'const user = userEvent.setup();',
         'const { container } = renderUI();',
-        `const target = ${selectorQuery(link, 'query')};`,
-        'if (!target) return;',
+        `const target = ${selectorQuery(link)};`,
         'await user.click(target);',
-        'expect(container).toBeInTheDocument();',
+        'expect(container).toBeTruthy();',
       ].join('\n')
     );
   }
@@ -236,10 +227,8 @@ export function buildCallbackPropTests(component: ComponentInfo): ConditionalTes
         body: [
           'const user = userEvent.setup();',
           `const ${mockName} = ${mockFn()};`,
-          `renderUI({ ${safePropKey(prop.name)}: ${mockName} });`,
-          `const trigger = ${triggerElement};`,
-          'if (!trigger) return;',
-          'await user.click(trigger);',
+          `renderUI({ ${prop.name}: ${mockName} });`,
+          `await user.click(${triggerElement});`,
           `expect(${mockName}).toHaveBeenCalled();`,
         ],
       });
@@ -249,8 +238,8 @@ export function buildCallbackPropTests(component: ComponentInfo): ConditionalTes
         title: `accepts ${prop.name} callback prop`,
         body: [
           `const ${mockName} = ${mockFn()};`,
-          `const { container } = renderUI({ ${safePropKey(prop.name)}: ${mockName} });`,
-          'expect(container).toBeInTheDocument();',
+          `const { container } = renderUI({ ${prop.name}: ${mockName} });`,
+          'expect(container).toBeTruthy();',
         ],
       });
     }
@@ -267,7 +256,7 @@ function findTriggerElement(propName: string, component: ComponentInfo): string 
   // onClick/onPress → click the first button
   if (/^on(click|press|action|tap)$/i.test(propName)) {
     if (component.buttons.length > 0 && isReliableSelector(component.buttons[0])) {
-      return selectorQuery(component.buttons[0], 'query');
+      return selectorQuery(component.buttons[0]);
     }
   }
 
@@ -279,7 +268,7 @@ function findTriggerElement(propName: string, component: ComponentInfo): string 
         b.value &&
         /submit|save|create|add|confirm|apply|ok|done/i.test(b.value)
     );
-    if (submitButton) return selectorQuery(submitButton, 'query');
+    if (submitButton) return selectorQuery(submitButton);
   }
 
   // onClose/onDismiss/onCancel → find close/cancel button (usually first button)
@@ -288,7 +277,7 @@ function findTriggerElement(propName: string, component: ComponentInfo): string 
       (b) =>
         isReliableSelector(b) && b.value && /close|dismiss|cancel|back|exit|hide|x|×/i.test(b.value)
     );
-    if (closeButton) return selectorQuery(closeButton, 'query');
+    if (closeButton) return selectorQuery(closeButton);
   }
 
   // onDelete/onRemove → find delete/remove button
@@ -296,13 +285,13 @@ function findTriggerElement(propName: string, component: ComponentInfo): string 
     const deleteButton = component.buttons.find(
       (b) => isReliableSelector(b) && b.value && /delete|remove|clear|destroy|trash/i.test(b.value)
     );
-    if (deleteButton) return selectorQuery(deleteButton, 'query');
+    if (deleteButton) return selectorQuery(deleteButton);
   }
 
   // onToggle/onSwitch → first button
   if (/^on(toggle|switch|flip)$/i.test(propName)) {
     if (component.buttons.length > 0 && isReliableSelector(component.buttons[0]))
-      return selectorQuery(component.buttons[0], 'query');
+      return selectorQuery(component.buttons[0]);
   }
 
   // onChange → type in first input or change first select
@@ -322,13 +311,13 @@ function findTriggerElement(propName: string, component: ComponentInfo): string 
     const editButton = component.buttons.find(
       (b) => isReliableSelector(b) && b.value && /edit|modify|rename|pencil/i.test(b.value)
     );
-    if (editButton) return selectorQuery(editButton, 'query');
+    if (editButton) return selectorQuery(editButton);
   }
 
   // onExpand/onCollapse/onOpen → find first button
   if (/^on(expand|collapse|open|show|reveal)$/i.test(propName)) {
     if (component.buttons.length > 0 && isReliableSelector(component.buttons[0]))
-      return selectorQuery(component.buttons[0], 'query');
+      return selectorQuery(component.buttons[0]);
   }
 
   // onSearch → type in an input (search is input-driven, not button-driven)
@@ -343,13 +332,13 @@ function findTriggerElement(propName: string, component: ComponentInfo): string 
     const nextButton = component.buttons.find(
       (b) => isReliableSelector(b) && b.value && /next|forward|last/i.test(b.value)
     );
-    if (nextButton) return selectorQuery(nextButton, 'query');
+    if (nextButton) return selectorQuery(nextButton);
   }
 
   // onSort/onFilter → first button
   if (/^on(sort|filter|refresh|reload|retry)$/i.test(propName)) {
     if (component.buttons.length > 0 && isReliableSelector(component.buttons[0]))
-      return selectorQuery(component.buttons[0], 'query');
+      return selectorQuery(component.buttons[0]);
   }
 
   return null;
@@ -366,7 +355,7 @@ export function buildConditionalRenderTests(component: ComponentInfo): Condition
   component.conditionalElements.forEach((element, index) => {
     if (element.requiredProps.length === 0) return;
 
-    const propsArg = element.requiredProps.map((prop: string) => `${safePropKey(prop)}: true`).join(', ');
+    const propsArg = element.requiredProps.map((prop) => `${prop}: true`).join(', ');
     const key = `${propsArg}-${element.selector.strategy}-${element.selector.value}`;
 
     if (seen.has(key)) return;
@@ -381,7 +370,7 @@ export function buildConditionalRenderTests(component: ComponentInfo): Condition
         title: `renders conditional element ${index + 1}`,
         body: [
           `const { container } = renderUI({ ${propsArg} });`,
-          'expect(container).toBeInTheDocument();',
+          'expect(container).toBeTruthy();',
         ],
       });
       return;
@@ -406,8 +395,8 @@ export function buildNegativeBranchTests(component: ComponentInfo): ConditionalT
     cases.push({
       title: `renders with ${prop.name} set to false`,
       body: [
-        `const { container } = renderUI({ ${safePropKey(prop.name)}: false });`,
-        'expect(container).toBeInTheDocument();',
+        `const { container } = renderUI({ ${prop.name}: false });`,
+        'expect(container).toBeTruthy();',
       ],
     });
   }
@@ -425,7 +414,7 @@ export function buildNegativeBranchTests(component: ComponentInfo): ConditionalT
       return;
     }
 
-    const propsArgFalse = element.requiredProps.map((prop: string) => `${safePropKey(prop)}: false`).join(', ');
+    const propsArgFalse = element.requiredProps.map((prop) => `${prop}: false`).join(', ');
     const query = conditionalSelectorQuery(element.selector);
     const key = `neg-${propsArgFalse}-${element.selector.strategy}-${element.selector.value}`;
 
@@ -452,7 +441,7 @@ export function buildOptionalPropTests(component: ComponentInfo): ConditionalTes
   if (optionalProps.length > 0) {
     cases.push({
       title: 'renders with only required props',
-      body: ['const { container } = renderUI();', 'expect(container).toBeInTheDocument();'],
+      body: ['const { container } = renderUI();', 'expect(container).toBeTruthy();'],
     });
   }
 
@@ -476,8 +465,8 @@ export function buildStateTests(component: ComponentInfo): ConditionalTestCase[]
     cases.push({
       title: 'renders loading state',
       body: [
-        `const { container } = renderUI({ ${loadingProps.map((p) => `${safePropKey(p.name)}: true`).join(', ')} });`,
-        'expect(container).toBeInTheDocument();',
+        `const { container } = renderUI({ ${loadingProps.map((p) => `${p.name}: true`).join(', ')} });`,
+        'expect(container).toBeTruthy();',
       ],
     });
   }
@@ -493,14 +482,14 @@ export function buildStateTests(component: ComponentInfo): ConditionalTestCase[]
   );
   if (errorBoolProps.length > 0 || errorStringProps.length > 0) {
     const overrides = [
-      ...errorBoolProps.map((p) => `${safePropKey(p.name)}: true`),
+      ...errorBoolProps.map((p) => `${p.name}: true`),
       ...errorStringProps.map((p) => `${p.name}: "Test error message"`),
     ];
     cases.push({
       title: 'renders error state',
       body: [
         `const { container } = renderUI({ ${overrides.join(', ')} });`,
-        'expect(container).toBeInTheDocument();',
+        'expect(container).toBeTruthy();',
       ],
     });
   }
@@ -519,7 +508,7 @@ export function buildStateTests(component: ComponentInfo): ConditionalTestCase[]
       title: 'renders with empty data',
       body: [
         `const { container } = renderUI({ ${arrayProps.map((p) => `${p.name}: []`).join(', ')} });`,
-        'expect(container).toBeInTheDocument();',
+        'expect(container).toBeTruthy();',
       ],
     });
   }
@@ -534,8 +523,8 @@ export function buildStateTests(component: ComponentInfo): ConditionalTestCase[]
     cases.push({
       title: 'renders disabled state',
       body: [
-        `const { container } = renderUI({ ${disabledProps.map((p) => `${safePropKey(p.name)}: true`).join(', ')} });`,
-        'expect(container).toBeInTheDocument();',
+        `const { container } = renderUI({ ${disabledProps.map((p) => `${p.name}: true`).join(', ')} });`,
+        'expect(container).toBeTruthy();',
       ],
     });
   }
@@ -556,11 +545,8 @@ export function buildFormSubmissionTest(component: ComponentInfo): ConditionalTe
 
   // Fill up to 5 inputs
   for (const input of component.inputs.slice(0, 5)) {
-    const selector = selectorQuery(input, 'query');
-    body.push(`const inputTarget = ${selector};`);
-    body.push('if (inputTarget) {');
-    body.push('  await user.type(inputTarget, "test value");');
-    body.push('}');
+    const selector = selectorQuery(input);
+    body.push(`await user.type(${selector}, "test value");`);
   }
 
   // Find and click submit-like button
@@ -570,15 +556,10 @@ export function buildFormSubmissionTest(component: ComponentInfo): ConditionalTe
     ) || component.buttons[0];
 
   if (submitButton) {
-    body.push(
-      `const submitButton = ${selectorQuery(submitButton, 'query')};`,
-      'if (submitButton) {',
-      '  await user.click(submitButton);',
-      '}'
-    );
+    body.push(`await user.click(${selectorQuery(submitButton)});`);
   }
 
-  body.push('expect(container).toBeInTheDocument();');
+  body.push('expect(container).toBeTruthy();');
 
   return {
     title: 'handles form submission',
@@ -587,24 +568,20 @@ export function buildFormSubmissionTest(component: ComponentInfo): ConditionalTe
   };
 }
 
-function selectorQuery(selector: SelectorInfo, mode: 'get' | 'query' = 'get'): string {
-  const byPrefix = mode === 'query' ? 'queryBy' : 'getBy';
-  const byAllPrefix = mode === 'query' ? 'queryAllBy' : 'getAllBy';
+function selectorQuery(selector: SelectorInfo): string {
   switch (selector.strategy) {
     case 'testid':
-      return `screen.${byPrefix}TestId("${escapeRegExp(selector.value)}")`;
+      return `screen.getByTestId("${escapeRegExp(selector.value)}")`;
     case 'label':
-      return `screen.${byPrefix}LabelText(/${escapeRegExp(selector.value)}/i)`;
+      return `screen.getByLabelText(/${escapeRegExp(selector.value)}/i)`;
     case 'placeholder':
-      return `screen.${byPrefix}PlaceholderText(/${escapeRegExp(selector.value)}/i)`;
+      return `screen.getByPlaceholderText(/${escapeRegExp(selector.value)}/i)`;
     case 'text':
-      return `screen.${byPrefix}Role("button", { name: /${escapeRegExp(selector.value)}/i })`;
+      return `screen.getByRole("button", { name: /${escapeRegExp(selector.value)}/i })`;
     case 'role':
-      return mode === 'query'
-        ? `screen.${byAllPrefix}Role("${selector.role || selector.value}")[0] ?? null`
-        : `screen.${byAllPrefix}Role("${selector.role || selector.value}")[0]`;
+      return `screen.getAllByRole("${selector.role || selector.value}")[0]`;
     default:
-      return mode === 'query' ? 'screen.queryByRole("button")' : 'screen.getByRole("button")';
+      return 'screen.getByRole("button")';
   }
 }
 
@@ -639,169 +616,5 @@ function toQuerySelector(query: string): string {
 }
 
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// ---------------------------------------------------------------------------
-// Accessibility test builders
-// ---------------------------------------------------------------------------
-
-/**
- * Builds accessibility-focused test cases for a component.
- * Checks ARIA roles, labels, and basic a11y attributes.
- */
-export function buildAccessibilityTests(component: ComponentInfo): ConditionalTestCase[] {
-  const tests: ConditionalTestCase[] = [];
-  const hasButtons = component.buttons.length > 0;
-  const hasInputs = component.inputs.length > 0;
-  const hasForms = component.forms.length > 0;
-  const hasLinks = component.links.length > 0;
-
-  // Test: Buttons are accessible (have accessible labels)
-  if (hasButtons) {
-    const btn = component.buttons[0];
-    if (btn.strategy === 'label') {
-      tests.push({
-        title: 'buttons have accessible labels',
-        body: [
-          'const { container } = renderUI();',
-          'expect(container).toBeInTheDocument();',
-          `const btn = screen.queryByRole("button", { name: /${escapeRegexStr(btn.value)}/ });`,
-          '// Button should either exist with proper label or not exist at all',
-          'if (btn) {',
-          '  expect(btn).toBeInTheDocument();',
-          '}',
-        ],
-      });
-    } else if (btn.strategy === 'role') {
-      tests.push({
-        title: 'interactive buttons are accessible',
-        body: [
-          'const { container } = renderUI();',
-          'expect(container).toBeInTheDocument();',
-          '// All buttons should be in the document without crashing',
-          'const buttons = screen.queryAllByRole("button");',
-          'buttons.forEach(btn => expect(btn).toBeInTheDocument());',
-        ],
-      });
-    }
-  }
-
-  // Test: Inputs are accessible (have labels)
-  if (hasInputs) {
-    const input = component.inputs[0];
-    if (input.strategy === 'label') {
-      tests.push({
-        title: 'form inputs are properly labeled',
-        body: [
-          'const { container } = renderUI();',
-          'expect(container).toBeInTheDocument();',
-          `const input = screen.queryByLabelText(/${escapeRegexStr(input.value)}/i);`,
-          'if (input) {',
-          '  expect(input).toBeInTheDocument();',
-          '}',
-        ],
-      });
-    }
-  }
-
-  // Test: Form has accessible submit mechanism
-  if (hasForms) {
-    tests.push({
-      title: 'form elements are accessible',
-      body: [
-        'const { container } = renderUI();',
-        'expect(container).toBeInTheDocument();',
-        '// Forms should render without crashing',
-        'const forms = container.querySelectorAll("form");',
-        'forms.forEach(form => expect(form).toBeInTheDocument());',
-      ],
-    });
-  }
-
-  // Test: Links are accessible
-  if (hasLinks) {
-    tests.push({
-      title: 'links are accessible',
-      body: [
-        'const { container } = renderUI();',
-        'expect(container).toBeInTheDocument();',
-        'const links = screen.queryAllByRole("link");',
-        'links.forEach(link => expect(link).toBeInTheDocument());',
-      ],
-    });
-  }
-
-  // Test: No ARIA role violations (basic check)
-  if (hasButtons || hasInputs || hasLinks) {
-    const globalName = mockGlobalName();
-    tests.push({
-      title: 'renders with no unexpected console errors',
-      body: [
-        `const consoleSpy = ${globalName}.spyOn(console, "error").mockImplementation(() => {});`,
-        'const { container } = renderUI();',
-        'expect(container).toBeInTheDocument();',
-        '// Restore console - check no unexpected ARIA errors were thrown',
-        'consoleSpy.mockRestore();',
-      ],
-    });
-  }
-
-  return tests;
-}
-
-/**
- * Builds keyboard navigation test cases for interactive components.
- */
-export function buildKeyboardNavigationTests(component: ComponentInfo): ConditionalTestCase[] {
-  const tests: ConditionalTestCase[] = [];
-
-  const hasKeyboardTargets =
-    component.buttons.length > 0 || component.inputs.length > 0;
-
-  if (!hasKeyboardTargets) return tests;
-
-  // Only for components with specific selectors (not generic role selectors)
-  const specificButton = component.buttons.find((b) => b.strategy !== 'role');
-  const specificInput = component.inputs.find((i) => i.strategy !== 'role');
-
-  if (specificButton) {
-    tests.push({
-      title: 'supports keyboard navigation to interactive elements',
-      isAsync: true,
-      body: [
-        'const user = userEvent.setup();',
-        'const { container } = renderUI();',
-        'expect(container).toBeInTheDocument();',
-        `const target = ${selectorQuery(specificButton, 'query')};`,
-        'if (target) {',
-        '  await user.tab();',
-        '  // Component accepts keyboard focus without throwing',
-        '  expect(document.body).toBeInTheDocument();',
-        '}',
-      ],
-    });
-  } else if (specificInput) {
-    tests.push({
-      title: 'input fields are keyboard accessible',
-      isAsync: true,
-      body: [
-        'const user = userEvent.setup();',
-        'const { container } = renderUI();',
-        'expect(container).toBeInTheDocument();',
-        `const input = ${selectorQuery(specificInput, 'query')};`,
-        'if (input) {',
-        '  await user.click(input);',
-        '  await user.keyboard("{Tab}");',
-        '  expect(document.body).toBeInTheDocument();',
-        '}',
-      ],
-    });
-  }
-
-  return tests;
-}
-
-function escapeRegexStr(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

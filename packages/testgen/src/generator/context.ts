@@ -1,5 +1,6 @@
 import { Node, SourceFile, SyntaxKind, TypeChecker } from 'ts-morph';
 import path from 'node:path';
+import fs from 'node:fs';
 import { CONTEXT_DETECTION_CONFIG } from '../config';
 import { relativeImport } from '../utils/path';
 import { buildDomMatchersImport, buildTestGlobalsImport } from '../utils/framework';
@@ -171,7 +172,7 @@ function appendProviderTests(lines: string[], providerName: string, wrappers: Wr
     appendLines(lines, `      ${wrapper}`);
   }
 
-  appendLines(lines, '    );', '    expect(container).toBeInTheDocument();', '  });', '});', '');
+  appendLines(lines, '    );', '    expect(container).toBeTruthy();', '  });', '});', '');
 }
 
 function appendHookTests(

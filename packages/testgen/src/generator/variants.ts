@@ -18,7 +18,7 @@ export function buildVariantTestCases(component: ComponentInfo): VariantTestCase
       : `renders with ${variant.label}`,
     body: [
       `const { container } = renderUI(${variant.propsExpr});`,
-      'expect(container).toBeInTheDocument();',
+      'expect(container).toBeTruthy();',
     ],
   }));
 }
@@ -30,6 +30,6 @@ export function buildVariantRenders(component: ComponentInfo): string[] {
   const variants = buildVariantProps(component);
   return variants.map(
     (variant) =>
-      `const { container } = renderUI(${variant.propsExpr});\nexpect(container).toBeInTheDocument();`
+      `const { container } = renderUI(${variant.propsExpr});\nexpect(container).toBeTruthy();`
   );
 }
