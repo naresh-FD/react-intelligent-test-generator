@@ -131,7 +131,14 @@ function extractReason(rawOutput: string): string {
       return trimmed.length > 150 ? `${trimmed.substring(0, 147)}...` : trimmed;
     }
   }
-  return '';
+  const fallbackLine = text
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+  if (!fallbackLine) {
+    return '';
+  }
+  return fallbackLine.length > 150 ? `${fallbackLine.substring(0, 147)}...` : fallbackLine;
 }
 
 /**

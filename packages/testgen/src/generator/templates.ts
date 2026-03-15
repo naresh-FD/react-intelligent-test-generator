@@ -21,8 +21,14 @@ export function buildImports(components: ComponentInfo[], options: TemplateOptio
   const componentImport = relativeImport(options.testFilePath, options.sourceFilePath);
 
   const imports: string[] = [];
-  const needsPlainRender = components.some((c) => c.usesRouter);
-  const needsProviders = components.some((c) => !c.usesRouter);
+  // Check if a custom render helper exists in this project
+  const renderHelper = resolveRenderHelper(options.sourceFilePath);
+  const hasCustomRender = renderHelper !== null;
+  const renderFnsByComponent = new Map(
+    components.map((component) => [component.name, getRenderFunctionName(component, options.sourceFilePath)]),
+  );
+  const needsPlainRender = components.some((c) => renderFnsByComponent.get(c.name) === 'render');
+  const needsProviders = components.some((c) => renderFnsByComponent.get(c.name) !== 'render');
   const hasContextMocks = (options.contextImports ?? []).length > 0;
   const needsMockGlobal = hasContextMocks || components.some((c) => c.props.some((p) => p.isCallback));
 
@@ -30,10 +36,6 @@ export function buildImports(components: ComponentInfo[], options: TemplateOptio
   if (needsMockGlobal) testGlobals.push(mockGlobalName());
   imports.push(buildTestGlobalsImport(testGlobals));
   imports.push(buildDomMatchersImport());
-
-  // Check if a custom render helper exists in this project
-  const renderHelper = resolveRenderHelper(options.sourceFilePath);
-  const hasCustomRender = renderHelper !== null;
 
   if (needsPlainRender || !hasCustomRender) {
     // Use plain render from RTL (either for router components, or when custom render doesn't exist)
@@ -44,7 +46,7 @@ export function buildImports(components: ComponentInfo[], options: TemplateOptio
 
   // Add MemoryRouter import when components use router hooks with plain render
   const needsMemoryRouter = needsPlainRender && components.some(
-    (c) => c.usesRouter && getRenderFunctionName(c, options.sourceFilePath) === 'render'
+    (c) => c.usesRouter && renderFnsByComponent.get(c.name) === 'render'
   );
   if (needsMemoryRouter) {
     imports.push('import { MemoryRouter } from "react-router-dom";');
@@ -116,7 +118,6 @@ export function buildImports(components: ComponentInfo[], options: TemplateOptio
  * Returns the actual export name from the detected render helper.
  */
 export function getRenderFunctionName(component: ComponentInfo, sourceFilePath: string): string {
-  if (component.usesRouter) return 'render';
   const helper = resolveRenderHelper(sourceFilePath);
   return helper ? helper.exportName : 'render';
 }

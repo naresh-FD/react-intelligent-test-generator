@@ -28,6 +28,7 @@ import { buildVariantTestCases } from './variants';
 import { buildContextVariantTests } from './contextVariants';
 import { buildAutoMocks } from './autoMocks';
 import { buildSafeRenderBlock } from './safePatterns';
+import { resolveRenderHelper } from '../utils/path';
 
 export interface GenerateOptions {
   pass: 1 | 2;
@@ -242,7 +243,51 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
     parts.push(joinBlocks(blocks));
   }
 
-  return buildFileContent(parts);
+  const content = buildFileContent(parts);
+  return adaptGeneratedContentForAsyncRenderHelper(content, components, options.sourceFilePath);
+}
+
+function adaptGeneratedContentForAsyncRenderHelper(
+  content: string,
+  components: ComponentInfo[],
+  sourceFilePath: string,
+): string {
+  const helper = resolveRenderHelper(sourceFilePath);
+  const usesAsyncCustomRender = helper?.isAsync === true && components.length > 0;
+  if (!usesAsyncCustomRender) {
+    return content;
+  }
+
+  const transformedLines = content.split('\n').map((line) => transformAsyncRenderLine(line));
+  return transformedLines.join('\n');
+}
+
+function transformAsyncRenderLine(line: string): string {
+  if (line.includes('const renderUI = ') && line.includes('=>')) {
+    return line.replace(/const renderUI = (\([^)]*\)) =>/, 'const renderUI = async $1 =>');
+  }
+
+  if (line.includes('it("') && line.includes('() => {')) {
+    return line.replace('() => {', 'async () => {');
+  }
+
+  const throwExpectationMatch = line.match(
+    /^(\s*)expect\(\(\) => (renderUI\(.*\))\)\.not\.toThrow\(\);$/,
+  );
+  if (throwExpectationMatch) {
+    const [, indent, renderExpr] = throwExpectationMatch;
+    return `${indent}await expect(${renderExpr}).resolves.toBeDefined();`;
+  }
+
+  if (line.includes('const renderUI = ')) {
+    return line;
+  }
+
+  if (line.includes('renderUI(') && !line.includes('await renderUI(')) {
+    return line.replace(/renderUI\(/, 'await renderUI(');
+  }
+
+  return line;
 }
 
 // ---------------------------------------------------------------------------

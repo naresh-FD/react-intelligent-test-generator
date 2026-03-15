@@ -12,7 +12,7 @@ Usage:
 
 import path from 'node:path';
 import fs from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { createParser, getSourceFile } from './parser';
 import { analyzeSourceFile } from './analyzer';
 import { scanSourceFiles, getTestFilePath, isTestFile } from './utils/path';
@@ -22,6 +22,7 @@ import { generateBarrelTest } from './generator/barrel';
 import { generateUtilityTest } from './generator/utility';
 import { generateContextTest } from './generator/context';
 import { TEST_UTILITY_PATTERNS, UNTESTABLE_PATTERNS } from './config';
+import { detectTestFramework, type TestFramework } from './utils/framework';
 import {
   classifyFailure,
   loadMemory,
@@ -102,12 +103,14 @@ function parseArgs(argv: string[]): CliOptions {
 
   const retriesIndex = argv.indexOf('--max-retries');
   if (retriesIndex >= 0 && argv[retriesIndex + 1]) {
-    options.maxRetries = Number.parseInt(argv[retriesIndex + 1], 10) || 2;
+    const parsed = Number.parseInt(argv[retriesIndex + 1], 10);
+    options.maxRetries = Number.isNaN(parsed) ? 2 : parsed;
   }
 
   const thresholdIndex = argv.indexOf('--coverage-threshold');
   if (thresholdIndex >= 0 && argv[thresholdIndex + 1]) {
-    options.coverageThreshold = Number.parseInt(argv[thresholdIndex + 1], 10) || 50;
+    const parsed = Number.parseInt(argv[thresholdIndex + 1], 10);
+    options.coverageThreshold = Number.isNaN(parsed) ? 50 : parsed;
   }
 
   return options;
@@ -250,7 +253,8 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
   const cwd = process.cwd();
   const relTest = normalizeSlashes(path.relative(cwd, testFilePath));
   const relSrc = normalizeSlashes(path.relative(cwd, sourceFilePath));
-  const resultFile = path.join(cwd, VERIFY_DIR, 'jest-result.json');
+  const framework = detectTestFramework(cwd);
+  const resultFile = path.join(cwd, VERIFY_DIR, `${framework}-result.json`);
   const coverageDir = path.join(cwd, VERIFY_DIR, 'coverage');
 
   // Ensure output dir exists; clean stale result
@@ -259,26 +263,44 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
 
   // Escape the path for use as a jest regex pattern
   const pathPattern = escapeRegex(relTest);
-
-  const jestArgs = [
-    `--testPathPattern="${pathPattern}"`,
-    `--collectCoverageFrom="${relSrc}"`,
-    '--coverage',
-    '--coverageReporters=json-summary',
-    `--coverageDirectory="${coverageDir}"`,
-    '--json',
-    `--outputFile="${resultFile}"`,
-    '--forceExit',
-    '--passWithNoTests',
-    '--silent',
-  ].join(' ');
+  const command = process.execPath;
+  let runnerArgs: string[];
+  try {
+    runnerArgs = buildVerifyRunnerArgs(framework, cwd, relTest, relSrc, pathPattern, resultFile, coverageDir);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to resolve test runner.';
+    return {
+      passed: false,
+      numTests: 0,
+      numFailed: 0,
+      coverage: 0,
+      errorOutput: message,
+      classified: {
+        failureClass: 'unknown',
+        reason: message,
+        rawOutput: message,
+      },
+    };
+  }
 
   let errorOutput = '';
   try {
-    execSync(`npx jest ${jestArgs}`, { cwd, encoding: 'utf8', stdio: 'pipe' });
+    execFileSync(command, runnerArgs, { cwd, encoding: 'utf8', stdio: 'pipe' });
   } catch (e: unknown) {
-    const err = e as { stdout?: string; stderr?: string; message?: string };
-    errorOutput = err.stderr ?? err.stdout ?? err.message ?? 'Unknown jest error';
+    const err = e as {
+      stdout?: unknown;
+      stderr?: unknown;
+      output?: unknown;
+      stack?: string;
+      message?: string;
+    };
+    errorOutput =
+      normalizeProcessText(err.stderr) ||
+      normalizeProcessText(err.stdout) ||
+      normalizeProcessText(err.output) ||
+      err.stack ||
+      err.message ||
+      'Unknown test runner error';
   }
 
   // --- Parse jest JSON output ---
@@ -286,6 +308,7 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
   let numTests = 0;
   let numFailed = 0;
   let firstFailureOutput = '';
+  let suiteFailureOutput = '';
 
   try {
     if (fs.existsSync(resultFile)) {
@@ -293,7 +316,12 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
         success?: boolean;
         numTotalTests?: number;
         numFailedTests?: number;
+        numFailedTestSuites?: number;
+        numRuntimeErrorTestSuites?: number;
+        message?: string;
         testResults?: Array<{
+          message?: string;
+          testExecError?: { message?: string };
           testResults?: Array<{
             status?: string;
             fullName?: string;
@@ -303,12 +331,19 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
       };
       numTests = jestOut.numTotalTests ?? 0;
       numFailed = jestOut.numFailedTests ?? 0;
-      // Consider passing when all tests pass (including 0 tests = nothing to fail)
-      passed = numFailed === 0;
+      const failedSuites =
+        (jestOut.numFailedTestSuites ?? 0) + (jestOut.numRuntimeErrorTestSuites ?? 0);
+      // A verify run only passes when the runner itself reports success, no suite/test failures
+      // are present, and at least one test actually executed.
+      passed = jestOut.success === true && numFailed === 0 && failedSuites === 0 && numTests > 0;
 
       // Extract first failure message from JSON for precise error reporting
-      if (numFailed > 0 && jestOut.testResults) {
+      if (jestOut.testResults) {
         for (const suite of jestOut.testResults) {
+          if (!suiteFailureOutput) {
+            suiteFailureOutput =
+              suite.testExecError?.message?.trim() || suite.message?.trim() || suiteFailureOutput;
+          }
           for (const test of suite.testResults ?? []) {
             if (test.status === 'failed' && test.failureMessages?.length) {
               firstFailureOutput = test.failureMessages[0];
@@ -318,13 +353,21 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
           if (firstFailureOutput) break;
         }
       }
+      if (!suiteFailureOutput) {
+        suiteFailureOutput = jestOut.message?.trim() ?? '';
+      }
     }
   } catch {
     /* result file missing or malformed — keep defaults */
   }
 
-  // Use best available error output for classification
-  const classificationInput = firstFailureOutput || errorOutput;
+  // Use the best available runner output for classification. Zero executed tests should never
+  // be treated as a coverage problem.
+  const noTestsReason =
+    !passed && numTests === 0
+      ? 'No tests were executed for this generated file. The test runner reported zero executed tests or a suite-level setup error.'
+      : '';
+  const classificationInput = firstFailureOutput || suiteFailureOutput || errorOutput || noTestsReason;
   const classified = classifyFailure(classificationInput);
 
   // --- Parse coverage for the specific source file ---
@@ -342,13 +385,109 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
         (k) => k.endsWith(basename) || normalizeSlashes(k).endsWith(relSrc)
       );
       const entry = matchKey ? cov[matchKey] : cov['total'];
-      coverage = entry?.lines?.pct ?? entry?.statements?.pct ?? 0;
+      coverage = normalizeCoverageValue(entry?.lines?.pct ?? entry?.statements?.pct ?? 0);
     }
   } catch {
     /* ignore coverage parse errors */
   }
 
   return { passed, numTests, numFailed, coverage, errorOutput, classified };
+}
+
+function normalizeCoverageValue(value: unknown): number {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function normalizeProcessText(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (Buffer.isBuffer(value)) {
+    return value.toString('utf8');
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => normalizeProcessText(item))
+      .filter((item) => item.trim().length > 0)
+      .join('\n');
+  }
+  return '';
+}
+
+function isNonRetriableVerifyFailure(result: JestRunResult): boolean {
+  const text = `${result.classified.reason}\n${result.errorOutput}\n${result.classified.rawOutput}`;
+  return (
+    /Install the workspace test runner before using --verify\./.test(text) ||
+    /failed to load config/i.test(text) ||
+    /spawn EPERM/i.test(text)
+  );
+}
+
+function buildVerifyRunnerArgs(
+  framework: TestFramework,
+  cwd: string,
+  relTest: string,
+  relSrc: string,
+  jestPathPattern: string,
+  resultFile: string,
+  coverageDir: string,
+): string[] {
+  if (framework === 'vitest') {
+    const vitestEntry = resolveNodeModuleBinary(cwd, ['vitest', 'vitest.mjs']);
+    return [
+      vitestEntry,
+      'run',
+      relTest,
+      '--reporter=json',
+      `--outputFile=${resultFile}`,
+      '--coverage.enabled',
+      '--coverage.reporter=json-summary',
+      `--coverage.reportsDirectory=${coverageDir}`,
+      '--passWithNoTests',
+      '--silent',
+    ];
+  }
+
+  const jestEntry = resolveNodeModuleBinary(cwd, ['jest', 'bin', 'jest.js']);
+  return [
+    jestEntry,
+    `--testPathPattern=${jestPathPattern}`,
+    `--collectCoverageFrom=${relSrc}`,
+    '--coverage',
+    '--coverageReporters=json-summary',
+    `--coverageDirectory=${coverageDir}`,
+    '--json',
+    `--outputFile=${resultFile}`,
+    '--forceExit',
+    '--passWithNoTests',
+    '--silent',
+  ];
+}
+
+function resolveNodeModuleBinary(startDir: string, binarySegments: string[]): string {
+  let current = startDir;
+  while (true) {
+    const candidate = path.join(current, 'node_modules', ...binarySegments);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
+  }
+
+  throw new Error(
+    `Unable to resolve ${binarySegments.join('/')} from ${startDir}. Install the workspace test runner before using --verify.`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -396,10 +535,13 @@ function verifyAndRetry(
       }
     }
 
-    console.log(`  ▶  Running jest (attempt ${attempt}/${maxRetries + 1})...`);
+    const framework = detectTestFramework(process.cwd());
+    console.log(`  ▶  Running ${framework} (attempt ${attempt}/${maxRetries + 1})...`);
     lastResult = runJestOnTestFile(testFilePath, filePath);
 
-    const { passed, numTests, numFailed, coverage, classified } = lastResult;
+    const { passed, numTests, numFailed, classified } = lastResult;
+    const coverage = normalizeCoverageValue(lastResult.coverage);
+    lastResult = { ...lastResult, coverage };
 
     if (!passed) {
       console.log(`  ❌ ${numFailed}/${numTests} test(s) failed  [${classified.failureClass}]`);
@@ -420,7 +562,12 @@ function verifyAndRetry(
         recordOutcome(memory, classified.failureClass, strategyUsed, false);
       }
 
-      if (attempt < maxRetries + 1) continue; // will retry
+      if (attempt < maxRetries + 1) {
+        if (!isNonRetriableVerifyFailure(lastResult)) {
+          continue; // will retry
+        }
+        break;
+      }
     } else if (coverage < coverageThreshold) {
       console.log(
         `  ⚠️  Tests pass (${numTests}) but coverage ${coverage.toFixed(1)}% < ${coverageThreshold}% threshold`
@@ -457,10 +604,13 @@ function verifyAndRetry(
 
   // All attempts exhausted
   const finalStatus: VerifyStatus = lastResult.passed ? 'low-coverage' : 'fail';
+  const finalCoverage = normalizeCoverageValue(lastResult.coverage);
+  const attemptsUsed = healAttempts.length > 0 ? healAttempts.length : maxRetries + 1;
+  const retriesUsed = Math.max(0, attemptsUsed - 1);
   const msg =
     finalStatus === 'fail'
-      ? `Tests still failing after ${maxRetries} retries`
-      : `Coverage ${lastResult.coverage.toFixed(1)}% still below ${coverageThreshold}% after ${maxRetries} retries`;
+      ? `Tests still failing after ${retriesUsed} retries`
+      : `Coverage ${finalCoverage.toFixed(1)}% still below ${coverageThreshold}% after ${retriesUsed} retries`;
   console.log(`  ⛔ ${msg}`);
 
   const healReport: HealFileReport = {
@@ -468,14 +618,14 @@ function verifyAndRetry(
     testFile: path.basename(testFilePath),
     status: 'failed',
     attempts: healAttempts,
-    finalCoverage: lastResult.coverage,
-    totalAttempts: maxRetries + 1,
+    finalCoverage: finalCoverage,
+    totalAttempts: attemptsUsed,
   };
 
   return {
     status: finalStatus,
-    coverage: lastResult.coverage,
-    attempts: maxRetries + 1,
+    coverage: finalCoverage,
+    attempts: attemptsUsed,
     numTests: lastResult.numTests,
     failureReason: lastResult.classified.reason || undefined,
     healReport,
@@ -523,7 +673,8 @@ function printSummary(rows: SummaryRow[]): void {
 
   for (const r of rows) {
     const icon = STATUS_ICON[r.status];
-    const cov = r.coverage > 0 ? `${r.coverage.toFixed(1)}%`.padStart(7) : '      -';
+    const coverage = normalizeCoverageValue(r.coverage);
+    const cov = coverage > 0 ? `${coverage.toFixed(1)}%`.padStart(7) : '      -';
     const tests = r.numTests > 0 ? String(r.numTests).padStart(5) : '    -';
     const tries = r.attempts > 0 ? String(r.attempts).padStart(5) : '    -';
     console.log(

@@ -65,3 +65,4 @@ __tests__/
 .husky/_
 *.zip
 .claude
+# examples/bulletproof-react-master/*

@@ -16,7 +16,13 @@ interface GenerationContext {
 }
 
 let _activeContext: GenerationContext | null = null;
-const _cachedRenderHelper = new Map<string, { path: string; exportName: string } | null>();
+export interface ResolvedRenderHelper {
+  path: string;
+  exportName: string;
+  isAsync: boolean;
+}
+
+const _cachedRenderHelper = new Map<string, ResolvedRenderHelper | null>();
 
 function normalizeSlashes(value: string): string {
   return value.split('\\').join('/');
@@ -154,15 +160,15 @@ export function relativeImport(fromFile: string, toFile: string): string {
  */
 export function resolveRenderHelper(
   sourceFilePath: string
-): { path: string; exportName: string } | null {
+): ResolvedRenderHelper | null {
   const packageRoot = _activeContext?.packageRoot ?? ROOT_DIR;
   const override = _activeContext?.renderHelperOverride ?? 'auto';
 
   if (override !== 'auto') {
     const abs = path.isAbsolute(override) ? override : path.join(packageRoot, override);
     if (exists(abs)) {
-      const exportName = detectRenderExport(abs);
-      if (exportName) return { path: abs, exportName };
+      const helper = detectRenderExport(abs);
+      if (helper) return { path: abs, exportName: helper.exportName, isAsync: helper.isAsync };
     }
   }
 
@@ -176,7 +182,7 @@ export function resolveRenderHelper(
   return result;
 }
 
-function findRenderHelper(packageRoot: string): { path: string; exportName: string } | null {
+function findRenderHelper(packageRoot: string): ResolvedRenderHelper | null {
   const srcDir = detectSrcDir(packageRoot);
   const dirsToCheck = getRenderHelperDirsToCheck(srcDir, packageRoot);
   const directMatch = findRenderHelperInDirs(dirsToCheck);
@@ -202,14 +208,14 @@ function collectRenderHelperDirs(dirsToCheck: string[], baseDir: string): void {
 
 function findRenderHelperInDirs(
   dirsToCheck: string[]
-): { path: string; exportName: string } | null {
+): ResolvedRenderHelper | null {
   for (const dir of dirsToCheck) {
     for (const fileName of RENDER_HELPER_FILE_NAMES) {
       for (const ext of ['.tsx', '.ts', '.jsx', '.js']) {
         const filePath = path.join(dir, `${fileName}${ext}`);
         if (!exists(filePath)) continue;
-        const exportName = detectRenderExport(filePath);
-        if (exportName) return { path: filePath, exportName };
+        const helper = detectRenderExport(filePath);
+        if (helper) return { path: filePath, exportName: helper.exportName, isAsync: helper.isAsync };
       }
     }
   }
@@ -228,15 +234,15 @@ function isEligibleRenderHelperCandidate(filePath: string): boolean {
   );
 }
 
-function findRenderHelperBySourceScan(srcDir: string): { path: string; exportName: string } | null {
+function findRenderHelperBySourceScan(srcDir: string): ResolvedRenderHelper | null {
   if (!exists(srcDir)) return null;
 
   try {
     const allFiles = listFilesRecursive(srcDir);
     const candidates = allFiles.filter(isEligibleRenderHelperCandidate);
     for (const filePath of candidates) {
-      const exportName = detectRenderExport(filePath);
-      if (exportName) return { path: filePath, exportName };
+      const helper = detectRenderExport(filePath);
+      if (helper) return { path: filePath, exportName: helper.exportName, isAsync: helper.isAsync };
     }
   } catch {
     return null;
@@ -245,19 +251,23 @@ function findRenderHelperBySourceScan(srcDir: string): { path: string; exportNam
   return null;
 }
 
-function detectRenderExport(filePath: string): string | null {
+function detectRenderExport(filePath: string): { exportName: string; isAsync: boolean } | null {
   try {
     const content = fs.readFileSync(filePath, 'utf8');
     const exportPatterns = [
-      /export\s+(?:async\s+)?function\s+(renderWithProviders|customRender|renderWithWrapper|renderWithContext)\b/,
-      /export\s+const\s+(renderWithProviders|customRender|renderWithWrapper|renderWithContext)\b/,
+      /export\s+(async\s+)?function\s+(renderWithProviders|customRender|renderWithWrapper|renderWithContext)\b/,
+      /export\s+const\s+(renderWithProviders|customRender|renderWithWrapper|renderWithContext)\s*=\s*(async\s*)?/,
       /export\s*\{[^}]*(renderWithProviders|customRender|renderWithWrapper|renderWithContext)[^}]*\}/,
       /(?:module\.)?exports\.(renderWithProviders|customRender|renderWithWrapper|renderWithContext)\b/,
     ];
 
     for (const pattern of exportPatterns) {
       const match = pattern.exec(content);
-      if (match) return match[1];
+      if (match) {
+        const exportName = match[2] ?? match[1];
+        const isAsync = /\basync\b/.test(match[1] ?? '') || /\basync\b/.test(match[3] ?? '');
+        return { exportName, isAsync: isAsync || isAsyncRenderExport(content, exportName) };
+      }
     }
 
     if (
@@ -268,13 +278,25 @@ function detectRenderExport(filePath: string): string | null {
         content.includes('export default'))
     ) {
       const customExportMatch = /export\s+(?:const|function)\s+(render\w+)/.exec(content);
-      if (customExportMatch) return customExportMatch[1];
+      if (customExportMatch) {
+        const exportName = customExportMatch[1];
+        return { exportName, isAsync: isAsyncRenderExport(content, exportName) };
+      }
     }
 
     return null;
   } catch {
     return null;
   }
+}
+
+function isAsyncRenderExport(content: string, exportName: string): boolean {
+  const escaped = exportName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return (
+    new RegExp(`export\\s+async\\s+function\\s+${escaped}\\b`).test(content) ||
+    new RegExp(`export\\s+const\\s+${escaped}\\s*=\\s*async\\b`).test(content) ||
+    new RegExp(`const\\s+${escaped}\\s*=\\s*async\\b`).test(content)
+  );
 }
 
 /**
