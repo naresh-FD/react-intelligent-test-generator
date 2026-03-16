@@ -7,7 +7,6 @@
  */
 
 import fs from 'node:fs';
-import path from 'node:path';
 import type { FailureClass, ClassifiedFailure } from './classifier';
 import type { HealMemoryData } from './memory';
 import { rankedStrategies } from './memory';

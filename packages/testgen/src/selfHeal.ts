@@ -466,7 +466,7 @@ const testStore = configureStore({ reducer: (state = {}) => state });`;
   {
     errorPattern: /TypeError.*is not a function|TypeError.*is not iterable/i,
     description: 'Enhance existing jest.mock with proper return values',
-    apply(content, error) {
+    apply(content, _error) {
       // Look for bare jest.mock("module") without factory and add a factory
       const bareMockRegex = /jest\.mock\(["']([^"']+)["']\);/g;
       let modified = content;
@@ -515,12 +515,10 @@ const testStore = configureStore({ reducer: (state = {}) => state });`;
         /Type '(boolean|string|number)' is not assignable to type '(?:.*\.)?MutableRefObject<(\w+)>'/i
       );
       if (refMatch) {
-        const [, , innerType] = refMatch;
-        const defaultVal = innerType === 'boolean' ? 'false' : innerType === 'number' ? '0' : '""';
         // Find the prop in defaultProps and wrap it in { current: ... }
         modified = modified.replace(
           /(const defaultProps\s*=\s*\{[\s\S]*?)(\w+):\s*(true|false|"[^"]*"|\d+)/,
-          (m, before, propName, val) => {
+          (_m, before, propName, val) => {
             // Only fix if this looks like the offending prop
             return `${before}${propName}: { current: ${val} }`;
           }

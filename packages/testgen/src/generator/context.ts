@@ -1,6 +1,5 @@
 import { Node, SourceFile, SyntaxKind, TypeChecker } from 'ts-morph';
 import path from 'node:path';
-import fs from 'node:fs';
 import { CONTEXT_DETECTION_CONFIG } from '../config';
 import { relativeImport } from '../utils/path';
 import { buildDomMatchersImport, buildTestGlobalsImport } from '../utils/framework';

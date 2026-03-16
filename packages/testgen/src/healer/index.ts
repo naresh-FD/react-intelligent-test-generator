@@ -51,7 +51,7 @@ export function heal(failureDetails: FailureDetail[]): HealResult {
   const allAnalyses = analyzeFailures(failureDetails);
 
   // Pick highest-priority root cause
-  const rootCause = allAnalyses[0];
+  const rootCause = pickRootCause(failureDetails);
   if (!rootCause) {
     return { repairPlan: null, source: 'none', description: 'No failures analyzed' };
   }

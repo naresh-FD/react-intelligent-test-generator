@@ -134,7 +134,7 @@ export function stripAbsolutePaths(input: string): string {
   return input
     .replace(FILE_URL_PATTERN, '<path>')
     .replace(WINDOWS_PATH_PATTERN, '<path>')
-    .replace(POSIX_PATH_PATTERN, (match, prefix: string) => `${prefix}<path>`);
+    .replace(POSIX_PATH_PATTERN, (_match, prefix: string) => `${prefix}<path>`);
 }
 
 export function stripVolatileLocationData(input: string): string {
