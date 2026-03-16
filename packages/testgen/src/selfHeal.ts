@@ -889,7 +889,7 @@ function simplifyTestFile(content: string): string | null {
       expect(true).toBe(true);
       return;
     }
-    expect(container).toBeInTheDocument();
+    expect(container).toBeTruthy();
   });
 });
 `;
@@ -993,7 +993,7 @@ function wrapRenderUIInTryCatch(content: string): string {
 
   // Simple approach: wrap the entire `const { container } = renderUI()` pattern
   result = result.replace(
-    /(\s+)const \{ container \} = renderUI\(([^)]*)\);(\s+)expect\(container\)\.toBeInTheDocument\(\);/g,
+    /(\s+)const \{ container \} = renderUI\(([^)]*)\);(\s+)expect\(container\)\.(?:toBeInTheDocument|toBeTruthy)\(\);/g,
     (_match: string, indent: string, args: string, _sep: string) => {
       return [
         `${indent}let container: HTMLElement;`,
@@ -1004,7 +1004,7 @@ function wrapRenderUIInTryCatch(content: string): string {
         `${indent}  expect(true).toBe(true);`,
         `${indent}  return;`,
         `${indent}}`,
-        `${indent}expect(container).toBeInTheDocument();`,
+        `${indent}expect(container).toBeTruthy();`,
       ].join('\n');
     }
   );

@@ -22,6 +22,10 @@ export function detectTestFramework(rootDir: string = ROOT_DIR): TestFramework {
     'vitest.config.js',
     'vitest.config.mts',
     'vitest.config.mjs',
+    'vite.config.ts',
+    'vite.config.js',
+    'vite.config.mts',
+    'vite.config.mjs',
   ];
   for (const config of vitestConfigs) {
     if (exists(path.join(normalizedRoot, config))) {

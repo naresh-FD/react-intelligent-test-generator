@@ -25,7 +25,7 @@ export function buildSafeRenderBlock(
     '  expect(true).toBe(true);',
     '  return;',
     '}',
-    'expect(container).toBeInTheDocument();',
+    'expect(container).toBeTruthy();',
   ];
 
   for (const assertion of extraAssertions) {

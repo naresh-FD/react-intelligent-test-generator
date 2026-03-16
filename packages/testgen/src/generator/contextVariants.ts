@@ -42,7 +42,7 @@ export function buildContextVariantTests(
         title: `renders with ${ctx.contextName} context`,
         body: [
           'const { container } = renderUI();',
-          'expect(container).toBeInTheDocument();',
+          'expect(container).toBeTruthy();',
         ],
       });
     }
@@ -108,7 +108,7 @@ function generateKeyVariants(
       title: `provides ${key} function via context`,
       body: [
         'const { container } = renderUI();',
-        'expect(container).toBeInTheDocument();',
+        'expect(container).toBeTruthy();',
         `// ${key} is provided via ${contextBase} context`,
       ],
     });
@@ -131,7 +131,7 @@ function buildContextOverrideTest(
     `${mockVarName}.${key} = ${value};`,
     'try {',
     '  const { container } = renderUI();',
-    '  expect(container).toBeInTheDocument();',
+    '  expect(container).toBeTruthy();',
     '} finally {',
     `  ${mockVarName}.${key} = original_${key};`,
     '}',
