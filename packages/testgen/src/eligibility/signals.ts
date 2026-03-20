@@ -115,12 +115,16 @@ export function extractSignals(
     };
 }
 
+function normalizeSlashes(value: string): string {
+    return value.split('\\').join('/');
+}
+
 // ---------------------------------------------------------------------------
 // File metadata detectors
 // ---------------------------------------------------------------------------
 
 function detectTestFile(filePath: string): boolean {
-    const normalized = filePath.replaceAll('\\', '/');
+    const normalized = normalizeSlashes(filePath);
     return (
         /\.(test|spec)\.(ts|tsx|js|jsx)$/.test(filePath) ||
         normalized.includes('/__tests__/') ||
@@ -133,7 +137,7 @@ function detectStoryFile(filePath: string): boolean {
 }
 
 function detectMockFile(filePath: string): boolean {
-    const normalized = filePath.replaceAll('\\', '/');
+    const normalized = normalizeSlashes(filePath);
     return (
         normalized.includes('/__mocks__/') ||
         normalized.includes('/mocks/') ||
@@ -161,7 +165,7 @@ function detectConfigFile(filePath: string): boolean {
 }
 
 function detectAppEntry(filePath: string, basenameWithExt: string): boolean {
-    const normalized = filePath.replaceAll('\\', '/');
+    const normalized = normalizeSlashes(filePath);
     // main.tsx / index.tsx / main.jsx / index.jsx at src root, or App.tsx/App.jsx
     if (/^(main|App)\.(js|jsx|ts|tsx)$/.test(basenameWithExt)) return true;
     // index file directly under src/ (not deeply nested)

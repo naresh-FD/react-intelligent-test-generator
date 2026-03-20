@@ -129,7 +129,7 @@ const fixQuerySelector: Strategy = {
     if (!/Unable to find/.test(failure.rawOutput)) return null;
 
     // Replace getByText with queryByText for assertions that check presence
-    let patched = content.replace(
+    const patched = content.replace(
       /screen\.getBy(Text|Role|TestId|LabelText|PlaceholderText)\(([^)]+)\)/g,
       'screen.queryBy$1($2)'
     );

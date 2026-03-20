@@ -243,7 +243,7 @@ export function printEligibilitySummary(results: FileEligibilityResult[], packag
 // ---------------------------------------------------------------------------
 
 function toRelative(filePath: string, packageRoot: string): string {
-    return path.relative(packageRoot, filePath).replaceAll('\\', '/');
+    return path.relative(packageRoot, filePath).split('\\').join('/');
 }
 
 function findResult(

@@ -1,6 +1,8 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { ROOT_DIR, TESTS_DIR_NAME, detectSrcDir } from '../config';
+import type { ResolvedTestOutput } from '../workspace/config';
+import { DEFAULT_TEST_OUTPUT } from '../workspace/config';
 import { exists, listFilesRecursive } from '../fs';
 
 export interface ScanSourceFilesOptions {
@@ -60,12 +62,30 @@ export function scanSourceFiles(options: ScanSourceFilesOptions = {}): string[] 
   });
 }
 
-export function getTestFilePath(sourceFilePath: string): string {
+export function getTestFilePath(
+  sourceFilePath: string,
+  testOutput: ResolvedTestOutput = DEFAULT_TEST_OUTPUT,
+  packageRoot: string = ROOT_DIR,
+): string {
   const dir = path.dirname(sourceFilePath);
   const ext = path.extname(sourceFilePath);
   const base = path.basename(sourceFilePath, ext);
-  const testExt = ext === '.ts' ? '.test.ts' : '.test.tsx';
-  return path.join(dir, TESTS_DIR_NAME, `${base}${testExt}`);
+  const testFileName = `${base}${testOutput.suffix}${ext}`;
+
+  switch (testOutput.strategy) {
+    case 'colocated':
+      return path.join(dir, testFileName);
+    case 'mirror': {
+      const sourceRoot = path.join(packageRoot, testOutput.srcRoot);
+      const relativeSourceDir = path.relative(sourceRoot, dir);
+      return path.join(packageRoot, testOutput.directory, relativeSourceDir, testFileName);
+    }
+    case 'subfolder':
+    default: {
+      const outputDir = testOutput.directory || TESTS_DIR_NAME;
+      return path.join(dir, outputDir, testFileName);
+    }
+  }
 }
 
 export function relativeImport(fromFile: string, toFile: string): string {

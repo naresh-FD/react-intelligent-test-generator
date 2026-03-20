@@ -6,7 +6,8 @@ interface FailureRule {
   pattern: RegExp;
 }
 
-const ANSI_PATTERN = /\u001B\[[0-9;]*m/g;
+const ANSI_ESCAPE = String.fromCharCode(27);
+const ANSI_PATTERN = new RegExp(`${ANSI_ESCAPE}\\[[0-9;]*m`, 'g');
 const FILE_URL_PATTERN = /file:\/\/\/[^\s)]+/gi;
 const WINDOWS_PATH_PATTERN = /\b[A-Za-z]:\\(?:[^\\\s:()]+\\)*[^\\\s:()]+/g;
 const POSIX_PATH_PATTERN = /(^|[\s(])\/(?:[^/\s:()]+\/)*[^/\s:()]+/g;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { ComponentInfo, analyzeSourceFile } from '../src/analyzer';
+import { analyzeSourceFile } from '../src/analyzer';
 import { generateTests } from '../src/generator';
 import { createParser, getSourceFile } from '../src/parser';
 import { classifyFailure } from '../src/selfHeal/failureClassifier';

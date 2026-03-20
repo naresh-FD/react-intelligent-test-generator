@@ -18,7 +18,7 @@ export interface FailureContext {
 export function parseFailureContext(errorOutput: string): FailureContext {
   const raw = errorOutput ?? '';
 
-  const missingModule = raw.match(/Cannot find module ['\"]([^'\"]+)['\"]/i);
+  const missingModule = raw.match(/Cannot find module ['"]([^'"]+)['"]/i);
   if (missingModule) {
     return { kind: 'missing-module', moduleName: missingModule[1], raw };
   }
@@ -40,8 +40,8 @@ export function parseFailureContext(errorOutput: string): FailureContext {
     return { kind: 'provider-required', providerHint: 'generic', raw };
   }
 
-  const hookShape = raw.match(/Cannot destructure property ['\"]?(\w+)['\"]? of .*use([A-Z]\w*)/i)
-    ?? raw.match(/Cannot read propert(?:y|ies) of undefined \(reading ['\"](\w+)['\"]\)/i);
+  const hookShape = raw.match(/Cannot destructure property ['"]?(\w+)['"]? of .*use([A-Z]\w*)/i)
+    ?? raw.match(/Cannot read propert(?:y|ies) of undefined \(reading ['"](\w+)['"]\)/i);
   if (hookShape) {
     return {
       kind: 'hook-shape',

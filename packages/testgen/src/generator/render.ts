@@ -1,54 +1,88 @@
+import path from 'node:path';
+import { Project, TypeChecker } from 'ts-morph';
 import { ComponentInfo } from '../analyzer';
-import { getRenderFunctionName } from './templates';
-import { resolveRenderHelper } from '../utils/path';
 import type { RepairPlan } from '../healer/knowledge-base';
+import type { ReferencePatternSummary } from '../repoPatterns';
+import { resolveRenderHelper } from '../utils/path';
+import { ContextMockValue, generateContextMockValue } from './contextValues';
+import { getRenderFunctionName } from './templates';
+
+interface ProviderWrapperTemplate {
+  name: string;
+  valueObjectName?: string;
+}
+
+interface BuildContextRenderInfoOptions {
+  sourceFilePath: string;
+  testFilePath: string;
+}
+
+export interface ContextRenderInfo {
+  contextImports: string[];
+  mockDeclarations: string[];
+  contextMocks: ContextMockValue[];
+}
 
 export function buildRenderHelper(
   component: ComponentInfo,
   sourceFilePath?: string,
-  repairPlan?: RepairPlan
+  repairPlan?: RepairPlan,
+  referencePatterns?: ReferencePatternSummary,
+  contextInfo?: ContextRenderInfo,
 ): string {
   const renderFn = sourceFilePath
     ? getRenderFunctionName(component, sourceFilePath)
     : 'render';
 
-  // Check if repair plan says to use renderWithProviders
-  // But only if the project actually has a custom render helper
   const hasCustomRender = sourceFilePath ? resolveRenderHelper(sourceFilePath) !== null : false;
   const useCustomRender = hasCustomRender && repairPlan?.actions.some(
-    (a) => a.kind === 'use-render-helper' && a.helper === 'renderWithProviders'
+    (action) => action.kind === 'use-render-helper' && action.helper === 'renderWithProviders',
   );
   const effectiveRenderFn = useCustomRender ? 'renderWithProviders' : renderFn;
-
-  // Collect wrappers from repair plan (MemoryRouter, QueryClientProvider, etc.)
-  const wrapperActions = repairPlan?.actions.filter((a) => a.kind === 'add-wrapper') ?? [];
+  const wrapperActions = repairPlan?.actions.filter((action) => action.kind === 'add-wrapper') ?? [];
 
   const renderOptions: string[] = [];
-  // Only add auth options for known custom render functions (not plain 'render')
   if (effectiveRenderFn !== 'render' && component.usesAuthHook) {
     renderOptions.push('withAuthProvider: false');
-    const authState = deriveAuthState(component);
-    renderOptions.push(`authState: ${authState}`);
+    renderOptions.push(`authState: ${deriveAuthState(component)}`);
   }
   const optionsSuffix = renderOptions.length > 0 ? `, { ${renderOptions.join(', ')} }` : '';
 
-  // Build the JSX element
   const propsSpread = component.props.length > 0 ? ' {...defaultProps} {...props}' : '';
   const paramsDecl = component.props.length > 0 ? '(props = {})' : '()';
   let jsx = `<${component.name}${propsSpread} />`;
 
-  // Wrap with repair-plan wrappers (idempotent — each wrapper applied once)
-  for (const action of wrapperActions) {
-    if (action.kind === 'add-wrapper') {
-      // Don't double-wrap if the render function already provides this wrapper
-      // (e.g., renderWithProviders already includes MemoryRouter)
-      if (effectiveRenderFn !== 'render') continue;
+  const referenceWrappers = buildReferenceWrappers(component, referencePatterns);
+  const existingWrapperNames = new Set(referenceWrappers.map((wrapper) => wrapper.name));
+  for (const wrapper of referenceWrappers.reverse()) {
+    if (wrapper.valueObjectName) {
+      jsx = `<${wrapper.name} value={${wrapper.valueObjectName}}>${jsx}</${wrapper.name}>`;
+    } else {
+      jsx = `<${wrapper.name}>${jsx}</${wrapper.name}>`;
+    }
+  }
 
-      if (action.wrapper === 'QueryClientProvider') {
-        jsx = `<QueryClientProvider client={new QueryClient()}>${jsx}</QueryClientProvider>`;
-      } else {
-        jsx = `<${action.wrapper}>${jsx}</${action.wrapper}>`;
-      }
+  if (effectiveRenderFn === 'render' && component.usesReactQuery) {
+    jsx = `<QueryClientProvider client={new QueryClient()}>${jsx}</QueryClientProvider>`;
+  }
+
+  if (effectiveRenderFn === 'render' && component.usesRouter) {
+    jsx = `<MemoryRouter>${jsx}</MemoryRouter>`;
+  }
+
+  for (const contextMock of [...(contextInfo?.contextMocks ?? [])].reverse()) {
+    if (existingWrapperNames.has(`${contextMock.importName}.Provider`)) continue;
+    jsx = `<${contextMock.importName}.Provider value={${contextMock.mockVarName}}>${jsx}</${contextMock.importName}.Provider>`;
+  }
+
+  for (const action of wrapperActions) {
+    if (action.kind !== 'add-wrapper') continue;
+    if (effectiveRenderFn !== 'render') continue;
+
+    if (action.wrapper === 'QueryClientProvider') {
+      jsx = `<QueryClientProvider client={new QueryClient()}>${jsx}</QueryClientProvider>`;
+    } else {
+      jsx = `<${action.wrapper}>${jsx}</${action.wrapper}>`;
     }
   }
 
@@ -58,24 +92,93 @@ export function buildRenderHelper(
   ].join('\n');
 }
 
+export function buildContextRenderInfo(
+  component: ComponentInfo,
+  project: Project,
+  checker: TypeChecker,
+  options: BuildContextRenderInfoOptions,
+): ContextRenderInfo {
+  const contextImports: string[] = [];
+  const mockDeclarations: string[] = [];
+  const contextMocks: ContextMockValue[] = [];
+
+  for (const context of component.contexts) {
+    const mock = generateContextMockValue(context, project, checker);
+    if (!mock) continue;
+
+    contextMocks.push(mock);
+    const importPath = resolveContextImportPath(mock.importPath, options.sourceFilePath, options.testFilePath);
+    const importLine = `import { ${mock.importName} } from "${importPath}";`;
+    if (!contextImports.includes(importLine)) {
+      contextImports.push(importLine);
+    }
+    if (!mockDeclarations.includes(mock.mockDeclaration)) {
+      mockDeclarations.push(mock.mockDeclaration);
+    }
+  }
+
+  return {
+    contextImports,
+    mockDeclarations,
+    contextMocks,
+  };
+}
+
 function deriveAuthState(component: ComponentInfo): string {
   const name = component.name;
-  // Check for common auth-related route patterns generically
-  if (
-    /public/i.test(name) ||
-    /login/i.test(name) ||
-    /register/i.test(name) ||
-    /signup/i.test(name)
-  ) {
+  if (/public|login|register|signup/i.test(name)) {
     return '{ isAuthenticated: false, isLoading: false }';
   }
-  if (
-    /protected/i.test(name) ||
-    /private/i.test(name) ||
-    /auth/i.test(name) ||
-    /dashboard/i.test(name)
-  ) {
+  if (/protected|private|auth|dashboard/i.test(name)) {
     return '{ isAuthenticated: true, isLoading: false }';
   }
   return '{ isAuthenticated: false, isLoading: false }';
+}
+
+function buildReferenceWrappers(
+  component: ComponentInfo,
+  referencePatterns?: ReferencePatternSummary,
+): ProviderWrapperTemplate[] {
+  if (!referencePatterns) return [];
+
+  const wrappers: ProviderWrapperTemplate[] = [];
+  const seen = new Set<string>();
+
+  for (const wrapper of referencePatterns.providerWrappers) {
+    const lowerName = wrapper.name.toLowerCase();
+    const isContextWrapper =
+      /\.provider$/i.test(wrapper.name)
+      && component.contexts.some((context) =>
+        lowerName.includes(context.contextName.toLowerCase().replace(/context$/, '')),
+      );
+    const isFrameworkWrapper =
+      wrapper.name === 'MemoryRouter'
+      || wrapper.name === 'QueryClientProvider'
+      || (wrapper.name === 'Provider' && component.usesRedux);
+
+    if (!isContextWrapper && !isFrameworkWrapper) continue;
+
+    const key = `${wrapper.name}::${wrapper.valueObjectName ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    wrappers.push({
+      name: wrapper.name,
+      valueObjectName: wrapper.valueObjectName,
+    });
+  }
+
+  return wrappers;
+}
+
+function resolveContextImportPath(importPath: string, sourceFilePath: string, testFilePath: string): string {
+  if (!importPath.startsWith('.')) return importPath;
+
+  const sourceDir = path.dirname(sourceFilePath);
+  const absoluteTarget = path.resolve(sourceDir, importPath);
+  const testDir = path.dirname(testFilePath);
+  let relativePath = path.relative(testDir, absoluteTarget).split('\\').join('/');
+  if (!relativePath.startsWith('.')) {
+    relativePath = `./${relativePath}`;
+  }
+  return relativePath.replace(/\.(tsx?|jsx?)$/, '');
 }

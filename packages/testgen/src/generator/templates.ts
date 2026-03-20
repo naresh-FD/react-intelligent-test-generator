@@ -1,15 +1,18 @@
-import { relativeImport, resolveRenderHelper } from '../utils/path';
 import { ComponentInfo } from '../analyzer';
-import { buildDomMatchersImport, buildTestGlobalsImport, mockGlobalName } from '../utils/framework';
 import type { RepairPlan } from '../healer/knowledge-base';
+import type { ReferencePatternSummary } from '../repoPatterns';
+import { buildDomMatchersImport, buildTestGlobalsImport, mockGlobalName } from '../utils/framework';
+import { relativeImport, resolveRenderHelper } from '../utils/path';
 
 export interface TemplateOptions {
   testFilePath: string;
   sourceFilePath: string;
   usesUserEvent: boolean;
   needsScreen: boolean;
-  /** Repair plan from the self-healing system. */
+  contextImports?: string[];
   repairPlan?: RepairPlan;
+  referencePatterns?: ReferencePatternSummary;
+  usesBeforeEach?: boolean;
 }
 
 export function buildHeader(): string {
@@ -17,36 +20,33 @@ export function buildHeader(): string {
 }
 
 export function buildImports(components: ComponentInfo[], options: TemplateOptions): string {
-  const defaultComponents = components.filter((c) => c.exportType === 'default');
-  const namedComponents = components.filter((c) => c.exportType === 'named');
+  const defaultComponents = components.filter((component) => component.exportType === 'default');
+  const namedComponents = components.filter((component) => component.exportType === 'named');
   const componentImport = relativeImport(options.testFilePath, options.sourceFilePath);
 
   const imports: string[] = [];
-  const needsPlainRender = components.some((c) => c.usesRouter);
-  const needsProviders = components.some((c) => !c.usesRouter);
-  const needsMockGlobal = components.some((c) => c.props.some((p) => p.isCallback));
+  const needsPlainRender = components.some((component) => component.usesRouter);
+  const needsProviders = components.some((component) => !component.usesRouter);
+  const needsMockGlobal = components.some((component) => component.props.some((prop) => prop.isCallback));
 
-  // Check if repair plan forces renderWithProviders
   const forceCustomRender = options.repairPlan?.actions.some(
-    (a) => a.kind === 'use-render-helper' && a.helper === 'renderWithProviders'
+    (action) => action.kind === 'use-render-helper' && action.helper === 'renderWithProviders',
   );
 
   const testGlobals = ['describe', 'it', 'expect'];
   if (needsMockGlobal) testGlobals.push(mockGlobalName());
+  if (options.usesBeforeEach) testGlobals.push('beforeEach');
   imports.push(buildTestGlobalsImport(testGlobals));
   imports.push(buildDomMatchersImport());
 
-  // Check if a custom render helper exists in this project
   const renderHelper = resolveRenderHelper(options.sourceFilePath);
   const hasCustomRender = renderHelper !== null;
 
   if ((needsPlainRender || !hasCustomRender) && !forceCustomRender) {
-    // Use plain render from RTL (either for router components, or when custom render doesn't exist)
     const rtlImports = ['render'];
     if (options.needsScreen) rtlImports.push('screen');
-    // Check if repair plan needs async handling imports
-    if (options.repairPlan?.actions.some((a) => a.kind === 'add-async-handling')) {
-      const strategy = options.repairPlan.actions.find((a) => a.kind === 'add-async-handling');
+    if (options.repairPlan?.actions.some((action) => action.kind === 'add-async-handling')) {
+      const strategy = options.repairPlan.actions.find((action) => action.kind === 'add-async-handling');
       if (strategy && 'strategy' in strategy) {
         if (strategy.strategy === 'waitFor' && !rtlImports.includes('waitFor')) {
           rtlImports.push('waitFor');
@@ -59,10 +59,17 @@ export function buildImports(components: ComponentInfo[], options: TemplateOptio
     imports.push(`import { ${rtlImports.join(', ')} } from "@testing-library/react";`);
   }
 
+  if (components.some((component) => component.usesRouter)) {
+    imports.push('import { MemoryRouter } from "react-router-dom";');
+  }
+
+  if (components.some((component) => component.usesReactQuery)) {
+    imports.push('import { QueryClientProvider, QueryClient } from "@tanstack/react-query";');
+  }
+
   if ((needsProviders && hasCustomRender) || (forceCustomRender && hasCustomRender)) {
-    const testUtilsImport = relativeImport(options.testFilePath, renderHelper!.path);
-    const renderFnName = renderHelper!.exportName;
-    const testingImports = [renderFnName];
+    const testUtilsImport = relativeImport(options.testFilePath, renderHelper.path);
+    const testingImports = [renderHelper.exportName];
     if (!needsPlainRender && options.needsScreen) testingImports.push('screen');
     imports.push(`import { ${testingImports.join(', ')} } from "${testUtilsImport}";`);
   }
@@ -73,40 +80,39 @@ export function buildImports(components: ComponentInfo[], options: TemplateOptio
 
   if (defaultComponents.length > 0 && namedComponents.length > 0) {
     imports.push(
-      `import ${defaultComponents[0].name}, { ${namedComponents
-        .map((c) => c.name)
-        .join(', ')} } from "${componentImport}";`
+      `import ${defaultComponents[0].name}, { ${namedComponents.map((component) => component.name).join(', ')} } from "${componentImport}";`,
     );
   } else if (defaultComponents.length > 0) {
     imports.push(`import ${defaultComponents[0].name} from "${componentImport}";`);
   } else {
-    imports.push(
-      `import { ${namedComponents.map((c) => c.name).join(', ')} } from "${componentImport}";`
-    );
+    imports.push(`import { ${namedComponents.map((component) => component.name).join(', ')} } from "${componentImport}";`);
   }
 
-  // Apply repair plan: add extra imports (idempotent — deduplicated)
+  for (const contextImport of options.contextImports ?? []) {
+    if (!imports.includes(contextImport)) {
+      imports.push(contextImport);
+    }
+  }
+
   if (options.repairPlan) {
-    const existingImportText = imports.join('\n');
+    let existingImportText = imports.join('\n');
     for (const action of options.repairPlan.actions) {
       if (action.kind === 'ensure-import' && action.module !== 'unknown') {
         const importLine = action.symbol
           ? `import { ${action.symbol} } from "${action.module}";`
           : `import "${action.module}";`;
-        // Idempotent: don't add if already present
         if (!existingImportText.includes(action.module)) {
           imports.push(importLine);
+          existingImportText = imports.join('\n');
         }
       }
-      if (action.kind === 'add-wrapper') {
-        // Add import for wrapper component if not already imported
-        if (!existingImportText.includes(action.importFrom)) {
-          if (action.wrapper === 'QueryClientProvider') {
-            imports.push(`import { QueryClientProvider, QueryClient } from "${action.importFrom}";`);
-          } else {
-            imports.push(`import { ${action.wrapper} } from "${action.importFrom}";`);
-          }
+      if (action.kind === 'add-wrapper' && !existingImportText.includes(action.importFrom)) {
+        if (action.wrapper === 'QueryClientProvider') {
+          imports.push(`import { QueryClientProvider, QueryClient } from "${action.importFrom}";`);
+        } else {
+          imports.push(`import { ${action.wrapper} } from "${action.importFrom}";`);
         }
+        existingImportText = imports.join('\n');
       }
     }
   }
@@ -114,10 +120,6 @@ export function buildImports(components: ComponentInfo[], options: TemplateOptio
   return imports.join('\n');
 }
 
-/**
- * Determines which render function to use based on project structure.
- * Returns the actual export name from the detected render helper.
- */
 export function getRenderFunctionName(component: ComponentInfo, sourceFilePath: string): string {
   if (component.usesRouter) return 'render';
   const helper = resolveRenderHelper(sourceFilePath);
@@ -153,9 +155,9 @@ export function buildAsyncTestBlock(title: string, bodyLines: string[]): string 
 }
 
 export function joinBlocks(blocks: string[]): string {
-  return blocks.filter((b) => b.trim().length > 0).join('\n\n');
+  return blocks.filter((block) => block.trim().length > 0).join('\n\n');
 }
 
 export function buildFileContent(parts: string[]): string {
-  return parts.filter((p) => p.trim().length > 0).join('\n\n') + '\n';
+  return parts.filter((part) => part.trim().length > 0).join('\n\n') + '\n';
 }

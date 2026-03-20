@@ -39,6 +39,7 @@ function rebaseRelativeImport(
 export interface AutoMockOptions {
   sourceFilePath?: string;
   testFilePath?: string;
+  skipHookMocks?: string[];
 }
 
 /**
@@ -74,6 +75,7 @@ export function buildAutoMocks(component: ComponentInfo, options: AutoMockOption
   // Mock custom hooks that consume context/data to return safe defaults
   // This prevents "Cannot read properties of undefined (reading 'map')" errors
   const mockedSources = new Set<string>();
+  const skippedHookMocks = new Set(options.skipHookMocks ?? []);
   for (const hook of component.hooks) {
     if (!hook.importSource) continue;
     // Skip React internals, testing-library, and already-mocked third-party
@@ -85,6 +87,7 @@ export function buildAutoMocks(component: ComponentInfo, options: AutoMockOption
     if (component.serviceImports.includes(hook.importSource)) continue;
     // Skip if we already mocked this source
     if (mockedSources.has(hook.importSource)) continue;
+    if (skippedHookMocks.has(hook.name)) continue;
 
     // Only mock hooks from relative imports (project-internal hooks)
     if (hook.importSource.startsWith('.') || hook.importSource.startsWith('@/') || hook.importSource.startsWith('~/')) {
@@ -110,7 +113,7 @@ export function buildAutoMocks(component: ComponentInfo, options: AutoMockOption
  * Build a smart mock return value for a custom hook based on naming conventions.
  * Prevents "Cannot read properties of undefined" errors by returning safe defaults.
  */
-function buildHookMockReturnValue(hookName: string): string {
+export function buildHookMockReturnValue(hookName: string): string {
   // Extract the resource name from the hook (e.g., useGetTransactions → Transactions)
   const nameMatch = hookName.match(/^use(?:Get|Fetch|Load|Query)?([A-Z]\w*)/);
   const resource = nameMatch ? nameMatch[1] : '';

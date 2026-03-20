@@ -1,4 +1,5 @@
 import { ComponentInfo, SelectorInfo } from '../analyzer';
+import type { ReferencePatternSummary } from '../repoPatterns';
 import { mockFn } from '../utils/framework';
 
 export interface ConditionalTestCase {
@@ -7,10 +8,13 @@ export interface ConditionalTestCase {
   isAsync?: boolean;
 }
 
-export function buildRenderAssertions(component: ComponentInfo): string[] {
+export function buildRenderAssertions(
+  component: ComponentInfo,
+  referencePatterns?: ReferencePatternSummary,
+): string[] {
   const lines: string[] = [
     'const { container } = renderUI();',
-    'expect(container).toBeTruthy();',
+    `expect(${buildPrimaryRenderAssertion(component, referencePatterns)}).toBeInTheDocument();`,
   ];
 
   // Only assert elements that use specific selectors (testid, label, text, placeholder)
@@ -452,7 +456,10 @@ export function buildOptionalPropTests(component: ComponentInfo): ConditionalTes
  * Build tests for loading/error/empty/disabled states (branch coverage).
  * Uses universal prop naming conventions.
  */
-export function buildStateTests(component: ComponentInfo): ConditionalTestCase[] {
+export function buildStateTests(
+  component: ComponentInfo,
+  referencePatterns?: ReferencePatternSummary,
+): ConditionalTestCase[] {
   const cases: ConditionalTestCase[] = [];
 
   // Loading state tests
@@ -466,7 +473,7 @@ export function buildStateTests(component: ComponentInfo): ConditionalTestCase[]
       title: 'renders loading state',
       body: [
         `const { container } = renderUI({ ${loadingProps.map((p) => `${p.name}: true`).join(', ')} });`,
-        'expect(container).toBeTruthy();',
+        `expect(${buildFallbackStateAssertion('loading', component, referencePatterns)}).toBeInTheDocument();`,
       ],
     });
   }
@@ -489,7 +496,7 @@ export function buildStateTests(component: ComponentInfo): ConditionalTestCase[]
       title: 'renders error state',
       body: [
         `const { container } = renderUI({ ${overrides.join(', ')} });`,
-        'expect(container).toBeTruthy();',
+        `expect(${buildFallbackStateAssertion('error', component, referencePatterns)}).toBeInTheDocument();`,
       ],
     });
   }
@@ -508,7 +515,7 @@ export function buildStateTests(component: ComponentInfo): ConditionalTestCase[]
       title: 'renders with empty data',
       body: [
         `const { container } = renderUI({ ${arrayProps.map((p) => `${p.name}: []`).join(', ')} });`,
-        'expect(container).toBeTruthy();',
+        `expect(${buildFallbackStateAssertion('empty', component, referencePatterns)}).toBeInTheDocument();`,
       ],
     });
   }
@@ -524,7 +531,7 @@ export function buildStateTests(component: ComponentInfo): ConditionalTestCase[]
       title: 'renders disabled state',
       body: [
         `const { container } = renderUI({ ${disabledProps.map((p) => `${p.name}: true`).join(', ')} });`,
-        'expect(container).toBeTruthy();',
+        `expect(${buildPrimaryRenderAssertion(component, referencePatterns)}).toBeInTheDocument();`,
       ],
     });
   }
@@ -535,7 +542,10 @@ export function buildStateTests(component: ComponentInfo): ConditionalTestCase[]
 /**
  * Build form submission test (fills inputs and clicks submit).
  */
-export function buildFormSubmissionTest(component: ComponentInfo): ConditionalTestCase | null {
+export function buildFormSubmissionTest(
+  component: ComponentInfo,
+  referencePatterns?: ReferencePatternSummary,
+): ConditionalTestCase | null {
   if (component.forms.length === 0 && component.inputs.length === 0) return null;
 
   // Need at least one input to fill
@@ -559,7 +569,7 @@ export function buildFormSubmissionTest(component: ComponentInfo): ConditionalTe
     body.push(`await user.click(${selectorQuery(submitButton)});`);
   }
 
-  body.push('expect(container).toBeTruthy();');
+  body.push(`expect(${buildPrimaryRenderAssertion(component, referencePatterns)}).toBeInTheDocument();`);
 
   return {
     title: 'handles form submission',
@@ -617,4 +627,49 @@ function toQuerySelector(query: string): string {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function buildPrimaryRenderAssertion(
+  component: ComponentInfo,
+  referencePatterns?: ReferencePatternSummary,
+): string {
+  if (
+    referencePatterns?.preferredQueryStyle === 'role-first'
+    || component.traits.testing.queryStyle === 'role-first'
+  ) {
+    const roleSelector = component.buttons.find((selector) => selector.strategy === 'role')
+      ?? component.inputs.find((selector) => selector.strategy === 'role')
+      ?? component.links.find((selector) => selector.strategy === 'role');
+    if (roleSelector) {
+      return `screen.queryAllByRole("${roleSelector.role || roleSelector.value}")[0]`;
+    }
+  }
+
+  const textSelector = [
+    ...component.buttons,
+    ...component.inputs,
+    ...component.links,
+  ].find((selector) => selector.strategy !== 'role');
+  if (textSelector) {
+    return selectorQuery(textSelector);
+  }
+
+  return 'container.firstChild';
+}
+
+function buildFallbackStateAssertion(
+  kind: 'loading' | 'error' | 'empty',
+  component: ComponentInfo,
+  referencePatterns?: ReferencePatternSummary,
+): string {
+  if (kind === 'loading') {
+    return 'screen.queryByText(/loading|please wait/i) ?? screen.queryByRole("status") ?? screen.queryByRole("progressbar") ?? container.firstChild';
+  }
+  if (kind === 'error') {
+    return 'screen.queryByText(/error|failed|unable|invalid/i) ?? screen.queryByRole("alert") ?? container.firstChild';
+  }
+  if (kind === 'empty') {
+    return 'screen.queryByText(/no data|no records|empty/i) ?? container.firstChild';
+  }
+  return buildPrimaryRenderAssertion(component, referencePatterns);
 }

@@ -66,3 +66,4 @@ __tests__/
 *.zip
 .claude
 examples/*
+testgen-stability-hardening-addendum.md

@@ -79,7 +79,7 @@ function run(): void {
   const hookFailure = `TypeError: Cannot destructure property 'profile' of 'useProfile(...)' as it is undefined`;
   const hookContext = parseFailureContext(hookFailure);
   assert.equal(hookContext.kind, 'hook-shape');
-  const hookFixed = applyFixRules('import { useProfile } from \"../hooks/useProfile\";\nconst x = useProfile();', hookFailure, 'x.tsx', 1, hookContext);
+  const hookFixed = applyFixRules('import { useProfile } from "../hooks/useProfile";\nconst x = useProfile();', hookFailure, 'x.tsx', 1, hookContext);
   assert.ok(Boolean(hookFixed), 'hook destructuring should trigger hook-shape fix');
 
   const providerOutput = generateForFixture('provider', 'src/components/BigProviderComponent.tsx');
@@ -104,6 +104,18 @@ function run(): void {
   setActiveFramework('vitest');
   const vitestMocks = buildAutoMocks(baseComponent({ serviceImports: ['axios-service'] }));
   assert.ok(vitestMocks.some((m) => m.startsWith('vi.mock')), 'vitest mode should emit vi.mock');
+
+  const repoAwareOutput = generateForFixture('repo-aware', 'src/components/ScheduledTransfers.tsx');
+  assert.match(repoAwareOutput, /const createMockFeatureContext =/, 'repo-aware generation should create provider mock factories');
+  assert.match(repoAwareOutput, /let mockFeatureContext = createMockFeatureContext\(\);/, 'repo-aware generation should retain reusable provider state');
+  assert.match(repoAwareOutput, /const mockUseTransactionsState = vi\.fn\(\(\) => createMockUseTransactionsState\(\)\);/, 'repo-aware generation should create repo-style hook mocks');
+  assert.match(repoAwareOutput, /vi\.mock\("\.\.\/\.\.\/hooks\/useTransactionsState"/, 'repo-aware generation should mock sibling hooks');
+  assert.match(repoAwareOutput, /beforeEach\(\(\) => \{[\s\S]*vi\.clearAllMocks\(\)/, 'repo-aware generation should adopt local beforeEach clearing patterns');
+  assert.match(repoAwareOutput, /<FeatureContext\.Provider value=\{mockFeatureContext\}>/, 'repo-aware generation should reuse mined provider wrappers');
+  assert.match(repoAwareOutput, /it\("renders loading state"/, 'repo-aware generation should emit loading scenario tests');
+  assert.match(repoAwareOutput, /it\("renders empty state"/, 'repo-aware generation should emit empty-state scenario tests');
+  assert.match(repoAwareOutput, /it\("renders error state"/, 'repo-aware generation should emit error scenario tests');
+  assert.match(repoAwareOutput, /it\("renders data state"/, 'repo-aware generation should emit data scenario tests');
 
   setActiveFramework(null);
   runHealedRegressionSuite();
