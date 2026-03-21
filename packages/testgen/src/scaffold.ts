@@ -342,6 +342,11 @@ if (typeof window.scrollTo !== 'function' || !(window.scrollTo as unknown)) {
   window.scrollTo = jest.fn();
 }
 
+// Mock window.print (used by reporting/export flows)
+if (typeof window.print !== 'function' || !(window.print as unknown)) {
+  window.print = jest.fn();
+}
+
 // Mock URL.createObjectURL / revokeObjectURL (used by file upload components)
 if (!URL.createObjectURL) {
   URL.createObjectURL = jest.fn(() => 'blob:test-url');

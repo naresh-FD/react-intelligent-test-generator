@@ -8,6 +8,9 @@ import { applyFixRules } from '../src/selfHeal';
 import { parseFailureContext } from '../src/failureContext';
 import { setActiveFramework } from '../src/utils/framework';
 import { buildAutoMocks } from '../src/generator/autoMocks';
+import { planMockModules } from '../src/generator/mockRegistry';
+import { buildSemanticTestPlan } from '../src/generator/semanticPlan';
+import { buildRenderHelper } from '../src/generator/render';
 import { runHealedRegressionSuite } from './healedRegression';
 
 const fixturesRoot = path.resolve(__dirname, 'fixtures');
@@ -104,6 +107,70 @@ function run(): void {
   setActiveFramework('vitest');
   const vitestMocks = buildAutoMocks(baseComponent({ serviceImports: ['axios-service'] }));
   assert.ok(vitestMocks.some((m) => m.startsWith('vi.mock')), 'vitest mode should emit vi.mock');
+
+  const mockRegistryParser = createParser(path.join(fixturesRoot, 'mock-registry'));
+  const defaultServiceSource = getSourceFile(
+    mockRegistryParser.project,
+    path.join(fixturesRoot, 'mock-registry', 'src/components/UsesDefaultService.tsx'),
+  );
+  const namedServiceSource = getSourceFile(
+    mockRegistryParser.project,
+    path.join(fixturesRoot, 'mock-registry', 'src/components/UsesNamedService.tsx'),
+  );
+  const hookModuleSource = getSourceFile(
+    mockRegistryParser.project,
+    path.join(fixturesRoot, 'mock-registry', 'src/components/UsesHookModule.tsx'),
+  );
+
+  const defaultServiceMocks = planMockModules(
+    baseComponent({ serviceImports: ['../services/authService'] }),
+    { sourceFile: defaultServiceSource },
+  );
+  assert.match(defaultServiceMocks[0]?.statement ?? '', /__esModule:\s*true/, 'default export mocks should mark ES module default shape');
+  assert.match(defaultServiceMocks[0]?.statement ?? '', /default:/, 'default export mocks should include default');
+
+  const namedServiceMocks = planMockModules(
+    baseComponent({ serviceImports: ['../utils/formatters'] }),
+    { sourceFile: namedServiceSource },
+  );
+  assert.match(namedServiceMocks[0]?.statement ?? '', /formatCurrency:/, 'named export mocks should export named bindings');
+  assert.doesNotMatch(namedServiceMocks[0]?.statement ?? '', /default:/, 'named export mocks should not emit default export stubs');
+
+  const partialHookMocks = planMockModules(
+    baseComponent({
+      hooks: [{ name: 'useFeatureData', importSource: '../hooks/useFeatureData' }],
+    }),
+    { sourceFile: hookModuleSource },
+  );
+  assert.match(partialHookMocks[0]?.statement ?? '', /requireActual/, 'relative hook mocks should preserve real exports with partial mocks');
+
+  const unresolvedProviderPlan = buildSemanticTestPlan({
+    sourceFilePath: path.join(fixturesRoot, 'repo-aware', 'src/components/ScheduledTransfers.tsx'),
+    testFilePath: path.join(fixturesRoot, 'repo-aware', 'src/components/__tests__/Ghost.test.tsx'),
+    components: [
+      baseComponent({
+        name: 'GhostComponent',
+        contexts: [{
+          contextName: 'GhostContext',
+          consumedKeys: ['value'],
+          isOptional: false,
+          name: 'GhostContext',
+        }],
+      }),
+    ],
+  });
+  const unresolvedRender = buildRenderHelper(unresolvedProviderPlan.componentPlans[0]);
+  assert.doesNotMatch(unresolvedRender, /GhostContext\.Provider/, 'unresolved providers should not be emitted into JSX');
+
+  const environmentPlan = buildSemanticTestPlan({
+    sourceFilePath: path.join(fixturesRoot, 'mock-registry', 'src/components/UsesNamedService.tsx'),
+    testFilePath: path.join(fixturesRoot, 'mock-registry', 'src/components/__tests__/UsesNamedService.test.tsx'),
+    components: [baseComponent({ name: 'ChartWidget', usesRecharts: true })],
+  });
+  const environmentOutput = environmentPlan.topLevelBlocks.join('\n');
+  assert.match(environmentOutput, /matchMedia/, 'environment planner should request matchMedia stubs when needed');
+  assert.match(environmentOutput, /ResizeObserver/, 'environment planner should request ResizeObserver stubs when needed');
+  assert.match(environmentOutput, /HTMLCanvasElement\.prototype\.getContext/, 'environment planner should centralize canvas stubs when needed');
 
   const repoAwareOutput = generateForFixture('repo-aware', 'src/components/ScheduledTransfers.tsx');
   assert.match(repoAwareOutput, /const createMockFeatureContext =/, 'repo-aware generation should create provider mock factories');

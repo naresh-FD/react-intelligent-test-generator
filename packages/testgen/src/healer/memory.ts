@@ -111,8 +111,9 @@ export function lookupRanked(analysis: FailureAnalysis): FixMemoryEntry | null {
 
     // Bonus for matching action kinds that seem relevant
     for (const action of entry.actions) {
-      if (action.kind === 'add-wrapper' && analysis.providerName) {
-        if ('wrapper' in action && action.wrapper.toLowerCase().includes(analysis.providerName.toLowerCase())) {
+      if ((action.kind === 'add-wrapper' || action.kind === 'require-provider') && analysis.providerName) {
+        const wrapperName = action.kind === 'require-provider' ? action.provider : action.wrapper;
+        if (wrapperName.toLowerCase().includes(analysis.providerName.toLowerCase())) {
           score += 30;
         }
       }

@@ -10,6 +10,7 @@ import { FailureAnalysis, FailureCategory } from './analyzer';
 
 export type RepairAction =
   | { kind: 'add-wrapper'; wrapper: string; importFrom: string }
+  | { kind: 'require-provider'; provider: string; importFrom: string; exportName: string; alias?: string }
   | { kind: 'use-render-helper'; helper: 'renderWithProviders' }
   | { kind: 'ensure-import'; module: string; symbol?: string }
   | { kind: 'switch-query'; from: string; to: string }
@@ -49,7 +50,7 @@ const routerProviderRule: KBRule = {
     a.category === FailureCategory.MISSING_PROVIDER &&
     (a.providerName === 'MemoryRouter' || /router/i.test(a.errorMessage)),
   plan: () => ({
-    actions: [{ kind: 'add-wrapper', wrapper: 'MemoryRouter', importFrom: 'react-router-dom' }],
+    actions: [{ kind: 'require-provider', provider: 'MemoryRouter', importFrom: 'react-router-dom', exportName: 'MemoryRouter' }],
     confidence: 'high',
     description: 'Add MemoryRouter wrapper — component uses Router hooks',
   }),
@@ -63,7 +64,7 @@ const queryClientProviderRule: KBRule = {
     (a.providerName === 'QueryClientProvider' || /QueryClient/i.test(a.errorMessage)),
   plan: () => ({
     actions: [
-      { kind: 'add-wrapper', wrapper: 'QueryClientProvider', importFrom: '@tanstack/react-query' },
+      { kind: 'require-provider', provider: 'QueryClientProvider', importFrom: '@tanstack/react-query', exportName: 'QueryClientProvider' },
     ],
     confidence: 'high',
     description: 'Add QueryClientProvider wrapper — component uses React Query hooks',
@@ -77,7 +78,7 @@ const reduxProviderRule: KBRule = {
     a.category === FailureCategory.MISSING_PROVIDER &&
     (a.providerName === 'ReduxProvider' || /store/i.test(a.errorMessage)),
   plan: () => ({
-    actions: [{ kind: 'add-wrapper', wrapper: 'Provider', importFrom: 'react-redux' }],
+    actions: [{ kind: 'require-provider', provider: 'ReduxProvider', importFrom: 'react-redux', exportName: 'Provider', alias: 'ReduxProvider' }],
     confidence: 'medium',
     description: 'Add Redux Provider wrapper — component uses Redux hooks',
   }),
@@ -101,10 +102,10 @@ const hookContextUseRenderHelperRule: KBRule = {
 
     // Also add specific wrapper actions as fallback when renderWithProviders is unavailable
     if (/navigate|location|params|route|search.*params/i.test(hookName) || /router/i.test(a.errorMessage)) {
-      actions.push({ kind: 'add-wrapper', wrapper: 'MemoryRouter', importFrom: 'react-router-dom' });
+      actions.push({ kind: 'require-provider', provider: 'MemoryRouter', importFrom: 'react-router-dom', exportName: 'MemoryRouter' });
     }
     if (/query|mutation|queryClient/i.test(hookName) || /QueryClient/i.test(a.errorMessage)) {
-      actions.push({ kind: 'add-wrapper', wrapper: 'QueryClientProvider', importFrom: '@tanstack/react-query' });
+      actions.push({ kind: 'require-provider', provider: 'QueryClientProvider', importFrom: '@tanstack/react-query', exportName: 'QueryClientProvider' });
     }
 
     return {

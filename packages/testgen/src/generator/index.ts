@@ -3,7 +3,6 @@ import type { RepairPlan } from '../healer/knowledge-base';
 import type { ReferencePatternSummary } from '../repoPatterns';
 import { mineReferencePatterns } from '../repoPatterns';
 import { TypeChecker, Project } from 'ts-morph';
-import { mockFn, mockGlobalName, mockModuleFn } from '../utils/framework';
 import {
   buildAsyncTestBlock,
   buildDescribeEnd,
@@ -14,8 +13,6 @@ import {
   buildTestBlock,
   joinBlocks,
 } from './templates';
-import { buildDefaultProps } from './mocks';
-import { buildAutoMocks } from './autoMocks';
 import {
   buildCallbackPropTests,
   buildConditionalRenderTests,
@@ -26,10 +23,10 @@ import {
   buildRenderAssertions,
   buildStateTests,
 } from './interactions';
-import { buildReferenceAwareSetup, buildReferenceScenarioTests } from './repoAware';
-import { buildContextRenderInfo, buildRenderHelper } from './render';
+import { buildRenderHelper } from './render';
 import { buildVariantTestCases } from './variants';
 import { buildContextVariantTests } from './contextVariants';
+import { buildSemanticTestPlan } from './semanticPlan';
 
 export interface GenerateOptions {
   pass: 1 | 2;
@@ -42,131 +39,68 @@ export interface GenerateOptions {
 }
 
 export function generateTests(components: ComponentInfo[], options: GenerateOptions): string {
-  const usesUserEvent = components.some(
-    (component) =>
-      component.buttons.length > 0
-      || component.inputs.length > 0
-      || component.selects.length > 0
-      || component.links.length > 0,
-  );
-
-  let needsScreen = usesUserEvent || components.some((component) =>
-    component.buttons.length > 0
-    || component.inputs.length > 0
-    || component.selects.length > 0
-    || component.links.length > 0
-    || component.conditionalElements.length > 0
-    || component.forms.length > 0
-    || component.props.some((prop) =>
-      /^(is)?(loading|pending|fetching|submitting|processing|busy|error|failed|invalid|disabled|readOnly|locked|readonly)/i.test(
-        prop.name,
-      ),
-    ),
-  );
-
-  const repairPlan = options.repairPlan;
   const referencePatterns = options.referencePatterns === undefined
     ? mineReferencePatterns(options.sourceFilePath, options.testFilePath, components)
     : options.referencePatterns;
-  if (referencePatterns && Object.values(referencePatterns.scenarios).some(Boolean)) {
-    needsScreen = true;
-  }
-
-  const contextRenderInfos = components.map((component) => {
-    if (!options.project || !options.checker || component.contexts.length === 0) {
-      return null;
-    }
-    return buildContextRenderInfo(component, options.project, options.checker, {
-      sourceFilePath: options.sourceFilePath,
-      testFilePath: options.testFilePath,
-    });
+  const sourceFile = options.project?.getSourceFile(options.sourceFilePath) ?? null;
+  const semanticPlan = buildSemanticTestPlan({
+    ...options,
+    components,
+    sourceFile,
+    referencePatterns,
   });
-
-  const contextImports = contextRenderInfos.flatMap((entry) => entry?.contextImports ?? []);
-  const repoAwareSetups = components.map((component) =>
-    buildReferenceAwareSetup(component, referencePatterns ?? undefined, {
-      sourceFilePath: options.sourceFilePath,
-      testFilePath: options.testFilePath,
-    }),
-  );
-  const usesBeforeEach = repoAwareSetups.some((setup) => setup.beforeEachLines.length > 0);
 
   const parts: string[] = [];
   parts.push(buildHeader());
-  parts.push(
-    buildImports(components, {
-      testFilePath: options.testFilePath,
-      sourceFilePath: options.sourceFilePath,
-      usesUserEvent,
-      needsScreen,
-      contextImports,
-      repairPlan,
-      referencePatterns: referencePatterns ?? undefined,
-      usesBeforeEach,
-    }),
-  );
+  parts.push(buildImports(semanticPlan.imports));
 
-  const allAutoMocks: string[] = [];
-  components.forEach((component, index) => {
-    const setup = repoAwareSetups[index];
-    allAutoMocks.push(...setup.declarations);
-    allAutoMocks.push(...setup.mockStatements);
-    allAutoMocks.push(
-      ...buildAutoMocks(component, {
-        sourceFilePath: options.sourceFilePath,
-        testFilePath: options.testFilePath,
-        skipHookMocks: (referencePatterns?.moduleMocks ?? []).map((entry) => entry.exportName),
-      }),
-    );
-  });
-  if (allAutoMocks.length > 0) {
-    parts.push(dedupeSnippets(allAutoMocks).join('\n\n'));
+  if (semanticPlan.topLevelBlocks.length > 0) {
+    parts.push(semanticPlan.topLevelBlocks.join('\n\n'));
   }
 
-  if (repairPlan) {
-    const mockBlocks = buildRepairMockBlocks(repairPlan);
-    if (mockBlocks) {
-      parts.push(mockBlocks);
-    }
+  if (semanticPlan.globalBeforeEachLines.length > 0) {
+    parts.push([
+      'beforeEach(() => {',
+      ...semanticPlan.globalBeforeEachLines.map((line) => `  ${line}`),
+      '});',
+    ].join('\n'));
   }
 
-  components.forEach((component, index) => {
+  semanticPlan.componentPlans.forEach((componentPlan) => {
+    const component = componentPlan.component;
     const blocks: string[] = [];
-    const contextInfo = contextRenderInfos[index];
-    const repoAwareSetup = repoAwareSetups[index];
 
     blocks.push(buildDescribeStart(component));
 
-    if (repoAwareSetup.beforeEachLines.length > 0) {
+    if (componentPlan.beforeEachLines.length > 0) {
       blocks.push([
         '  beforeEach(() => {',
-        ...repoAwareSetup.beforeEachLines.map((line) => `    ${line}`),
+        ...componentPlan.beforeEachLines.map((line) => `    ${line}`),
         '  });',
       ].join('\n'));
     }
 
-    contextInfo?.mockDeclarations.forEach((declaration) => {
+    componentPlan.topLevelDeclarations.forEach((declaration) => {
       blocks.push(`  ${declaration}`);
     });
 
-    if (component.props.length > 0) {
-      blocks.push(`  ${buildDefaultProps(component)}`);
+    if (componentPlan.defaultPropsBlock) {
+      blocks.push(`  ${componentPlan.defaultPropsBlock}`);
     }
 
-    blocks.push(`  ${buildRenderHelper(component, options.sourceFilePath, repairPlan, referencePatterns ?? undefined, contextInfo ?? undefined)}`);
+    blocks.push(`  ${buildRenderHelper(componentPlan)}`);
 
     const renderAssertions = buildRenderAssertions(component, referencePatterns ?? undefined);
     blocks.push(buildTestBlock('renders without crashing', renderAssertions));
-
     if (renderAssertions.length > 2) {
       blocks.push(buildTestBlock('renders key elements', renderAssertions));
     }
 
-    buildReferenceScenarioTests(component, referencePatterns ?? undefined).forEach((testCase) => {
-      if (testCase.isAsync) {
-        blocks.push(buildAsyncTestBlock(testCase.title, testCase.body));
+    componentPlan.scenarioPlans.forEach((scenarioPlan) => {
+      if (scenarioPlan.isAsync) {
+        blocks.push(buildAsyncTestBlock(scenarioPlan.title, scenarioPlan.body));
       } else {
-        blocks.push(buildTestBlock(testCase.title, testCase.body));
+        blocks.push(buildTestBlock(scenarioPlan.title, scenarioPlan.body));
       }
     });
 
@@ -203,8 +137,16 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
       blocks.push(buildTestBlock(variant.title, variant.body));
     });
 
-    if (contextInfo && contextInfo.contextMocks.length > 0) {
-      buildContextVariantTests(component, contextInfo.contextMocks).forEach((variant) => {
+    const contextVariantValues = componentPlan.providers
+      .filter((provider) => provider.source === 'context' && provider.importName && provider.valueExpression)
+      .map((provider) => ({
+        importName: provider.importName!,
+        importPath: provider.importModulePath ?? '',
+        mockDeclaration: '',
+        mockVarName: provider.valueExpression!,
+      }));
+    if (contextVariantValues.length > 0) {
+      buildContextVariantTests(component, contextVariantValues).forEach((variant) => {
         blocks.push(buildTestBlock(variant.title, variant.body));
       });
     }
@@ -218,83 +160,4 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
   });
 
   return buildFileContent(parts);
-}
-
-function buildRepairMockBlocks(plan: RepairPlan): string | null {
-  const lines: string[] = [];
-
-  for (const action of plan.actions) {
-    if (action.kind === 'mock-hook') {
-      const fn = mockFn();
-      const mock = mockModuleFn();
-      const global = mockGlobalName();
-      const defaultReturn = action.valueKind === 'function' ? fn : '{}';
-      lines.push(
-        `// Auto-heal: mock ${action.hookName}`,
-        `${mock}('${resolveHookModule(action.hookName)}', () => ({`,
-        `  ...${global}.requireActual('${resolveHookModule(action.hookName)}'),`,
-        `  ${action.hookName}: ${global}.fn(() => (${defaultReturn})),`,
-        '}));',
-        '',
-      );
-    }
-    if (action.kind === 'fix-mock-return') {
-      const fn = mockFn();
-      const mock = mockModuleFn();
-      const global = mockGlobalName();
-      const shape =
-        action.shapeKind === 'array'
-          ? '[]'
-          : action.shapeKind === 'function'
-            ? fn
-            : action.shapeKind === 'promise'
-              ? 'Promise.resolve({})'
-              : '{}';
-      const modulePath = resolveHookModule(action.target);
-      lines.push(
-        `// Auto-heal: fix mock return shape for ${action.target}`,
-        `${mock}('${modulePath}', () => ({`,
-        `  ...${global}.requireActual('${modulePath}'),`,
-        `  ${action.target}: ${global}.fn(() => (${shape})),`,
-        '}));',
-        '',
-      );
-    }
-  }
-
-  return lines.length > 0 ? lines.join('\n') : null;
-}
-
-function resolveHookModule(hookName: string): string {
-  const wellKnown: Record<string, string> = {
-    useNavigate: 'react-router-dom',
-    useLocation: 'react-router-dom',
-    useParams: 'react-router-dom',
-    useSearchParams: 'react-router-dom',
-    useQuery: '@tanstack/react-query',
-    useMutation: '@tanstack/react-query',
-    useQueryClient: '@tanstack/react-query',
-    useSelector: 'react-redux',
-    useDispatch: 'react-redux',
-  };
-  if (wellKnown[hookName]) return wellKnown[hookName];
-
-  if (/^use\w+Context$/i.test(hookName)) {
-    const contextName = hookName.replace(/^use/, '').replace(/Context$/i, '');
-    return `../context/${contextName}Context`;
-  }
-
-  return `./${hookName}`;
-}
-
-function dedupeSnippets(snippets: string[]): string[] {
-  const seen = new Set<string>();
-  const deduped: string[] = [];
-  for (const snippet of snippets) {
-    const trimmed = snippet.trim();
-    if (trimmed.length === 0 || seen.has(trimmed)) continue;
-    seen.add(trimmed);
-    deduped.push(trimmed);
-  }
-  return deduped;
 }
