@@ -32,6 +32,8 @@ import { generateContextTest } from './generator/context';
 import { TEST_UTILITY_PATTERNS, UNTESTABLE_PATTERNS } from './config';
 import { resolveConfig, createOllamaProvider, enhanceTest } from './llm';
 import type { LlmProvider } from './llm';
+import { runHealingLoop } from './execution/healingLoop';
+import type { JestResult, HealingLoopResult } from './execution/healingLoop';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -61,6 +63,8 @@ interface JestRunResult {
   errorOutput: string;
   /** Concise single-line failure reason extracted from error output */
   failureReason: string;
+  /** Per-test failure messages for fine-grained classification */
+  failureMessages: string[];
 }
 
 type VerifyStatus = 'pass' | 'fail' | 'low-coverage' | 'skipped' | 'generated';
@@ -251,6 +255,25 @@ function stripAnsi(text: string): string {
  * Looks for common error patterns (ReferenceError, TypeError, etc.)
  * and returns the first match, truncated to 150 chars.
  */
+function stripNodeWarningsFromOutput(text: string): string {
+  return text
+    .split('\n')
+    .filter((line) => {
+      const trimmed = line.trim();
+      // Node.js warnings: (node:1234) [SOME_CODE] Warning: ...
+      if (/^\(node:\d+\)\s*\[/.test(trimmed)) return false;
+      // Node.js trace hint lines
+      if (/^Use `node --trace-warnings/.test(trimmed)) return false;
+      if (/^\(Use `node --trace-/.test(trimmed)) return false;
+      // V8/Node module system diagnostics
+      if (/^Reparsing as ES module because module syntax was detected/i.test(trimmed)) return false;
+      if (/^Module type of file:/i.test(trimmed)) return false;
+      return true;
+    })
+    .join('\n')
+    .trim();
+}
+
 function extractFailureReason(rawOutput: string): string {
   const text = stripAnsi(rawOutput);
   const lines = text.split('\n');
@@ -309,6 +332,7 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
   let numTests = 0;
   let numFailed = 0;
   let failureReason = '';
+  const failureMessages: string[] = [];
 
   try {
     if (fs.existsSync(resultFile)) {
@@ -329,16 +353,17 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
       // Consider passing when all tests pass (including 0 tests = nothing to fail)
       passed = numFailed === 0;
 
-      // Extract first failure message from JSON for precise error reporting
-      if (numFailed > 0 && jestOut.testResults) {
+      // Collect ALL failure messages for classification
+      if (jestOut.testResults) {
         for (const suite of jestOut.testResults) {
           for (const test of suite.testResults ?? []) {
             if (test.status === 'failed' && test.failureMessages?.length) {
-              failureReason = extractFailureReason(test.failureMessages[0]);
-              break;
+              failureMessages.push(...test.failureMessages);
+              if (!failureReason) {
+                failureReason = extractFailureReason(test.failureMessages[0]);
+              }
             }
           }
-          if (failureReason) break;
         }
       }
     }
@@ -346,9 +371,15 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
     /* result file missing or malformed — keep defaults */
   }
 
+  // Strip Node.js diagnostic warnings from error output before using it
+  errorOutput = stripNodeWarningsFromOutput(errorOutput);
+
   // Fall back to raw error output if JSON didn't provide a reason
   if (!failureReason && errorOutput) {
     failureReason = extractFailureReason(errorOutput);
+  }
+  if (failureMessages.length === 0 && errorOutput) {
+    failureMessages.push(errorOutput);
   }
 
   // --- Parse coverage for the specific source file ---
@@ -372,7 +403,7 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
     /* ignore coverage parse errors */
   }
 
-  return { passed, numTests, numFailed, coverage, errorOutput, failureReason };
+  return { passed, numTests, numFailed, coverage, errorOutput, failureReason, failureMessages };
 }
 
 // ---------------------------------------------------------------------------
@@ -393,6 +424,7 @@ function verifyAndRetry(
     coverage: 0,
     errorOutput: '',
     failureReason: '',
+    failureMessages: [],
   };
 
   for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
@@ -593,9 +625,36 @@ async function run() {
       continue;
     }
 
-    // --- Verify mode: run jest + check coverage + retry ---
-    const result = verifyAndRetry(filePath, testFilePath, ctx, maxRetries, coverageThreshold);
-    summary.push({ file: path.basename(filePath), ...result });
+    // --- Verify mode: run jest + classify failures + heal + retry ---
+    const healResult = runHealingLoop(filePath, testFilePath, {
+      maxRetries,
+      coverageThreshold,
+      runJest: (tp: string, sp: string): JestResult => {
+        const jr = runJestOnTestFile(tp, sp);
+        return {
+          passed: jr.passed,
+          numTests: jr.numTests,
+          numFailed: jr.numFailed,
+          coverage: jr.coverage,
+          errorOutput: jr.errorOutput,
+          failureReason: jr.failureReason,
+          failureMessages: jr.failureMessages,
+        };
+      },
+      regenerateTestFile: (sp: string) => generateTestForFile(sp, ctx),
+      readTestFile: (tp: string) => fs.readFileSync(tp, 'utf8'),
+      writeTestFile: (tp: string, content: string) => fs.writeFileSync(tp, content, 'utf8'),
+    });
+
+    const verifyStatus: VerifyStatus = healResult.status === 'exhausted' ? 'fail' : healResult.status;
+    summary.push({
+      file: path.basename(filePath),
+      status: verifyStatus,
+      coverage: healResult.coverage,
+      attempts: healResult.attempts,
+      numTests: healResult.numTests,
+      failureReason: healResult.failureReason ?? healResult.exhaustionReason,
+    });
   }
 
   // Always print summary in verify mode

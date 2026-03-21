@@ -9,6 +9,8 @@ import { generateContextMockValue } from './contextValues';
 import { EnvironmentPlan, planEnvironment, EnvironmentRequirement } from './environment';
 import { MockModulePlan, SourceImportUsage, collectSourceImports, flattenHookMockPlans, planMockModules } from './mockRegistry';
 import { buildDefaultProps } from './mocks';
+import { buildComponentTestContext } from '../analysis/componentTestContext';
+import type { ComponentTestContext } from '../types';
 
 export interface ResolvedImportSymbol {
   modulePath: string;
@@ -62,6 +64,8 @@ export interface SemanticTestPlan {
   globalBeforeEachLines: string[];
   environmentRequirements: EnvironmentRequirement[];
   componentPlans: ComponentSemanticPlan[];
+  /** Canonical analysis contexts — one per component, used for traceability */
+  componentTestContexts: ComponentTestContext[];
 }
 
 export interface SemanticPlanOptions {
@@ -80,6 +84,11 @@ export function buildSemanticTestPlan(options: SemanticPlanOptions): SemanticTes
   const sourceImports = collectSourceImports(sourceFile);
   const sourceText = sourceFile?.getFullText() ?? '';
   const componentImportSymbols = buildComponentImportSymbols(options.components, options.sourceFilePath, options.testFilePath);
+
+  // Build canonical ComponentTestContexts for traceability
+  const componentTestContexts = options.components.map((component) =>
+    buildComponentTestContext(component, options.sourceFilePath),
+  );
 
   const environmentPlan = planEnvironment(options.components, {
     sourceFilePath: options.sourceFilePath,
@@ -147,6 +156,7 @@ export function buildSemanticTestPlan(options: SemanticPlanOptions): SemanticTes
     globalBeforeEachLines: dedupeSnippets(environmentPlan.beforeEachLines),
     environmentRequirements: environmentPlan.requirements,
     componentPlans,
+    componentTestContexts,
   };
 }
 
@@ -204,6 +214,7 @@ function buildImportPlan(input: {
 }): ResolvedImportSymbol[] {
   const imports: ResolvedImportSymbol[] = [];
 
+  const globalsModule = getGlobalsModule();
   const globals = ['describe', 'it', 'expect'];
   if (input.usesBeforeEach) globals.push('beforeEach');
   if (
@@ -214,18 +225,18 @@ function buildImportPlan(input: {
     globals.push(mockGlobalName());
   }
 
-  imports.push({
-    modulePath: getGlobalsModule(),
-    importKind: 'named',
-    symbolName: globals[0],
-  });
-  globals.slice(1).forEach((symbolName) => {
-    imports.push({
-      modulePath: getGlobalsModule(),
-      importKind: 'named',
-      symbolName,
+  // Only emit globals import when @jest/globals or vitest is actually available.
+  // In traditional Jest, describe/it/expect/jest are automatic globals.
+  if (globalsModule) {
+    globals.forEach((symbolName) => {
+      imports.push({
+        modulePath: globalsModule,
+        importKind: 'named',
+        symbolName,
+      });
     });
-  });
+  }
+
   imports.push({
     modulePath: getDomMatchersModule(),
     importKind: 'side-effect',
@@ -737,10 +748,54 @@ function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function getGlobalsModule(): string {
-  return mockGlobalName() === 'vi' ? 'vitest' : '@jest/globals';
+/**
+ * Returns the module path for test globals.
+ * If @jest/globals is not installed (traditional Jest globals mode),
+ * returns null — globals are provided by Jest automatically.
+ */
+function getGlobalsModule(): string | null {
+  if (mockGlobalName() === 'vi') return 'vitest';
+  // Check if @jest/globals is actually available
+  if (isPackageExplicitDependency('@jest/globals')) return '@jest/globals';
+  // Traditional Jest — globals are automatic, no import needed
+  return null;
 }
 
 function getDomMatchersModule(): string {
-  return mockGlobalName() === 'vi' ? '@testing-library/jest-dom/vitest' : '@testing-library/jest-dom/jest-globals';
+  if (mockGlobalName() === 'vi') return '@testing-library/jest-dom/vitest';
+  if (isPackageExplicitDependency('@jest/globals')) return '@testing-library/jest-dom/jest-globals';
+  return '@testing-library/jest-dom';
+}
+
+/**
+ * Check if a package is explicitly listed as a dependency (not just transitively available).
+ * For @jest/globals: it comes bundled with jest but should only be used when the project
+ * explicitly imports it. We check the target project's package.json.
+ */
+function isPackageExplicitDependency(packageName: string): boolean {
+  const fs = require('node:fs');
+  const nodePath = require('node:path');
+  const cwd = process.cwd();
+
+  // Walk up from cwd looking for package.json that lists this dependency
+  let dir = cwd;
+  for (let i = 0; i < 5; i++) {
+    const pkgPath = nodePath.join(dir, 'package.json');
+    try {
+      if (fs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+        const allDeps = {
+          ...pkg.dependencies,
+          ...pkg.devDependencies,
+        };
+        if (allDeps[packageName]) return true;
+      }
+    } catch {
+      // ignore
+    }
+    const parent = nodePath.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return false;
 }

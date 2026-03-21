@@ -27,6 +27,7 @@ import { buildRenderHelper } from './render';
 import { buildVariantTestCases } from './variants';
 import { buildContextVariantTests } from './contextVariants';
 import { buildSemanticTestPlan } from './semanticPlan';
+import { validateTestPlan } from '../validation/preEmitValidator';
 
 export interface GenerateOptions {
   pass: 1 | 2;
@@ -43,12 +44,24 @@ export function generateTests(components: ComponentInfo[], options: GenerateOpti
     ? mineReferencePatterns(options.sourceFilePath, options.testFilePath, components)
     : options.referencePatterns;
   const sourceFile = options.project?.getSourceFile(options.sourceFilePath) ?? null;
-  const semanticPlan = buildSemanticTestPlan({
+  const rawPlan = buildSemanticTestPlan({
     ...options,
     components,
     sourceFile,
     referencePatterns,
   });
+
+  // Validate plan before emission — enforces import-JSX consistency.
+  // Any provider whose import was skipped is stripped here, making it
+  // structurally impossible for invalid symbols to appear in emitted JSX.
+  const semanticPlan = validateTestPlan(rawPlan);
+
+  if (semanticPlan.validationResult.strippedProviders.length > 0) {
+    console.log(`  ⚠ Pre-emit validator stripped ${semanticPlan.validationResult.strippedProviders.length} provider(s) with missing imports`);
+    for (const stripped of semanticPlan.validationResult.strippedProviders) {
+      console.log(`    - ${stripped.key}: ${stripped.reason}`);
+    }
+  }
 
   const parts: string[] = [];
   parts.push(buildHeader());

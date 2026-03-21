@@ -167,12 +167,18 @@ function buildFramerMotionPlan(): MockModulePlan {
     declarations: [],
     beforeEachLines: [],
     hookPlans: [],
-    statement: `${mockModuleFn()}("framer-motion", () => ({
+    statement: `${mockModuleFn()}("framer-motion", () => {
+  const React = require("react");
+  return {
   __esModule: true,
   motion: new Proxy({}, {
-    get: () => (props: Record<string, unknown>) => {
-      const { children, ...rest } = props;
-      return ({ type: "div", props: { ...rest, children } } as unknown);
+    get: (_target: unknown, prop: string) => {
+      const Component = React.forwardRef((props: Record<string, unknown>, ref: unknown) => {
+        const { children, initial, animate, exit, transition, whileHover, whileTap, whileFocus, whileInView, layout, layoutId, variants, ...rest } = props;
+        return React.createElement(prop, { ...rest, ref }, children);
+      });
+      Component.displayName = \`motion.\${prop}\`;
+      return Component;
     },
   }),
   AnimatePresence: ({ children }: { children: unknown }) => children,
@@ -183,7 +189,7 @@ function buildFramerMotionPlan(): MockModulePlan {
   useScroll: () => ({ scrollY: { get: () => 0 }, scrollX: { get: () => 0 } }),
   useSpring: (val: unknown) => ({ get: () => (typeof val === "number" ? val : 0), set: ${mockFn()} }),
   useReducedMotion: () => false,
-}));`,
+};});`,
   };
 }
 
@@ -295,7 +301,10 @@ function buildRelativeHookMockPlans(
       declarations.push(buildHookFactoryDeclaration(shape.factoryName, shape.shape, shape.mockVariableName));
       beforeEachLines.push(`${shape.mockVariableName}.mockReset();`);
       beforeEachLines.push(`${shape.mockVariableName}.mockReturnValue(${shape.factoryName}());`);
-      mockAssignments.push(`  ${hook.name}: ${shape.mockVariableName},`);
+      // Use jest.fn() INSIDE the factory — not outer variable reference.
+      // jest.mock() is hoisted above imports by babel-jest, so referencing
+      // outer const variables causes "Cannot access 'X' before initialization".
+      mockAssignments.push(`  ${hook.name}: (...args: unknown[]) => ${shape.mockVariableName}(...args),`);
     }
 
     const actualSpread = shouldPreserveActual(rebasedModulePath, sourceImports) ? `  ...${mockGlobalName()}.requireActual("${rebasedModulePath}"),\n` : '';
@@ -470,12 +479,18 @@ function buildHookFactoryDeclaration(
     ? shape.properties.map((property) => `  ${property.key}: ${normalizeLiteral(property)},`)
     : buildFallbackHookFactoryBody(mockVariableName);
 
+  // Declare mock variable as simple jest.fn() without factory reference.
+  // This is critical: jest.mock() is hoisted, and variables starting with 'mock'
+  // are auto-hoisted by Jest's babel plugin. But if the initializer references
+  // a non-hoistable function (like the factory), jest throws
+  // "Cannot access 'X' before initialization". By using plain jest.fn(),
+  // the mock is hoistable. The factory return value is set in beforeEach.
   return [
     `const ${factoryName} = (overrides: Record<string, unknown> = {}) => ({`,
     ...body,
     '  ...overrides,',
     '});',
-    `const ${mockVariableName} = ${mockGlobalName()}.fn(() => ${factoryName}());`,
+    `const ${mockVariableName} = ${mockGlobalName()}.fn();`,
   ].join('\n');
 }
 
