@@ -19,12 +19,9 @@
     "testgen:smart": "npm --workspace examples/expense-manager run testgen:smart",
     "testgen:smart:file": "npm --workspace examples/expense-manager run testgen:smart:file",
     "testgen:smart:git": "npm --workspace examples/expense-manager run testgen:smart:git",
-    "dev:bulletproof": "npm run dev --prefix examples/bulletproof-react-master/apps/react-vite",
-    "dev:bulletproof:no-testgen": "npm run dev:no-testgen --prefix examples/bulletproof-react-master/apps/react-vite",
-    "testgen:bulletproof": "npm run testgen:git --prefix examples/bulletproof-react-master/apps/react-vite",
-    "testgen:bulletproof:all": "npm run testgen:all --prefix examples/bulletproof-react-master/apps/react-vite",
-    "testgen:bulletproof:smart": "npm run testgen:smart --prefix examples/bulletproof-react-master/apps/react-vite",
-    "benchmark:testgen": "powershell -NoProfile -ExecutionPolicy Bypass -File packages/testgen/scripts/run-benchmark.ps1",
+    "testgen:enhance": "npm --workspace examples/expense-manager run testgen:enhance",
+    "testgen:enhance:file": "npm --workspace examples/expense-manager run testgen:enhance:file",
+    "testgen:enhance:smart": "npm --workspace examples/expense-manager run testgen:enhance:smart",
     "sonar": "npx sonarqube-scanner"
   }
 }

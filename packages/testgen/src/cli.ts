@@ -5,13 +5,17 @@ Usage:
   npm run testgen:file -- src/path/Component.tsx
   npm run testgen:smart       # generate + run jest + retry on failure (--all --verify)
   npm run testgen:smart:file  # single file with verify
-  npm run testgen:heal        # generate + self-healing loop (--all --heal)
-  npm run testgen:heal:file   # single file with heal
+  npm run testgen:enhance     # generate + enhance with local LLM (Ollama)
+  npm run testgen:enhance:smart # enhance + verify + retry
     --verify                  # run jest after each generated test, retry on fail
-    --heal                    # self-healing mode: analyze failures, teach generator, regenerate
+    --enhance                 # enhance tests with local LLM (requires Ollama)
     --max-retries <n>         # how many times to retry a failing test (default: 2)
-    --max-heal-attempts <n>   # max heal iterations per file (default: 3)
     --coverage-threshold <n>  # minimum line coverage % to consider passing (default: 50)
+
+  LLM env vars (all optional — defaults work out of the box):
+    TESTGEN_LLM_PROVIDER=ollama     # enable LLM (or use --enhance flag)
+    OLLAMA_MODEL=deepseek-coder:6.7b  # model to use
+    OLLAMA_BASE_URL=http://localhost:11434  # Ollama server URL
 */
 
 import path from 'node:path';
@@ -26,14 +30,8 @@ import { generateBarrelTest } from './generator/barrel';
 import { generateUtilityTest } from './generator/utility';
 import { generateContextTest } from './generator/context';
 import { TEST_UTILITY_PATTERNS, UNTESTABLE_PATTERNS } from './config';
-import {
-  heal,
-  recordHealOutcome,
-  isDuplicateHealAttempt,
-  DEFAULT_MAX_HEAL_ATTEMPTS,
-} from './healer';
-import type { FailureDetail, RepairPlan, RepairAction } from './healer';
-import { getActiveFramework, detectTestFramework, setActiveFramework } from './utils/framework';
+import { resolveConfig, createOllamaProvider, enhanceTest } from './llm';
+import type { LlmProvider } from './llm';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,14 +43,12 @@ interface CliOptions {
   all?: boolean;
   /** Run jest after each generated test file and retry on failure */
   verify?: boolean;
-  /** Self-healing mode: analyze failures, teach generator, regenerate */
-  healMode?: boolean;
   /** How many regeneration retries per file (default 2) */
   maxRetries?: number;
-  /** Max heal iterations per file (default 3) */
-  maxHealAttempts?: number;
   /** Minimum line-coverage % to consider a test file passing (default 50) */
   coverageThreshold?: number;
+  /** Enhance generated tests using a local LLM (Ollama) */
+  enhance?: boolean;
 }
 
 interface JestRunResult {
@@ -65,11 +61,9 @@ interface JestRunResult {
   errorOutput: string;
   /** Concise single-line failure reason extracted from error output */
   failureReason: string;
-  /** Structured failure details for each failing test */
-  failureDetails: FailureDetail[];
 }
 
-type VerifyStatus = 'pass' | 'fail' | 'low-coverage' | 'skipped' | 'generated' | 'healed';
+type VerifyStatus = 'pass' | 'fail' | 'low-coverage' | 'skipped' | 'generated';
 
 interface VerifyResult {
   status: VerifyStatus;
@@ -78,8 +72,6 @@ interface VerifyResult {
   numTests: number;
   /** Concise reason why the test failed (first error line) */
   failureReason?: string;
-  /** Description of the healing action applied */
-  healDescription?: string;
 }
 
 type ParserContext = ReturnType<typeof createParser>;
@@ -98,16 +90,11 @@ function parseArgs(argv: string[]): CliOptions {
   if (argv.includes('--git-unstaged')) options.gitUnstaged = true;
   if (argv.includes('--all')) options.all = true;
   if (argv.includes('--verify')) options.verify = true;
-  if (argv.includes('--heal')) options.healMode = true;
+  if (argv.includes('--enhance')) options.enhance = true;
 
   const retriesIndex = argv.indexOf('--max-retries');
   if (retriesIndex >= 0 && argv[retriesIndex + 1]) {
     options.maxRetries = Number.parseInt(argv[retriesIndex + 1], 10) || 2;
-  }
-
-  const healAttemptsIndex = argv.indexOf('--max-heal-attempts');
-  if (healAttemptsIndex >= 0 && argv[healAttemptsIndex + 1]) {
-    options.maxHealAttempts = Number.parseInt(argv[healAttemptsIndex + 1], 10) || DEFAULT_MAX_HEAL_ATTEMPTS;
   }
 
   const thresholdIndex = argv.indexOf('--coverage-threshold');
@@ -134,18 +121,14 @@ function resolveTargetFiles(args: CliOptions): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Per-file test generation  (extracted so verify/heal can re-call on retry)
+// Per-file test generation  (extracted so verify can re-call on retry)
 // ---------------------------------------------------------------------------
 
 /**
  * Generates (or regenerates) a test file for the given source file.
  * Returns the absolute path of the written test file, or null if skipped.
  */
-function generateTestForFile(
-  filePath: string,
-  { project, checker }: ParserContext,
-  repairPlan?: RepairPlan
-): string | null {
+function generateTestForFile(filePath: string, { project, checker }: ParserContext): string | null {
   const sourceFile = getSourceFile(project, filePath);
 
   // Skip test utility files (renderWithProviders, test helpers, etc.)
@@ -214,14 +197,9 @@ function generateTestForFile(
     pass: 2,
     testFilePath,
     sourceFilePath: filePath,
-    repairPlan,
   });
   writeFile(testFilePath, generatedTest);
-  if (repairPlan) {
-    console.log(`  - Test file regenerated with repair plan: ${repairPlan.description}`);
-  } else {
-    console.log('  - Test file generated/updated.');
-  }
+  console.log('  - Test file generated/updated.');
   return testFilePath;
 }
 
@@ -302,53 +280,28 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
   fs.mkdirSync(path.join(cwd, VERIFY_DIR), { recursive: true });
   if (fs.existsSync(resultFile)) fs.unlinkSync(resultFile);
 
-  const framework = getActiveFramework();
+  // Escape the path for use as a jest regex pattern
+  const pathPattern = escapeRegex(relTest);
+
+  const jestArgs = [
+    `--testPathPattern="${pathPattern}"`,
+    `--collectCoverageFrom="${relSrc}"`,
+    '--coverage',
+    '--coverageReporters=json-summary',
+    `--coverageDirectory="${coverageDir}"`,
+    '--json',
+    `--outputFile="${resultFile}"`,
+    '--forceExit',
+    '--passWithNoTests',
+    '--silent',
+  ].join(' ');
+
   let errorOutput = '';
-
-  if (framework === 'vitest') {
-    // --- Vitest mode ---
-    const vitestArgs = [
-      'run',
-      `"${relTest}"`,
-      '--reporter=json',
-      `--outputFile="${resultFile}"`,
-      '--coverage',
-      '--coverage.reporter=json-summary',
-      `--coverage.reportsDirectory="${coverageDir}"`,
-      `--coverage.include="${relSrc}"`,
-      '--passWithNoTests',
-      '--silent',
-    ].join(' ');
-
-    try {
-      execSync(`npx vitest ${vitestArgs}`, { cwd, encoding: 'utf8', stdio: 'pipe' });
-    } catch (e: unknown) {
-      const err = e as { stdout?: string; stderr?: string; message?: string };
-      errorOutput = err.stderr ?? err.stdout ?? err.message ?? 'Unknown vitest error';
-    }
-  } else {
-    // --- Jest mode ---
-    const pathPattern = escapeRegex(relTest);
-
-    const jestArgs = [
-      `--testPathPattern="${pathPattern}"`,
-      `--collectCoverageFrom="${relSrc}"`,
-      '--coverage',
-      '--coverageReporters=json-summary',
-      `--coverageDirectory="${coverageDir}"`,
-      '--json',
-      `--outputFile="${resultFile}"`,
-      '--forceExit',
-      '--passWithNoTests',
-      '--silent',
-    ].join(' ');
-
-    try {
-      execSync(`npx jest ${jestArgs}`, { cwd, encoding: 'utf8', stdio: 'pipe' });
-    } catch (e: unknown) {
-      const err = e as { stdout?: string; stderr?: string; message?: string };
-      errorOutput = err.stderr ?? err.stdout ?? err.message ?? 'Unknown jest error';
-    }
+  try {
+    execSync(`npx jest ${jestArgs}`, { cwd, encoding: 'utf8', stdio: 'pipe' });
+  } catch (e: unknown) {
+    const err = e as { stdout?: string; stderr?: string; message?: string };
+    errorOutput = err.stderr ?? err.stdout ?? err.message ?? 'Unknown jest error';
   }
 
   // --- Parse jest JSON output ---
@@ -356,7 +309,6 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
   let numTests = 0;
   let numFailed = 0;
   let failureReason = '';
-  const failureDetails: FailureDetail[] = [];
 
   try {
     if (fs.existsSync(resultFile)) {
@@ -365,56 +317,28 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
         numTotalTests?: number;
         numFailedTests?: number;
         testResults?: Array<{
-          // Jest uses testResults[], Vitest uses assertionResults[]
           testResults?: Array<{
             status?: string;
             fullName?: string;
             failureMessages?: string[];
           }>;
-          assertionResults?: Array<{
-            status?: string;
-            fullName?: string;
-            failureMessages?: string[];
-          }>;
-          // Suite-level error (vitest: env validation, import errors, etc.)
-          message?: string;
         }>;
       };
       numTests = jestOut.numTotalTests ?? 0;
       numFailed = jestOut.numFailedTests ?? 0;
       // Consider passing when all tests pass (including 0 tests = nothing to fail)
-      passed = numFailed === 0 && (jestOut.success !== false || numTests === 0);
+      passed = numFailed === 0;
 
-      // Extract ALL failure messages for the healer (not just the first one)
-      if (!passed && jestOut.testResults) {
+      // Extract first failure message from JSON for precise error reporting
+      if (numFailed > 0 && jestOut.testResults) {
         for (const suite of jestOut.testResults) {
-          // Handle both jest format (testResults) and vitest format (assertionResults)
-          const tests = suite.testResults ?? suite.assertionResults ?? [];
-          for (const test of tests) {
+          for (const test of suite.testResults ?? []) {
             if (test.status === 'failed' && test.failureMessages?.length) {
-              // First failure message becomes the concise reason
-              if (!failureReason) {
-                failureReason = extractFailureReason(test.failureMessages[0]);
-              }
-              // All failures go into failureDetails for the healer
-              failureDetails.push({
-                testName: test.fullName || 'unknown test',
-                errorMessage: stripAnsi(test.failureMessages.join('\n')),
-                stackTrace: stripAnsi(test.failureMessages.join('\n')),
-              });
+              failureReason = extractFailureReason(test.failureMessages[0]);
+              break;
             }
           }
-          // Handle suite-level errors (vitest reports env errors here)
-          if (tests.length === 0 && suite.message) {
-            if (!failureReason) {
-              failureReason = extractFailureReason(suite.message);
-            }
-            failureDetails.push({
-              testName: 'suite-error',
-              errorMessage: stripAnsi(suite.message),
-              stackTrace: stripAnsi(suite.message),
-            });
-          }
+          if (failureReason) break;
         }
       }
     }
@@ -425,15 +349,6 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
   // Fall back to raw error output if JSON didn't provide a reason
   if (!failureReason && errorOutput) {
     failureReason = extractFailureReason(errorOutput);
-  }
-
-  // If we have error output but no structured failure details, create one
-  if (failureDetails.length === 0 && errorOutput) {
-    failureDetails.push({
-      testName: 'unknown',
-      errorMessage: stripAnsi(errorOutput),
-      stackTrace: stripAnsi(errorOutput),
-    });
   }
 
   // --- Parse coverage for the specific source file ---
@@ -457,11 +372,11 @@ function runJestOnTestFile(testFilePath: string, sourceFilePath: string): JestRu
     /* ignore coverage parse errors */
   }
 
-  return { passed, numTests, numFailed, coverage, errorOutput, failureReason, failureDetails };
+  return { passed, numTests, numFailed, coverage, errorOutput, failureReason };
 }
 
 // ---------------------------------------------------------------------------
-// Verify-and-retry orchestrator (legacy --verify mode)
+// Verify-and-retry orchestrator
 // ---------------------------------------------------------------------------
 
 function verifyAndRetry(
@@ -478,7 +393,6 @@ function verifyAndRetry(
     coverage: 0,
     errorOutput: '',
     failureReason: '',
-    failureDetails: [],
   };
 
   for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
@@ -488,7 +402,7 @@ function verifyAndRetry(
       generateTestForFile(filePath, ctx);
     }
 
-    console.log(`  ▶  Running tests (attempt ${attempt}/${maxRetries + 1})...`);
+    console.log(`  ▶  Running jest (attempt ${attempt}/${maxRetries + 1})...`);
     lastResult = runJestOnTestFile(testFilePath, filePath);
 
     const { passed, numTests, numFailed, coverage, failureReason } = lastResult;
@@ -528,126 +442,6 @@ function verifyAndRetry(
 }
 
 // ---------------------------------------------------------------------------
-// Self-healing orchestrator (--heal mode)
-// ---------------------------------------------------------------------------
-
-function healAndRetry(
-  filePath: string,
-  testFilePath: string,
-  ctx: ParserContext,
-  maxHealAttempts: number
-): VerifyResult {
-  // Step 1: Run jest on the initially generated test
-  console.log(`  ▶  Running tests (initial run)...`);
-  let lastResult = runJestOnTestFile(testFilePath, filePath);
-
-  if (lastResult.passed) {
-    console.log(`  ✅ All ${lastResult.numTests} test(s) pass | Coverage: ${lastResult.coverage.toFixed(1)}%`);
-    return {
-      status: 'pass',
-      coverage: lastResult.coverage,
-      attempts: 1,
-      numTests: lastResult.numTests,
-    };
-  }
-
-  console.log(`  ❌ ${lastResult.numFailed}/${lastResult.numTests} test(s) failed`);
-  if (lastResult.failureReason) {
-    console.log(`     Reason: ${lastResult.failureReason}`);
-  }
-
-  // Step 2: Heal loop — analyze, get repair plan, regenerate, rerun
-  const previousAttempts: Array<{ fingerprint: string; actionKinds: string[] }> = [];
-  // Accumulate repair actions across attempts so previous fixes aren't lost on regeneration
-  const accumulatedActions: RepairAction[] = [];
-
-  for (let attempt = 1; attempt <= maxHealAttempts; attempt++) {
-    console.log(`\n  🔬 Heal attempt ${attempt}/${maxHealAttempts} — analyzing failures...`);
-
-    // Analyze failures and get repair plan
-    const healResult = heal(lastResult.failureDetails);
-
-    if (!healResult.repairPlan) {
-      console.log(`  ⚠️  ${healResult.description}`);
-      console.log(`  ⛔ No safe auto-repair available — stopping heal loop`);
-      break;
-    }
-
-    // Check for duplicate heal attempts (same fingerprint = same fix already tried)
-    if (healResult.fingerprint && isDuplicateHealAttempt(healResult.fingerprint, previousAttempts)) {
-      console.log(`  ⚠️  Same failure fingerprint seen before — stopping to prevent loop`);
-      break;
-    }
-
-    // Track this attempt
-    if (healResult.fingerprint) {
-      previousAttempts.push({
-        fingerprint: healResult.fingerprint,
-        actionKinds: healResult.repairPlan.actions.map((a) => a.kind),
-      });
-    }
-
-    console.log(`  🩹 Healing: ${healResult.description}`);
-    console.log(`     Source: ${healResult.source} | Confidence: ${healResult.repairPlan.confidence}`);
-    if (healResult.category) {
-      console.log(`     Category: ${healResult.category}`);
-    }
-
-    // Accumulate new actions (deduplicate by kind+key)
-    for (const action of healResult.repairPlan.actions) {
-      const actionKey = JSON.stringify(action);
-      if (!accumulatedActions.some((a) => JSON.stringify(a) === actionKey)) {
-        accumulatedActions.push(action);
-      }
-    }
-
-    // Build combined repair plan with all accumulated actions
-    const combinedPlan: RepairPlan = {
-      ...healResult.repairPlan,
-      actions: [...accumulatedActions],
-    };
-
-    // Regenerate with combined repair plan
-    console.log(`  🔄 Regenerating test with repair plan...`);
-    generateTestForFile(filePath, ctx, combinedPlan);
-
-    // Re-run jest
-    console.log(`  ▶  Running tests (after heal)...`);
-    lastResult = runJestOnTestFile(testFilePath, filePath);
-
-    // Record outcome in memory
-    recordHealOutcome(healResult, lastResult.passed);
-
-    if (lastResult.passed) {
-      console.log(`  ✅ Healed! All ${lastResult.numTests} test(s) pass | Coverage: ${lastResult.coverage.toFixed(1)}%`);
-      return {
-        status: 'healed',
-        coverage: lastResult.coverage,
-        attempts: attempt + 1, // +1 for initial run
-        numTests: lastResult.numTests,
-        healDescription: healResult.description,
-      };
-    }
-
-    console.log(`  ❌ Still failing: ${lastResult.numFailed}/${lastResult.numTests} test(s) failed`);
-    if (lastResult.failureReason) {
-      console.log(`     Reason: ${lastResult.failureReason}`);
-    }
-  }
-
-  // All heal attempts exhausted
-  console.log(`  ⛔ Tests still failing after ${maxHealAttempts} heal attempts`);
-
-  return {
-    status: 'fail',
-    coverage: lastResult.coverage,
-    attempts: maxHealAttempts + 1,
-    numTests: lastResult.numTests,
-    failureReason: lastResult.failureReason || undefined,
-  };
-}
-
-// ---------------------------------------------------------------------------
 // Summary printer
 // ---------------------------------------------------------------------------
 
@@ -657,7 +451,6 @@ const STATUS_ICON: Record<VerifyStatus, string> = {
   'low-coverage': '⚠️ ',
   skipped: '⏭️ ',
   generated: '📝',
-  healed: '🩹',
 };
 
 interface SummaryRow {
@@ -667,19 +460,17 @@ interface SummaryRow {
   attempts: number;
   numTests: number;
   failureReason?: string;
-  healDescription?: string;
 }
 
-function printSummary(rows: SummaryRow[], mode: 'verify' | 'heal'): void {
+function printSummary(rows: SummaryRow[]): void {
   if (rows.length === 0) return;
 
-  const modeLabel = mode === 'heal' ? 'HEAL' : 'VERIFY';
   const fileW = Math.max(...rows.map((r) => r.file.length), 32);
   const divider = '─'.repeat(fileW + 40);
   const header = '═'.repeat(fileW + 40);
 
   console.log(`\n${header}`);
-  console.log(` TESTGEN SMART — ${modeLabel} SUMMARY`);
+  console.log(' TESTGEN SMART — VERIFY SUMMARY');
   console.log(header);
   console.log(`${'File'.padEnd(fileW)}  Status        Coverage  Tests  Tries`);
   console.log(divider);
@@ -687,8 +478,7 @@ function printSummary(rows: SummaryRow[], mode: 'verify' | 'heal'): void {
   let pass = 0,
     fail = 0,
     lowCov = 0,
-    skipped = 0,
-    healed = 0;
+    skipped = 0;
 
   for (const r of rows) {
     const icon = STATUS_ICON[r.status];
@@ -702,28 +492,17 @@ function printSummary(rows: SummaryRow[], mode: 'verify' | 'heal'): void {
     if (r.status === 'fail' && r.failureReason) {
       console.log(`${''.padEnd(fileW)}     └─ ${r.failureReason}`);
     }
-    // Show heal description for healed tests
-    if (r.status === 'healed' && r.healDescription) {
-      console.log(`${''.padEnd(fileW)}     └─ 🩹 ${r.healDescription}`);
-    }
 
     if (r.status === 'pass') pass++;
     else if (r.status === 'fail') fail++;
     else if (r.status === 'low-coverage') lowCov++;
-    else if (r.status === 'healed') healed++;
     else skipped++;
   }
 
   console.log(divider);
-  const parts = [
-    `Total: ${rows.length}`,
-    `✅ Pass: ${pass}`,
-  ];
-  if (healed > 0) parts.push(`🩹 Healed: ${healed}`);
-  parts.push(`❌ Fail: ${fail}`);
-  if (lowCov > 0) parts.push(`⚠️  Low coverage: ${lowCov}`);
-  if (skipped > 0) parts.push(`⏭️  Skipped: ${skipped}`);
-  console.log(` ${parts.join('  |  ')}`);
+  console.log(
+    ` Total: ${rows.length}  |  ✅ Pass: ${pass}  |  ❌ Fail: ${fail}  |  ⚠️  Low coverage: ${lowCov}  |  ⏭️  Skipped: ${skipped}`
+  );
   console.log(header);
 }
 
@@ -733,25 +512,34 @@ function printSummary(rows: SummaryRow[], mode: 'verify' | 'heal'): void {
 
 async function run() {
   const args = parseArgs(process.argv.slice(2));
-
-  // Detect and set the active test framework (jest vs vitest) based on cwd
-  const detectedFramework = detectTestFramework();
-  setActiveFramework(detectedFramework);
-  console.log(`Test framework: ${detectedFramework}`);
-
   const ctx = createParser();
   const files = resolveTargetFiles(args);
 
   const maxRetries = args.maxRetries ?? 2;
-  const maxHealAttempts = args.maxHealAttempts ?? DEFAULT_MAX_HEAL_ATTEMPTS;
   const coverageThreshold = args.coverageThreshold ?? 50;
 
+  // --- LLM provider setup ---
+  let llmProvider: LlmProvider | null = null;
+  if (args.enhance) {
+    const llmConfig = resolveConfig();
+    if (llmConfig.provider === 'none') {
+      // Auto-enable ollama when --enhance is passed
+      llmConfig.provider = 'ollama';
+    }
+
+    const provider = createOllamaProvider(llmConfig);
+    const healthy = await provider.healthCheck();
+    if (healthy) {
+      llmProvider = provider;
+      console.log(`🤖 LLM enhancement ON  —  provider: ollama  |  model: ${llmConfig.model}`);
+    } else {
+      console.warn('⚠️  Ollama not reachable — falling back to rule-based generation.');
+      console.warn('   Start Ollama: https://ollama.com  →  ollama serve');
+    }
+  }
+
   console.log(`Found ${files.length} file(s) to process.`);
-  if (args.healMode) {
-    console.log(
-      `Heal mode ON  —  max heal attempts: ${maxHealAttempts}  |  coverage threshold: ${coverageThreshold}%`
-    );
-  } else if (args.verify) {
+  if (args.verify) {
     console.log(
       `Verify mode ON  —  max retries: ${maxRetries}  |  coverage threshold: ${coverageThreshold}%`
     );
@@ -763,6 +551,7 @@ async function run() {
   }
 
   const summary: SummaryRow[] = [];
+  let enhancedCount = 0;
 
   for (const [index, filePath] of files.entries()) {
     console.log(`\n[${index + 1}/${files.length}] ${path.basename(filePath)}`);
@@ -780,7 +569,20 @@ async function run() {
       continue;
     }
 
-    if (!args.verify && !args.healMode) {
+    // --- LLM enhancement pass ---
+    if (llmProvider && testFilePath) {
+      console.log('  🤖 Enhancing with local LLM...');
+      const sourceCode = fs.readFileSync(filePath, 'utf8');
+      const generatedTest = fs.readFileSync(testFilePath, 'utf8');
+      const result = await enhanceTest(llmProvider, sourceCode, filePath, generatedTest);
+      if (result.wasEnhanced) {
+        writeFile(testFilePath, result.enhanced);
+        console.log(`  ✨ Enhanced in ${(result.durationMs / 1000).toFixed(1)}s`);
+        enhancedCount++;
+      }
+    }
+
+    if (!args.verify) {
       summary.push({
         file: path.basename(filePath),
         status: 'generated',
@@ -791,24 +593,22 @@ async function run() {
       continue;
     }
 
-    if (args.healMode) {
-      // --- Heal mode: analyze failures → teach generator → regenerate ---
-      const result = healAndRetry(filePath, testFilePath, ctx, maxHealAttempts);
-      summary.push({ file: path.basename(filePath), ...result });
-    } else {
-      // --- Verify mode: run jest + check coverage + blind retry ---
-      const result = verifyAndRetry(filePath, testFilePath, ctx, maxRetries, coverageThreshold);
-      summary.push({ file: path.basename(filePath), ...result });
-    }
+    // --- Verify mode: run jest + check coverage + retry ---
+    const result = verifyAndRetry(filePath, testFilePath, ctx, maxRetries, coverageThreshold);
+    summary.push({ file: path.basename(filePath), ...result });
   }
 
-  // Always print summary in verify/heal mode
-  if (args.verify || args.healMode) {
-    printSummary(summary, args.healMode ? 'heal' : 'verify');
+  // Always print summary in verify mode
+  if (args.verify) {
+    printSummary(summary);
 
     // Exit with non-zero code if any test file is still failing
     const hasFailures = summary.some((r) => r.status === 'fail');
     if (hasFailures) process.exit(1);
+  }
+
+  if (llmProvider && enhancedCount > 0) {
+    console.log(`\n🤖 LLM enhanced ${enhancedCount}/${files.length} test file(s).`);
   }
 }
 

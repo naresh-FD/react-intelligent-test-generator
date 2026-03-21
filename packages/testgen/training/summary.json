@@ -1,0 +1,350 @@
+[
+  {
+    "source": "components/common/Avatar.tsx",
+    "test": "components/common/__tests__/Avatar.test.tsx",
+    "sourceLines": 50,
+    "testLines": 66
+  },
+  {
+    "source": "components/common/Badge.tsx",
+    "test": "components/common/__tests__/Badge.test.tsx",
+    "sourceLines": 31,
+    "testLines": 701
+  },
+  {
+    "source": "components/common/Button.tsx",
+    "test": "components/common/__tests__/Button.test.tsx",
+    "sourceLines": 75,
+    "testLines": 764
+  },
+  {
+    "source": "components/common/Card.tsx",
+    "test": "components/common/__tests__/Card.test.tsx",
+    "sourceLines": 90,
+    "testLines": 4047
+  },
+  {
+    "source": "components/common/DataTable.tsx",
+    "test": "components/common/__tests__/DataTable.test.tsx",
+    "sourceLines": 191,
+    "testLines": 131
+  },
+  {
+    "source": "components/common/EmptyState.tsx",
+    "test": "components/common/__tests__/EmptyState.test.tsx",
+    "sourceLines": 40,
+    "testLines": 54
+  },
+  {
+    "source": "components/common/index.ts",
+    "test": "components/common/__tests__/index.test.ts",
+    "sourceLines": 14,
+    "testLines": 34
+  },
+  {
+    "source": "components/common/Input.tsx",
+    "test": "components/common/__tests__/Input.test.tsx",
+    "sourceLines": 70,
+    "testLines": 723
+  },
+  {
+    "source": "components/common/Modal.tsx",
+    "test": "components/common/__tests__/Modal.test.tsx",
+    "sourceLines": 189,
+    "testLines": 214
+  },
+  {
+    "source": "components/common/Pagination.tsx",
+    "test": "components/common/__tests__/Pagination.test.tsx",
+    "sourceLines": 138,
+    "testLines": 99
+  },
+  {
+    "source": "components/common/Select.tsx",
+    "test": "components/common/__tests__/Select.test.tsx",
+    "sourceLines": 77,
+    "testLines": 702
+  },
+  {
+    "source": "components/common/Skeleton.tsx",
+    "test": "components/common/__tests__/Skeleton.test.tsx",
+    "sourceLines": 66,
+    "testLines": 89
+  },
+  {
+    "source": "components/common/Spinner.tsx",
+    "test": "components/common/__tests__/Spinner.test.tsx",
+    "sourceLines": 57,
+    "testLines": 99
+  },
+  {
+    "source": "components/common/Toast.tsx",
+    "test": "components/common/__tests__/Toast.test.tsx",
+    "sourceLines": 81,
+    "testLines": 19
+  },
+  {
+    "source": "components/dashboard/BudgetProgress.tsx",
+    "test": "components/dashboard/__tests__/BudgetProgress.test.tsx",
+    "sourceLines": 131,
+    "testLines": 54
+  },
+  {
+    "source": "components/dashboard/CategoryPieChart.tsx",
+    "test": "components/dashboard/__tests__/CategoryPieChart.test.tsx",
+    "sourceLines": 148,
+    "testLines": 53
+  },
+  {
+    "source": "components/dashboard/ExpenseChart.tsx",
+    "test": "components/dashboard/__tests__/ExpenseChart.test.tsx",
+    "sourceLines": 179,
+    "testLines": 54
+  },
+  {
+    "source": "components/dashboard/QuickActions.tsx",
+    "test": "components/dashboard/__tests__/QuickActions.test.tsx",
+    "sourceLines": 114,
+    "testLines": 53
+  },
+  {
+    "source": "components/dashboard/RecentTransactions.tsx",
+    "test": "components/dashboard/__tests__/RecentTransactions.test.tsx",
+    "sourceLines": 123,
+    "testLines": 54
+  },
+  {
+    "source": "components/dashboard/StatsCard.tsx",
+    "test": "components/dashboard/__tests__/StatsCard.test.tsx",
+    "sourceLines": 122,
+    "testLines": 86
+  },
+  {
+    "source": "components/expense/ExpenseCard.tsx",
+    "test": "components/expense/__tests__/ExpenseCard.test.tsx",
+    "sourceLines": 116,
+    "testLines": 85
+  },
+  {
+    "source": "components/expense/ExpenseFilters.tsx",
+    "test": "components/expense/__tests__/ExpenseFilters.test.tsx",
+    "sourceLines": 168,
+    "testLines": 68
+  },
+  {
+    "source": "components/expense/ExpenseForm.tsx",
+    "test": "components/expense/__tests__/ExpenseForm.test.tsx",
+    "sourceLines": 223,
+    "testLines": 108
+  },
+  {
+    "source": "components/expense/ExpenseList.tsx",
+    "test": "components/expense/__tests__/ExpenseList.test.tsx",
+    "sourceLines": 261,
+    "testLines": 20
+  },
+  {
+    "source": "components/finance/RiskLimitBoard.tsx",
+    "test": "components/finance/__tests__/RiskLimitBoard.test.tsx",
+    "sourceLines": 125,
+    "testLines": 41
+  },
+  {
+    "source": "components/finance/SettlementReconciliation.tsx",
+    "test": "components/finance/__tests__/SettlementReconciliation.test.tsx",
+    "sourceLines": 133,
+    "testLines": 48
+  },
+  {
+    "source": "components/layout/AuthLayout.tsx",
+    "test": "components/layout/__tests__/AuthLayout.test.tsx",
+    "sourceLines": 77,
+    "testLines": 35
+  },
+  {
+    "source": "components/layout/Footer.tsx",
+    "test": "components/layout/__tests__/Footer.test.tsx",
+    "sourceLines": 19,
+    "testLines": 19
+  },
+  {
+    "source": "components/layout/Header.tsx",
+    "test": "components/layout/__tests__/Header.test.tsx",
+    "sourceLines": 147,
+    "testLines": 65
+  },
+  {
+    "source": "components/layout/MainLayout.tsx",
+    "test": "components/layout/__tests__/MainLayout.test.tsx",
+    "sourceLines": 27,
+    "testLines": 23
+  },
+  {
+    "source": "components/layout/Sidebar.tsx",
+    "test": "components/layout/__tests__/Sidebar.test.tsx",
+    "sourceLines": 117,
+    "testLines": 51
+  },
+  {
+    "source": "components/ProtectedRoute.tsx",
+    "test": "components/__tests__/ProtectedRoute.test.tsx",
+    "sourceLines": 42,
+    "testLines": 39
+  },
+  {
+    "source": "contexts/AuthContext.tsx",
+    "test": "contexts/__tests__/AuthContext.test.tsx",
+    "sourceLines": 189,
+    "testLines": 46
+  },
+  {
+    "source": "contexts/BudgetContext.tsx",
+    "test": "contexts/__tests__/BudgetContext.test.tsx",
+    "sourceLines": 197,
+    "testLines": 57
+  },
+  {
+    "source": "contexts/CategoryContext.tsx",
+    "test": "contexts/__tests__/CategoryContext.test.tsx",
+    "sourceLines": 150,
+    "testLines": 57
+  },
+  {
+    "source": "contexts/ExpenseContext.tsx",
+    "test": "contexts/__tests__/ExpenseContext.test.tsx",
+    "sourceLines": 296,
+    "testLines": 39
+  },
+  {
+    "source": "contexts/NotificationContext.tsx",
+    "test": "contexts/__tests__/NotificationContext.test.tsx",
+    "sourceLines": 103,
+    "testLines": 39
+  },
+  {
+    "source": "contexts/ThemeContext.tsx",
+    "test": "contexts/__tests__/ThemeContext.test.tsx",
+    "sourceLines": 98,
+    "testLines": 39
+  },
+  {
+    "source": "hooks/useAnalytics.ts",
+    "test": "hooks/__tests__/useAnalytics.test.ts",
+    "sourceLines": 116,
+    "testLines": 168
+  },
+  {
+    "source": "hooks/useClickOutside.ts",
+    "test": "hooks/__tests__/useClickOutside.test.ts",
+    "sourceLines": 37,
+    "testLines": 30
+  },
+  {
+    "source": "hooks/useDebounce.ts",
+    "test": "hooks/__tests__/useDebounce.test.ts",
+    "sourceLines": 50,
+    "testLines": 42
+  },
+  {
+    "source": "hooks/useExpenses.ts",
+    "test": "hooks/__tests__/useExpenses.test.ts",
+    "sourceLines": 209,
+    "testLines": 181
+  },
+  {
+    "source": "hooks/useLocalStorage.ts",
+    "test": "hooks/__tests__/useLocalStorage.test.ts",
+    "sourceLines": 83,
+    "testLines": 73
+  },
+  {
+    "source": "hooks/useMediaQuery.ts",
+    "test": "hooks/__tests__/useMediaQuery.test.ts",
+    "sourceLines": 42,
+    "testLines": 57
+  },
+  {
+    "source": "hooks/useReconciliationMetrics.ts",
+    "test": "hooks/__tests__/useReconciliationMetrics.test.ts",
+    "sourceLines": 100,
+    "testLines": 25
+  },
+  {
+    "source": "hooks/useRiskLimits.ts",
+    "test": "hooks/__tests__/useRiskLimits.test.ts",
+    "sourceLines": 122,
+    "testLines": 25
+  },
+  {
+    "source": "pages/Dashboard.tsx",
+    "test": "pages/__tests__/Dashboard.test.tsx",
+    "sourceLines": 127,
+    "testLines": 19
+  },
+  {
+    "source": "pages/Expenses.tsx",
+    "test": "pages/__tests__/Expenses.test.tsx",
+    "sourceLines": 13,
+    "testLines": 19
+  },
+  {
+    "source": "pages/Login.tsx",
+    "test": "pages/__tests__/Login.test.tsx",
+    "sourceLines": 98,
+    "testLines": 55
+  },
+  {
+    "source": "pages/Profile.tsx",
+    "test": "pages/__tests__/Profile.test.tsx",
+    "sourceLines": 240,
+    "testLines": 46
+  },
+  {
+    "source": "pages/Register.tsx",
+    "test": "pages/__tests__/Register.test.tsx",
+    "sourceLines": 133,
+    "testLines": 77
+  },
+  {
+    "source": "pages/Settings.tsx",
+    "test": "pages/__tests__/Settings.test.tsx",
+    "sourceLines": 244,
+    "testLines": 20
+  },
+  {
+    "source": "services/api.ts",
+    "test": "services/__tests__/api.test.ts",
+    "sourceLines": 136,
+    "testLines": 126
+  },
+  {
+    "source": "services/authService.ts",
+    "test": "services/__tests__/authService.test.ts",
+    "sourceLines": 201,
+    "testLines": 367
+  },
+  {
+    "source": "services/expenseService.ts",
+    "test": "services/__tests__/expenseService.test.ts",
+    "sourceLines": 607,
+    "testLines": 745
+  },
+  {
+    "source": "services/localDb.ts",
+    "test": "services/__tests__/localDb.test.ts",
+    "sourceLines": 179,
+    "testLines": 403
+  },
+  {
+    "source": "utils/formatters.ts",
+    "test": "utils/__tests__/formatters.test.ts",
+    "sourceLines": 119,
+    "testLines": 899
+  },
+  {
+    "source": "utils/helpers.ts",
+    "test": "utils/__tests__/helpers.test.ts",
+    "sourceLines": 189,
+    "testLines": 771
+  }
+]

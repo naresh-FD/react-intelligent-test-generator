@@ -24,6 +24,9 @@
     "testgen:smart": "ts-node ../../packages/testgen/src/cli.ts --all --verify",
     "testgen:smart:file": "ts-node ../../packages/testgen/src/cli.ts --file --verify",
     "testgen:smart:git": "ts-node ../../packages/testgen/src/cli.ts --git-unstaged --verify",
+    "testgen:enhance": "ts-node ../../packages/testgen/src/cli.ts --all --enhance",
+    "testgen:enhance:file": "ts-node ../../packages/testgen/src/cli.ts --file --enhance",
+    "testgen:enhance:smart": "ts-node ../../packages/testgen/src/cli.ts --all --enhance --verify",
     "docs:generate": "node scripts/docs/generate-docs.mjs"
   },
   "keywords": [
