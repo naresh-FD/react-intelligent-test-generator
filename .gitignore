@@ -67,3 +67,9 @@ __tests__/
 .claude
 examples/*
 testgen-stability-hardening-addendum.md
+
+# Testgen fine-tuning generated artifacts
+packages/testgen/training/*.gguf
+packages/testgen/training/Modelfile.finetuned
+packages/testgen/training/outputs/
+packages/testgen/training/testgen-coder-finetuned/
