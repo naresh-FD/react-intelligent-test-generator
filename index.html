@@ -3,14 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="React Intelligent Test Generator creates evidence-backed React tests, runs a gated ticket-to-test pilot pipeline, and safely repairs owned generated tests.">
+  <meta name="description" content="TestGen generates evidence-backed React tests, safely repairs owned artifacts, and provides an approval-gated ADO/JSON application generator.">
   <meta name="theme-color" content="#f4f8fd">
-  <meta property="og:title" content="React Intelligent Test Generator">
-  <meta property="og:description" content="Deterministic React test generation, protected repair, and an evidence-backed ticket-to-test pilot pipeline.">
-  <meta property="og:type" content="website">
-  <meta property="og:url" content="https://naresh-fd.github.io/react-intelligent-test-generator/">
-  <link rel="canonical" href="https://naresh-fd.github.io/react-intelligent-test-generator/">
-  <title>React Intelligent Test Generator</title>
+  <title>TestGen - Evidence-backed React test generation and repair</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -801,8 +796,8 @@
         <a href="#how-it-works">How it works</a>
         <a href="#features">Features</a>
         <a href="#usage">Usage</a>
-        <a href="#pilot">Pilot</a>
         <a href="#production">Production</a>
+        <a href="application-generator.html">App generator</a>
       </nav>
       <span class="phase-badge">Production runtime</span>
       <button class="menu-button" type="button" aria-label="Open navigation" aria-controls="site-navigation" aria-expanded="false">
@@ -818,12 +813,13 @@
           <div class="hero-copy reveal">
             <div class="eyebrow">Evidence-backed developer tooling</div>
             <h1>React tests,<br>generated honestly<br>and repaired safely</h1>
-            <p>TestGen reads live TypeScript types, repository conventions, requirement contracts, and observable behavior to plan useful tests. Its opt-in repair runtime can change only TestGen-owned artifacts, verifies every change, and reverts regressions exactly.</p>
+            <p>TestGen reads live TypeScript types, repository conventions, and observable behavior to plan useful tests. Its opt-in repair runtime can fix only TestGen-owned generated artifacts, verifies every change, and reverts regressions exactly.</p>
             <div class="pills" aria-label="Key capabilities">
               <span class="pill">Deterministic by default</span>
               <span class="pill">Jest + Vitest</span>
               <span class="pill">Protected writes</span>
               <span class="pill">Opt-in local Ollama, cloud behind an egress gate</span>
+              <span class="pill">ADO/JSON application planning</span>
             </div>
           </div>
 
@@ -855,13 +851,13 @@
         </div>
 
         <div class="stat-grid reveal">
-          <div class="stat-card"><strong>12 / 20</strong><span>First-run green in the committed BOL evaluation corpus</span></div>
-          <div class="stat-card"><strong>0%</strong><span>Generation nondeterminism across five repetitions</span></div>
-          <div class="stat-card"><strong>40 / 503</strong><span>Package suites / passing tests in the current development verification</span></div>
-          <div class="stat-card"><strong>214 / 355</strong><span>Suites passing in one external pilot, after generator fixes</span></div>
+          <div class="stat-card"><strong>0</strong><span>Cloud inference calls in default CLI execution</span></div>
+          <div class="stat-card"><strong>1:1</strong><span>Generated tests to planned scenarios</span></div>
+          <div class="stat-card"><strong>1</strong><span>Recorded external pilot (React Admin <code>ra-core</code>)</span></div>
+          <div class="stat-card"><strong>214 / 355</strong><span>Suites passing in that pilot, after generator fixes</span></div>
         </div>
 
-        <div class="architecture-note reveal"><span><strong>How to read the numbers</strong> - the in-repository BOL corpus records 12 of 20 eligible cases compiling and passing untouched (60%), 16 of 20 compiling (80%), and zero generation nondeterminism or execution flake across five repetitions. Its golden-comparison metrics remain uncollected. Separately, 214/355 (60%) is a recorded result on one external repository after iterative generator fixes improved it from 191/440; it is not an untouched first-run rate or a reproducible cross-repository benchmark.</span></div>
+        <div class="architecture-note reveal"><span><strong>How to read the pilot number</strong> - 214/355 (60%) is a recorded result on one external repository, measured after iterative generator fixes improved it from 191/440. It is not an untouched first-run rate, and it is not yet a committed reproducible baseline. Remaining failures are concentrated in component-render generation. BOL baseline validation is pending: the evaluation corpus has no reviewed golden tests and no committed result artifact. See <a href="https://github.com/naresh-FD/react-intelligent-test-generator/blob/main/docs/product-status.md">product status</a> for the full evidence table.</span></div>
       </div>
     </section>
 
@@ -889,6 +885,7 @@
             <p>Only owned generated tests and setup artifacts may change. Root containment, symlink checks, provenance hashes, atomic writes, and recovery protect every mutation.</p>
           </article>
         </div>
+        <div class="architecture-note reveal"><span><strong>New application pipeline</strong> - <code>testgen app</code> normalizes an ADO hierarchy or versioned JSON blueprint, builds route/component/API/data/trace graphs, requires hash-bound human approval, scaffolds a React/Fastify/PostgreSQL monorepo, and advances each criterion only through receipt-backed RED-GREEN-REFACTOR. Read the <a href="application-generator.html">full application-generator and TDD architecture guide</a>.</span></div>
       </div>
     </section>
 
@@ -968,14 +965,6 @@
             <span class="icon-box" aria-hidden="true">KB</span>
             <div><h3>Durable learning</h3><p>The v2 knowledge base stores only portable registered operations and success evidence. Literal source edits stay in the per-run journal and are never promoted.</p></div>
           </article>
-          <article class="feature-card reveal">
-            <span class="icon-box" aria-hidden="true">RTC</span>
-            <div><h3>Requirement contracts</h3><p>Local RTC drafting, schema checks, readiness scoring, immutable source snapshots, and approval hashes make ticket quality an explicit gate before generation.</p></div>
-          </article>
-          <article class="feature-card reveal">
-            <span class="icon-box" aria-hidden="true">RED</span>
-            <div><h3>Frozen test evidence</h3><p>Multi-signal mapping feeds a fail-closed RED phase. Frozen hashes, GREEN verification, mutation results, and traceability reports preserve the ticket-to-test chain.</p></div>
-          </article>
         </div>
 
         <div class="metrics-grid">
@@ -1037,60 +1026,12 @@
       </div>
     </section>
 
-    <section id="pilot" class="section-rule">
-      <div class="shell">
-        <div class="section-heading reveal">
-          <div class="eyebrow">Ticket-driven pilot</div>
-          <h2>Requirements are gated before code is generated</h2>
-          <p>The experimental pilot path connects ticket evidence to an approved RTC, repository symbol mapping, a frozen RED artifact, GREEN verification, mutation testing, and a traceability report. Every uncertain boundary blocks or requires review instead of guessing.</p>
-        </div>
-
-        <div class="overview-grid">
-          <article class="info-card reveal">
-            <span class="icon-box" aria-hidden="true">A</span>
-            <h3>Approve the contract</h3>
-            <p>Revision and content hashes bind the RTC to its ticket snapshot. Non-approved, stale, or blocked contracts cannot enter the generation pipeline.</p>
-          </article>
-          <article class="info-card reveal">
-            <span class="icon-box" aria-hidden="true">B</span>
-            <h3>Map with evidence</h3>
-            <p>Explicit references, call-graph, lexical, ownership, test-adjacency, semantic, and git-history signals contribute to a scored mapping decision.</p>
-          </article>
-          <article class="info-card reveal">
-            <span class="icon-box" aria-hidden="true">C</span>
-            <h3>Measure the pilot</h3>
-            <p>Batch runs, ground-truth annotations, human-touch timing, and correlation reports support a blended Track A / Track B go-or-no-go decision.</p>
-          </article>
-        </div>
-
-        <div class="code-card reveal">
-          <div class="code-toolbar">
-            <span class="code-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-            <span>Ticket-to-test pilot</span>
-          </div>
-          <pre><span class="comment"># Validate an approved requirement contract</span>
-<span class="command">$ npx ts-node packages/testgen/src/cli.ts rtc check --rtc .testgen/requirements/1234.rtc.yaml</span>
-
-<span class="comment"># Map requirements, freeze RED tests, then verify GREEN</span>
-<span class="command">$ npx ts-node packages/testgen/src/cli.ts map --rtc .testgen/requirements/1234.rtc.yaml</span>
-<span class="command">$ npx ts-node packages/testgen/src/cli.ts red --rtc .testgen/requirements/1234.rtc.yaml --verify-red</span>
-<span class="command">$ npx ts-node packages/testgen/src/cli.ts green 1234</span>
-
-<span class="comment"># Run the measured Phase 1 sample and produce correlation artifacts</span>
-<span class="command">$ npx ts-node packages/testgen/src/cli.ts pilot batch-run --dir tickets --steps A,B,C</span>
-<span class="command">$ npx ts-node packages/testgen/src/cli.ts pilot correlate</span></pre>
-        </div>
-        <div class="architecture-note reveal"><span><strong>Mapping calibration - 24 August 2026</strong> - PILOT-1 correctly remains blocked because <code>validateCategory</code> does not exist. PILOT-2 resolves the real <code>formatCurrency</code> target at 56.0% from explicit reference, cross-file call graph, lexical match, test adjacency, and ownership evidence. A controlled repository-history test then links a real <code>PILOT-2</code> commit to that symbol's file and moves the same model above 65% to <code>review-required</code>. The threshold and weights were not lowered.</span></div>
-        <p class="usage-note reveal">The Phase 1 batch and correlation commands are active development tooling, not a completed fleet rollout. Live ADO pilot execution, reviewed ground truth, and promotion thresholds remain external gates.</p>
-      </div>
-    </section>
-
     <section id="production" class="section-rule">
       <div class="shell">
         <div class="section-heading reveal">
           <div class="eyebrow">Production verification</div>
-          <h2>The core runtime is verified; pilot validation is ongoing</h2>
-          <p>The core areas below are covered by TypeScript compilation, focused safety and orchestration suites, the full TestGen package suite, regression fixtures, and real Jest and Vitest executions. The ticket pipeline is an experimental pilot surface: its gates are executable, while live multi-repository validation is still in progress.</p>
+          <h2>The runtime implementation is complete against its specification</h2>
+          <p>Every area below was verified with TypeScript compilation, focused safety and orchestration suites, the full TestGen package suite, regression fixtures, and real Jest and Vitest executions. This is a statement about the runtime specification, not about external validation: broad real-world validation is still in progress, with one recorded pilot and no committed evaluation baseline yet.</p>
         </div>
 
         <div class="phase-tabs reveal" role="tablist" aria-label="Verification areas">
@@ -1098,7 +1039,7 @@
           <button class="phase-tab" type="button" data-phase="2" role="tab"><strong>2</strong><span>Repair</span><small class="done">Passed</small></button>
           <button class="phase-tab" type="button" data-phase="3" role="tab"><strong>3</strong><span>Safety</span><small class="done">Passed</small></button>
           <button class="phase-tab" type="button" data-phase="4" role="tab"><strong>4</strong><span>Runners</span><small class="done">Passed</small></button>
-          <button class="phase-tab" type="button" data-phase="5" role="tab"><strong>5</strong><span>Pilot</span><small class="now">In validation</small></button>
+          <button class="phase-tab" type="button" data-phase="5" role="tab"><strong>5</strong><span>CLI</span><small class="done">Passed</small></button>
         </div>
 
         <div class="roadmap-list">
@@ -1119,20 +1060,20 @@
             <div><h3>Independent Jest and Vitest adapters</h3><p>Both adapters use shared shell-free process infrastructure, preserve structured failures, fail closed on malformed JSON, handle suite failures, and have real executable integration coverage.</p></div>
           </article>
           <article class="roadmap-item reveal" data-roadmap="5">
-            <span class="roadmap-status current">Pilot - current</span>
-            <div><h3>Ticket-to-test gates and Phase 1 measurement</h3><p>RTC approval, scored mapping, frozen RED artifacts, GREEN verification, mutation evidence, traceability, batch execution, and correlation reporting are implemented. Live ADO validation and the reviewed 15+15 sample remain pilot work.</p></div>
+            <span class="roadmap-status complete">CLI - passed</span>
+            <div><h3>Explicit modes and gated inference</h3><p>Read-only verification, opt-in repair, fixed budgets, exit codes, artifact restrictions, strict loopback Ollama validation, redirect rejection, and the egress policy that governs every cloud provider are covered.</p></div>
           </article>
         </div>
 
-        <div class="architecture-note reveal"><span><strong>Verification snapshot - 24 August 2026</strong> - on Windows at development commit <code>ed65bd5</code>, TypeScript compiled without diagnostics and all 40 package suites passed: 503 tests passed and five probe-confirmed symlink capability tests skipped (508 total). The mapping calibration preserves the 65% review gate, and external package-resolution uncertainty is handled provisionally without weakening relative-import validation.</span></div>
+        <div class="architecture-note reveal"><span><strong>Current workspace verification</strong> - the TestGen package completed 50 suites with 539 passing tests and 5 intentional skips; the ADO adapter completed 3 suites with 22 passing tests. Both TypeScript packages compile without diagnostics and the public-claims scan reports zero violations. A disposable generated Expense scaffold also passed locked installation, Prisma generation, format, lint, architecture, strict typecheck, contract tests, production build, and dependency audit. This verifies the generator implementation; it does not promote the generated business application before its story receipts and external system gates pass.</span></div>
       </div>
     </section>
   </main>
 
   <footer>
     <div class="shell footer-inner">
-      <div><strong>TestGen</strong> - evidence-backed React test generation and protected repair</div>
-      <div class="footer-values">deterministic by default &middot; explicit repair &middot; local-first inference</div>
+      <div><strong>TestGen</strong> - evidence-backed tests, protected repair, and approval-gated application generation</div>
+      <div class="footer-values">deterministic scaffold &middot; receipt-backed TDD &middot; draft-PR boundary</div>
     </div>
   </footer>
 
