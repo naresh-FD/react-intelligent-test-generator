@@ -1,0 +1,1204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="React Intelligent Test Generator creates evidence-backed React tests, runs a gated ticket-to-test pilot pipeline, and safely repairs owned generated tests.">
+  <meta name="theme-color" content="#f4f8fd">
+  <meta property="og:title" content="React Intelligent Test Generator">
+  <meta property="og:description" content="Deterministic React test generation, protected repair, and an evidence-backed ticket-to-test pilot pipeline.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://naresh-fd.github.io/react-intelligent-test-generator/">
+  <link rel="canonical" href="https://naresh-fd.github.io/react-intelligent-test-generator/">
+  <title>React Intelligent Test Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --page: #f4f8fd;
+      --surface: #ffffff;
+      --surface-soft: #f8fbff;
+      --ink: #0c1f3d;
+      --muted: #61718a;
+      --muted-2: #8290a6;
+      --blue: #1f71f2;
+      --blue-dark: #155dcc;
+      --blue-soft: #eaf3ff;
+      --blue-border: #b9d5ff;
+      --green: #18a968;
+      --green-soft: #e5f8ee;
+      --amber: #b06a07;
+      --border: #dce7f4;
+      --shadow: 0 15px 45px rgba(29, 72, 131, .10);
+      --radius: 16px;
+      --nav-height: 72px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: calc(var(--nav-height) + 22px); }
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--ink);
+      background: var(--page);
+      font-family: "DM Sans", Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    body.menu-open { overflow: hidden; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    button { font: inherit; }
+    a { color: inherit; text-decoration: none; }
+    p, h1, h2, h3, h4 { margin-top: 0; }
+    p { color: var(--muted); }
+    code, pre, .mono { font-family: "JetBrains Mono", Consolas, monospace; }
+
+    .shell {
+      width: min(1120px, calc(100% - 48px));
+      margin: 0 auto;
+    }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      height: var(--nav-height);
+      background: rgba(255, 255, 255, .94);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(16px);
+    }
+    .nav-wrap {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 28px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--ink);
+      font-weight: 700;
+      letter-spacing: -.02em;
+      white-space: nowrap;
+    }
+    .brand-mark {
+      width: 31px;
+      height: 31px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 9px;
+      color: #fff;
+      background: var(--blue);
+      box-shadow: 0 6px 14px rgba(31, 113, 242, .25);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 30px;
+      margin-left: auto;
+    }
+    .nav-links a {
+      position: relative;
+      color: #586a84;
+      font-size: 14px;
+      font-weight: 600;
+      transition: color .18s ease;
+    }
+    .nav-links a::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 100%;
+      bottom: -10px;
+      height: 2px;
+      border-radius: 99px;
+      background: var(--blue);
+      transition: right .18s ease;
+    }
+    .nav-links a:hover, .nav-links a.active { color: var(--blue); }
+    .nav-links a.active::after { right: 0; }
+    .phase-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 12px;
+      border: 1px solid var(--blue-border);
+      border-radius: 999px;
+      color: var(--blue);
+      background: var(--blue-soft);
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .phase-badge::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--blue);
+      box-shadow: 0 0 0 4px rgba(31, 113, 242, .12);
+    }
+    .menu-button {
+      display: none;
+      width: 42px;
+      height: 42px;
+      padding: 10px;
+      border: 0;
+      border-radius: 10px;
+      background: var(--blue-soft);
+      cursor: pointer;
+    }
+    .menu-button span {
+      display: block;
+      height: 2px;
+      margin: 5px 0;
+      border-radius: 2px;
+      background: var(--ink);
+      transition: transform .2s ease, opacity .2s ease;
+    }
+    .menu-button[aria-expanded="true"] span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .menu-button[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
+    .menu-button[aria-expanded="true"] span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+    main { overflow: hidden; }
+    section { padding: 92px 0; }
+    .hero-section { padding: 76px 0 46px; }
+    .section-rule { border-top: 1px solid rgba(220, 231, 244, .8); }
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      color: var(--blue);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+    }
+    .eyebrow::before {
+      content: "";
+      width: 22px;
+      height: 2px;
+      border-radius: 99px;
+      background: var(--blue);
+    }
+    .section-heading {
+      max-width: 720px;
+      margin-bottom: 36px;
+    }
+    .section-heading h2 {
+      margin-bottom: 10px;
+      font-size: clamp(28px, 3.1vw, 38px);
+      line-height: 1.16;
+      letter-spacing: -.035em;
+    }
+    .section-heading p {
+      max-width: 680px;
+      margin-bottom: 0;
+      font-size: 16px;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.05fr .95fr;
+      align-items: center;
+      gap: 72px;
+    }
+    .hero-copy h1 {
+      max-width: 610px;
+      margin-bottom: 20px;
+      font-size: clamp(44px, 5.6vw, 68px);
+      line-height: 1.02;
+      letter-spacing: -.055em;
+    }
+    .hero-copy > p {
+      max-width: 590px;
+      margin-bottom: 26px;
+      font-size: 17px;
+      line-height: 1.72;
+    }
+    .pills { display: flex; flex-wrap: wrap; gap: 9px; }
+    .pill {
+      padding: 7px 11px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: #50627c;
+      background: rgba(255, 255, 255, .76);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .demo-card {
+      position: relative;
+      min-height: 440px;
+      padding: 28px;
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, .92);
+      box-shadow: var(--shadow);
+    }
+    .demo-card::before {
+      content: "";
+      position: absolute;
+      inset: 16px auto 16px 47px;
+      width: 1px;
+      background: #d7e3f2;
+    }
+    .demo-row {
+      position: relative;
+      display: grid;
+      grid-template-columns: 38px 1fr;
+      gap: 14px;
+      min-height: 92px;
+    }
+    .demo-step {
+      position: relative;
+      z-index: 1;
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #d5e3f4;
+      border-radius: 50%;
+      color: #6f8199;
+      background: #f8fbff;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .demo-row.is-active .demo-step {
+      color: #fff;
+      border-color: var(--blue);
+      background: var(--blue);
+      box-shadow: 0 0 0 6px var(--blue-soft);
+    }
+    .demo-text strong { display: block; margin: 2px 0 5px; font-size: 14px; }
+    .demo-text p { margin: 0; font-size: 12px; line-height: 1.6; }
+    .demo-file {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-top: 8px;
+      padding: 10px 12px;
+      border: 1px solid var(--blue-border);
+      border-radius: 9px;
+      color: var(--blue-dark);
+      background: var(--blue-soft);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .demo-file::before { content: "</>"; font-size: 9px; }
+    .demo-success {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin: 6px 0 0 52px;
+      padding: 13px 14px;
+      border: 1px solid #a8e2c5;
+      border-radius: 10px;
+      color: #158550;
+      background: var(--green-soft);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .demo-success::before { content: "\2713"; font-size: 15px; }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 18px;
+      margin-top: 54px;
+    }
+    .stat-card {
+      min-height: 116px;
+      padding: 20px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, .82);
+    }
+    .stat-card strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--blue);
+      font-size: 30px;
+      line-height: 1.1;
+      letter-spacing: -.04em;
+    }
+    .stat-card span { color: #667890; font-size: 12px; font-weight: 600; }
+
+    .overview-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 22px;
+    }
+    .info-card, .feature-card {
+      padding: 26px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+    }
+    .info-card:hover, .feature-card:hover {
+      transform: translateY(-3px);
+      border-color: var(--blue-border);
+      box-shadow: 0 14px 28px rgba(27, 72, 133, .07);
+    }
+    .icon-box {
+      width: 43px;
+      height: 43px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 20px;
+      border-radius: 12px;
+      color: var(--blue);
+      background: var(--blue-soft);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .info-card h3, .feature-card h3 { margin-bottom: 8px; font-size: 17px; }
+    .info-card p, .feature-card p { margin: 0; font-size: 14px; line-height: 1.65; }
+
+    .timeline {
+      position: relative;
+      display: grid;
+      gap: 16px;
+      margin-bottom: 36px;
+    }
+    .timeline::before {
+      content: "";
+      position: absolute;
+      left: 18px;
+      top: 22px;
+      bottom: 22px;
+      width: 1px;
+      background: var(--blue-border);
+    }
+    .timeline-item {
+      position: relative;
+      display: grid;
+      grid-template-columns: 38px 1fr;
+      gap: 18px;
+      align-items: center;
+    }
+    .timeline-number {
+      position: relative;
+      z-index: 1;
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--blue-border);
+      border-radius: 50%;
+      color: var(--blue);
+      background: var(--blue-soft);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .timeline-copy {
+      min-height: 92px;
+      padding: 20px 22px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--surface);
+    }
+    .timeline-copy h3 { margin-bottom: 5px; font-size: 15px; }
+    .timeline-copy p { margin: 0; font-size: 13px; }
+
+    .pipeline {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+    .pipeline-card {
+      position: relative;
+      min-height: 186px;
+      padding: 23px;
+      border: 1px solid var(--border);
+      border-radius: 15px;
+      background: var(--surface);
+    }
+    .pipeline-card:not(:nth-child(3))::after {
+      content: "\2192";
+      position: absolute;
+      top: 50%;
+      right: -15px;
+      z-index: 3;
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      color: var(--blue);
+      background: var(--page);
+      font-weight: 700;
+    }
+    .pipeline-label {
+      display: block;
+      margin-bottom: 12px;
+      color: var(--blue);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+    .pipeline-card h3 { margin-bottom: 7px; font-size: 16px; }
+    .pipeline-card p { margin: 0; font-size: 13px; }
+    .pipeline-card.output {
+      grid-column: 1 / -1;
+      min-height: auto;
+      color: #fff;
+      border-color: var(--blue);
+      background: var(--blue);
+      box-shadow: 0 12px 26px rgba(31, 113, 242, .2);
+    }
+    .pipeline-card.output .pipeline-label, .pipeline-card.output p { color: #dfeaff; }
+    .pipeline-card.output h3 { color: #fff; }
+    .architecture-note {
+      display: flex;
+      align-items: flex-start;
+      gap: 11px;
+      margin-top: 18px;
+      padding: 17px 19px;
+      border: 1px solid var(--blue-border);
+      border-radius: 13px;
+      color: #47617f;
+      background: var(--blue-soft);
+      font-size: 13px;
+    }
+    .architecture-note::before {
+      content: "i";
+      flex: 0 0 auto;
+      width: 19px;
+      height: 19px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--blue-border);
+      border-radius: 50%;
+      color: var(--blue);
+      font-family: serif;
+      font-weight: 700;
+    }
+    .architecture-note strong { color: var(--ink); }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 22px;
+    }
+    .feature-card {
+      display: grid;
+      grid-template-columns: 43px 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+    .feature-card .icon-box { margin: 0; }
+    .feature-card h3 { margin-top: 2px; }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 22px;
+      margin-top: 36px;
+    }
+    .metric-card {
+      padding: 28px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+    .metric-kicker {
+      display: block;
+      margin-bottom: 18px;
+      color: var(--blue);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .coverage-values {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .coverage-values strong { font-size: 32px; line-height: 1; letter-spacing: -.04em; }
+    .coverage-values .target { color: var(--blue); }
+    .coverage-values span { color: var(--muted-2); font-size: 12px; }
+    .progress-track {
+      position: relative;
+      height: 10px;
+      overflow: hidden;
+      margin-bottom: 14px;
+      border-radius: 99px;
+      background: #e7edf5;
+    }
+    .progress-track::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 42%;
+      border-radius: inherit;
+      background: #8496ac;
+    }
+    .progress-track::after {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 42%;
+      width: 33%;
+      border-radius: inherit;
+      background: var(--blue);
+    }
+    .metric-note { margin: 0; font-size: 12px; line-height: 1.6; }
+    .effort-row {
+      display: grid;
+      grid-template-columns: 84px 1fr 52px;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 13px;
+      color: #5c6f88;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .effort-row strong { color: var(--ink); font-size: 12px; text-align: right; }
+    .effort-bar {
+      height: 8px;
+      border-radius: 99px;
+      background: #e6edf6;
+    }
+    .effort-bar::before {
+      content: "";
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--amber);
+    }
+    .effort-row.manual .effort-bar::before { width: 90%; }
+    .effort-row.testgen .effort-bar::before { width: 12%; background: var(--blue); }
+
+    .code-card {
+      overflow: hidden;
+      border: 1px solid #183454;
+      border-radius: 15px;
+      background: #081a32;
+      box-shadow: 0 14px 28px rgba(8, 26, 50, .16);
+    }
+    .code-toolbar {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, .09);
+      color: #8ca4c2;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+    .code-dots { display: flex; gap: 6px; }
+    .code-dots i { width: 7px; height: 7px; border-radius: 50%; background: #476382; }
+    .copy-button {
+      padding: 4px 7px;
+      border: 0;
+      border-radius: 6px;
+      color: #a9bdd5;
+      background: rgba(255, 255, 255, .07);
+      font-size: 10px;
+      cursor: pointer;
+    }
+    .copy-button:hover { color: #fff; }
+    pre {
+      margin: 0;
+      padding: 24px 26px 27px;
+      overflow-x: auto;
+      color: #d9e5f3;
+      font-size: 12px;
+      line-height: 1.85;
+    }
+    .comment { color: #7290b2; }
+    .command { color: #9fc3ff; }
+    .output { color: #7ce0b1; }
+    .usage-note { margin: 14px 0 22px; font-size: 13px; }
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      background: var(--surface);
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 650px; }
+    th, td { padding: 15px 18px; border-bottom: 1px solid var(--border); text-align: left; }
+    tr:last-child td { border-bottom: 0; }
+    th {
+      color: #73849a;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 9px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+    td { color: #52657f; font-size: 13px; }
+    td:first-child { color: var(--ink); font-weight: 700; }
+    td code { color: var(--blue); font-size: 11px; font-weight: 600; }
+
+    .phase-tabs {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .phase-tab {
+      min-height: 100px;
+      padding: 13px 10px;
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      color: var(--ink);
+      background: var(--surface);
+      text-align: center;
+      cursor: pointer;
+      transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+    }
+    .phase-tab:hover { transform: translateY(-2px); border-color: var(--blue-border); }
+    .phase-tab.active {
+      border: 2px solid var(--blue);
+      box-shadow: 0 10px 22px rgba(31, 113, 242, .10);
+    }
+    .phase-tab strong { display: block; font-size: 24px; line-height: 1; }
+    .phase-tab span { display: block; margin: 7px 0 5px; font-size: 12px; font-weight: 700; }
+    .phase-tab small { display: block; color: #718298; font-size: 9px; font-weight: 700; }
+    .phase-tab .done { color: var(--green); }
+    .phase-tab .now { color: var(--blue); }
+
+    .roadmap-list { display: grid; gap: 13px; }
+    .roadmap-item {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 22px;
+      align-items: start;
+      padding: 20px 22px;
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      background: var(--surface);
+      transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+    }
+    .roadmap-item.highlight {
+      border: 2px solid var(--blue);
+      box-shadow: 0 10px 24px rgba(31, 113, 242, .09);
+      transform: translateY(-1px);
+    }
+    .roadmap-status {
+      display: inline-flex;
+      justify-content: center;
+      padding: 5px 9px;
+      border-radius: 999px;
+      color: #718298;
+      background: #edf2f7;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+    .roadmap-status.complete { color: var(--green); background: var(--green-soft); }
+    .roadmap-status.current { color: var(--blue); background: var(--blue-soft); }
+    .roadmap-item h3 { margin: 0 0 4px; font-size: 15px; }
+    .roadmap-item p { margin: 0; font-size: 12px; }
+
+    footer {
+      padding: 34px 0;
+      border-top: 1px solid var(--border);
+      background: rgba(255, 255, 255, .35);
+    }
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 28px;
+      color: #8090a6;
+      font-size: 11px;
+    }
+    .footer-inner strong { color: var(--ink); }
+    .footer-values { font-family: "JetBrains Mono", monospace; letter-spacing: .04em; }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity .55s ease, transform .55s ease;
+    }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    :focus-visible { outline: 3px solid rgba(31, 113, 242, .35); outline-offset: 3px; }
+
+    @media (max-width: 900px) {
+      .nav-links {
+        position: fixed;
+        inset: var(--nav-height) 0 auto 0;
+        display: none;
+        margin: 0;
+        padding: 20px 24px 28px;
+        align-items: stretch;
+        gap: 0;
+        border-bottom: 1px solid var(--border);
+        background: #fff;
+        box-shadow: 0 18px 34px rgba(20, 53, 95, .12);
+      }
+      .nav-links.open { display: grid; }
+      .nav-links a { padding: 12px 0; border-bottom: 1px solid var(--border); }
+      .nav-links a::after { display: none; }
+      .menu-button { display: block; }
+      .phase-badge { margin-left: auto; }
+      .hero-grid { grid-template-columns: 1fr; gap: 44px; }
+      .hero-copy { max-width: 680px; }
+      .demo-card { max-width: 620px; }
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
+      .overview-grid { grid-template-columns: 1fr; }
+      .phase-tabs { grid-template-columns: repeat(5, minmax(118px, 1fr)); overflow-x: auto; padding-bottom: 8px; }
+    }
+
+    @media (max-width: 700px) {
+      :root { --nav-height: 64px; }
+      .shell { width: min(100% - 32px, 1120px); }
+      section { padding: 70px 0; }
+      .hero-section { padding-top: 52px; }
+      .hero-copy h1 { font-size: clamp(42px, 12vw, 58px); }
+      .phase-badge { display: none; }
+      .demo-card { min-height: 420px; padding: 22px 18px; }
+      .demo-card::before { left: 37px; }
+      .demo-success { margin-left: 44px; }
+      .stat-grid, .feature-grid, .metrics-grid { grid-template-columns: 1fr; }
+      .pipeline { grid-template-columns: 1fr; }
+      .pipeline-card:not(:nth-child(3))::after { content: "\2193"; top: auto; right: 50%; bottom: -15px; transform: translateX(50%); }
+      .pipeline-card.output { grid-column: auto; }
+      .roadmap-item { grid-template-columns: 1fr; gap: 11px; }
+      .roadmap-status { justify-self: start; }
+      .footer-inner { align-items: flex-start; flex-direction: column; gap: 8px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+      .reveal { opacity: 1; transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="shell nav-wrap">
+      <a class="brand" href="#top" aria-label="testgen home">
+        <span class="brand-mark" aria-hidden="true">&lt;&gt;</span>
+        <span>testgen</span>
+      </a>
+      <nav class="nav-links" id="site-navigation" aria-label="Primary navigation">
+        <a href="#overview">Overview</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="#features">Features</a>
+        <a href="#usage">Usage</a>
+        <a href="#pilot">Pilot</a>
+        <a href="#production">Production</a>
+      </nav>
+      <span class="phase-badge">Production runtime</span>
+      <button class="menu-button" type="button" aria-label="Open navigation" aria-controls="site-navigation" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero-section">
+      <div class="shell">
+        <div class="hero-grid">
+          <div class="hero-copy reveal">
+            <div class="eyebrow">Evidence-backed developer tooling</div>
+            <h1>React tests,<br>generated honestly<br>and repaired safely</h1>
+            <p>TestGen reads live TypeScript types, repository conventions, requirement contracts, and observable behavior to plan useful tests. Its opt-in repair runtime can change only TestGen-owned artifacts, verifies every change, and reverts regressions exactly.</p>
+            <div class="pills" aria-label="Key capabilities">
+              <span class="pill">Deterministic by default</span>
+              <span class="pill">Jest + Vitest</span>
+              <span class="pill">Protected writes</span>
+              <span class="pill">Opt-in local Ollama, cloud behind an egress gate</span>
+            </div>
+          </div>
+
+          <div class="demo-card reveal" aria-label="Test generation example">
+            <div class="demo-row">
+              <span class="demo-step">1</span>
+              <div class="demo-text">
+                <strong>Understand</strong>
+                <p>Repository Intelligence and ts-morph resolve types, imports, providers, runners, and conventions.</p>
+              </div>
+            </div>
+            <div class="demo-row">
+              <span class="demo-step">2</span>
+              <div class="demo-text">
+                <strong>Plan</strong>
+                <p>A validated behavioral plan records evidence, skips unsupported scenarios, and requires observable assertions.</p>
+              </div>
+            </div>
+            <div class="demo-row is-active">
+              <span class="demo-step">3</span>
+              <div class="demo-text">
+                <strong>Emit and verify</strong>
+                <p>One stable scenario becomes one test.</p>
+                <div class="demo-file">// @testgen-scenario component-visible-output</div>
+              </div>
+            </div>
+            <div class="demo-success">Owned artifact written transactionally</div>
+          </div>
+        </div>
+
+        <div class="stat-grid reveal">
+          <div class="stat-card"><strong>12 / 20</strong><span>First-run green in the committed BOL evaluation corpus</span></div>
+          <div class="stat-card"><strong>0%</strong><span>Generation nondeterminism across five repetitions</span></div>
+          <div class="stat-card"><strong>38 / 500</strong><span>Package suites / passing tests in the current development verification</span></div>
+          <div class="stat-card"><strong>214 / 355</strong><span>Suites passing in one external pilot, after generator fixes</span></div>
+        </div>
+
+        <div class="architecture-note reveal"><span><strong>How to read the numbers</strong> - the in-repository BOL corpus records 12 of 20 eligible cases compiling and passing untouched (60%), 16 of 20 compiling (80%), and zero generation nondeterminism or execution flake across five repetitions. Its golden-comparison metrics remain uncollected. Separately, 214/355 (60%) is a recorded result on one external repository after iterative generator fixes improved it from 191/440; it is not an untouched first-run rate or a reproducible cross-repository benchmark.</span></div>
+      </div>
+    </section>
+
+    <section id="overview" class="section-rule">
+      <div class="shell">
+        <div class="section-heading reveal">
+          <div class="eyebrow">Overview</div>
+          <h2>Deterministic generation with explicit, bounded repair</h2>
+          <p>The TypeScript compiler and repository evidence drive generation. Verification stays read-only. Repair is a separate opt-in mode with registered operations, provenance checks, exact-byte journaling, scope-aware reruns, and regression rollback.</p>
+        </div>
+        <div class="overview-grid">
+          <article class="info-card reveal">
+            <span class="icon-box" aria-hidden="true">&lt;&gt;</span>
+            <h3>Repository-aware analysis</h3>
+            <p>Resolves live types, exports, aliases, providers, render helpers, Jest/Vitest mode, and conventions before planning code.</p>
+          </article>
+          <article class="info-card reveal">
+            <span class="icon-box" aria-hidden="true">AI</span>
+            <h3>Honest test planning</h3>
+            <p>Unsupported required fixtures become structured skips. Generated scenarios require source-backed observable outcomes; compilation-only assertions are rejected.</p>
+          </article>
+          <article class="info-card reveal">
+            <span class="icon-box" aria-hidden="true">0x</span>
+            <h3>Protected repair</h3>
+            <p>Only owned generated tests and setup artifacts may change. Root containment, symlink checks, provenance hashes, atomic writes, and recovery protect every mutation.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="how-it-works" class="section-rule">
+      <div class="shell">
+        <div class="section-heading reveal">
+          <div class="eyebrow">How it works</div>
+          <h2>From repository evidence to a verified artifact</h2>
+          <p>Planning is deterministic and finalized before emission. The optional repair loop is isolated behind <code>--repair</code> and never changes production source or human-written tests.</p>
+        </div>
+
+        <div class="timeline">
+          <article class="timeline-item reveal">
+            <span class="timeline-number">1</span>
+            <div class="timeline-copy"><h3>Inspect</h3><p>Repository Intelligence identifies compiler settings, framework mode, imports, exports, providers, render helpers, and existing-test evidence.</p></div>
+          </article>
+          <article class="timeline-item reveal">
+            <span class="timeline-number">2</span>
+            <div class="timeline-copy"><h3>Build fixtures</h3><p>Live TypeScript types produce deterministic structural fixtures. Required cycles, contradictions, and unsupported shapes are reported instead of guessed.</p></div>
+          </article>
+          <article class="timeline-item reveal">
+            <span class="timeline-number">3</span>
+            <div class="timeline-copy"><h3>Plan and emit</h3><p>A canonical behavioral plan is validated first. Each <code>GENERATE</code> scenario emits exactly one test; each <code>SKIP</code> emits none and is reported.</p></div>
+          </article>
+          <article class="timeline-item reveal">
+            <span class="timeline-number">4</span>
+            <div class="timeline-copy"><h3>Protect and verify</h3><p>Imports are revalidated and owned artifacts are written transactionally. Optional repair uses scope-aware Jest/Vitest runs and exact regression rollback.</p></div>
+          </article>
+        </div>
+
+        <div class="pipeline reveal" aria-label="Test generation pipeline">
+          <article class="pipeline-card">
+            <span class="pipeline-label">1 - Evidence</span>
+            <h3>Repository + TypeScript</h3>
+            <p>Live checker state, project configuration, imports, providers, and observable behavior.</p>
+          </article>
+          <article class="pipeline-card">
+            <span class="pipeline-label">2 - Decision</span>
+            <h3>Behavioral plan</h3>
+            <p>Evidence-backed scenarios, stable identifiers, typed fixtures, and structured skips.</p>
+          </article>
+          <article class="pipeline-card">
+            <span class="pipeline-label">3 - Emission</span>
+            <h3>Mechanical generator</h3>
+            <p>Only validated scenarios become React Testing Library tests with observable assertions.</p>
+          </article>
+          <article class="pipeline-card output">
+            <span class="pipeline-label">4 - Safety</span>
+            <h3>Protected artifact</h3>
+            <p>Containment, ownership, provenance, atomic transactions, verification, and recovery.</p>
+          </article>
+        </div>
+        <div class="architecture-note reveal"><span><strong>Inference boundary</strong> - no model runs unless you pass a flag, and local Ollama is the default provider. Two opt-in paths exist. During repair, <code>--repair --repair-llm</code> lets local Ollama propose only registered operation IDs, never literal source edits; this path is restricted to exact loopback HTTP endpoints on port <code>11434</code>, rejects redirects, and refuses any provider other than Ollama. During generation, <code>--llm</code> and <code>--enhance</code> let a model write or enhance test content, which is then revalidated before any write. Generation may target a cloud provider by setting <code>TESTGEN_LLM_PROVIDER=anthropic|openai</code>, which sends source code off-machine and is therefore denied by default: it requires <code>TESTGEN_EGRESS_POLICY=allow</code>, and the <code>banking</code> execution profile denies it unconditionally with no environment variable able to relax that. Cloud provider modules stay out of the CLI's static import graph, so a default run never loads them.</span></div>
+      </div>
+    </section>
+
+    <section id="features" class="section-rule">
+      <div class="shell">
+        <div class="section-heading reveal">
+          <div class="eyebrow">Features</div>
+          <h2>What you get</h2>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card reveal">
+            <span class="icon-box" aria-hidden="true">&gt;_</span>
+            <div><h3>Structural type fixtures</h3><p>Builds assignable values for primitives, objects, unions, tuples, callbacks, promises, records, generics, React types, and more from the live checker.</p></div>
+          </article>
+          <article class="feature-card reveal">
+            <span class="icon-box" aria-hidden="true">::</span>
+            <div><h3>Trusted repair registry</h3><p>Portable operation IDs own their schema, allowed issue types and scopes, prerequisites, mutation construction, safety, and verification blast radius.</p></div>
+          </article>
+          <article class="feature-card reveal">
+            <span class="icon-box" aria-hidden="true">TX</span>
+            <div><h3>Transactional mutation</h3><p>Content and provenance commit together. Interrupted writes are recovered from exact hashes, and conflicting bytes are handed off without mutation.</p></div>
+          </article>
+          <article class="feature-card reveal">
+            <span class="icon-box" aria-hidden="true">KB</span>
+            <div><h3>Durable learning</h3><p>The v2 knowledge base stores only portable registered operations and success evidence. Literal source edits stay in the per-run journal and are never promoted.</p></div>
+          </article>
+          <article class="feature-card reveal">
+            <span class="icon-box" aria-hidden="true">RTC</span>
+            <div><h3>Requirement contracts</h3><p>Local RTC drafting, schema checks, readiness scoring, immutable source snapshots, and approval hashes make ticket quality an explicit gate before generation.</p></div>
+          </article>
+          <article class="feature-card reveal">
+            <span class="icon-box" aria-hidden="true">RED</span>
+            <div><h3>Frozen test evidence</h3><p>Multi-signal mapping feeds a fail-closed RED phase. Frozen hashes, GREEN verification, mutation results, and traceability reports preserve the ticket-to-test chain.</p></div>
+          </article>
+        </div>
+
+        <div class="metrics-grid">
+          <article class="metric-card reveal">
+            <span class="metric-kicker">Repair safety budgets</span>
+            <div class="coverage-values"><strong>2</strong><span>per identity</span><strong class="target">20</strong><span>per run</span></div>
+            <div class="progress-track" aria-label="Repair is limited to two attempts per identity and twenty applied attempts per invocation"></div>
+            <p class="metric-note">A CLI repair session is also capped at ten minutes. Retry identities are stable across line shifts and isolated by run.</p>
+          </article>
+          <article class="metric-card reveal">
+            <span class="metric-kicker">Knowledge promotion</span>
+            <div class="effort-row manual"><span>Evidence</span><div class="effort-bar"></div><strong>5 attempts</strong></div>
+            <div class="effort-row testgen"><span>Diversity</span><div class="effort-bar"></div><strong>2 components</strong></div>
+            <p class="metric-note">Promotion additionally requires at least an 80% success rate. Known poison rules are filtered after zero successes and two failures.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="usage" class="section-rule">
+      <div class="shell">
+        <div class="section-heading reveal">
+          <div class="eyebrow">Usage</div>
+          <h2>Quick start</h2>
+        </div>
+        <div class="code-card reveal">
+          <div class="code-toolbar">
+            <span class="code-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span>CLI</span>
+            <button class="copy-button" type="button" data-copy-code>Copy</button>
+          </div>
+          <pre id="quick-start-code"><span class="comment"># Install workspace dependencies</span>
+<span class="command">$ npm install</span>
+
+<span class="comment"># Generate for one source file</span>
+<span class="command">$ npm run testgen:file -- src/components/Button.tsx</span>
+
+<span class="comment"># Read-only: run the existing test exactly once</span>
+<span class="command">$ npx ts-node packages/testgen/src/cli.ts --file src/components/Button.tsx --verify</span>
+
+<span class="comment"># Opt in to safe repair of a TestGen-owned generated test</span>
+<span class="command">$ npx ts-node packages/testgen/src/cli.ts --file src/components/Button.tsx --repair</span>
+
+<span class="comment"># Also allow local Ollama registered-operation proposals</span>
+<span class="command">$ npx ts-node packages/testgen/src/cli.ts --file src/components/Button.tsx --repair --repair-llm</span></pre>
+        </div>
+        <p class="usage-note reveal"><code>--verify</code> never generates, repairs, or rewrites files. <code>--repair-llm</code> is invalid without <code>--repair</code>. Low coverage remains a separate result and never triggers repair generation.</p>
+        <div class="table-wrap reveal">
+          <table>
+            <thead><tr><th>Mode</th><th>Behavior</th><th>Mutation policy</th></tr></thead>
+            <tbody>
+              <tr><td>Generate</td><td>Analyze, plan, validate, and emit evidence-backed tests</td><td>New TestGen-owned generated test artifacts only</td></tr>
+              <tr><td><code>--verify</code></td><td>Run the existing Jest or Vitest test once</td><td>Read-only</td></tr>
+              <tr><td><code>--repair</code></td><td>Apply registered operations and verify at the correct scope</td><td>Owned generated tests/setup only; exact rollback on regression</td></tr>
+              <tr><td><code>--repair-llm</code></td><td>Allow strict operation proposals from loopback Ollama</td><td>No literal edits; the same trusted registry executes every change</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="pilot" class="section-rule">
+      <div class="shell">
+        <div class="section-heading reveal">
+          <div class="eyebrow">Ticket-driven pilot</div>
+          <h2>Requirements are gated before code is generated</h2>
+          <p>The experimental pilot path connects ticket evidence to an approved RTC, repository symbol mapping, a frozen RED artifact, GREEN verification, mutation testing, and a traceability report. Every uncertain boundary blocks or requires review instead of guessing.</p>
+        </div>
+
+        <div class="overview-grid">
+          <article class="info-card reveal">
+            <span class="icon-box" aria-hidden="true">A</span>
+            <h3>Approve the contract</h3>
+            <p>Revision and content hashes bind the RTC to its ticket snapshot. Non-approved, stale, or blocked contracts cannot enter the generation pipeline.</p>
+          </article>
+          <article class="info-card reveal">
+            <span class="icon-box" aria-hidden="true">B</span>
+            <h3>Map with evidence</h3>
+            <p>Explicit references, call-graph, lexical, ownership, test-adjacency, semantic, and git-history signals contribute to a scored mapping decision.</p>
+          </article>
+          <article class="info-card reveal">
+            <span class="icon-box" aria-hidden="true">C</span>
+            <h3>Measure the pilot</h3>
+            <p>Batch runs, ground-truth annotations, human-touch timing, and correlation reports support a blended Track A / Track B go-or-no-go decision.</p>
+          </article>
+        </div>
+
+        <div class="code-card reveal">
+          <div class="code-toolbar">
+            <span class="code-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span>Ticket-to-test pilot</span>
+          </div>
+          <pre><span class="comment"># Validate an approved requirement contract</span>
+<span class="command">$ npx ts-node packages/testgen/src/cli.ts rtc check --rtc .testgen/requirements/1234.rtc.yaml</span>
+
+<span class="comment"># Map requirements, freeze RED tests, then verify GREEN</span>
+<span class="command">$ npx ts-node packages/testgen/src/cli.ts map --rtc .testgen/requirements/1234.rtc.yaml</span>
+<span class="command">$ npx ts-node packages/testgen/src/cli.ts red --rtc .testgen/requirements/1234.rtc.yaml --verify-red</span>
+<span class="command">$ npx ts-node packages/testgen/src/cli.ts green 1234</span>
+
+<span class="comment"># Run the measured Phase 1 sample and produce correlation artifacts</span>
+<span class="command">$ npx ts-node packages/testgen/src/cli.ts pilot batch-run --dir tickets --steps A,B,C</span>
+<span class="command">$ npx ts-node packages/testgen/src/cli.ts pilot correlate</span></pre>
+        </div>
+        <p class="usage-note reveal">The Phase 1 batch and correlation commands are active development tooling, not a completed fleet rollout. Live ADO pilot execution, reviewed ground truth, and promotion thresholds remain external gates.</p>
+      </div>
+    </section>
+
+    <section id="production" class="section-rule">
+      <div class="shell">
+        <div class="section-heading reveal">
+          <div class="eyebrow">Production verification</div>
+          <h2>The core runtime is verified; pilot validation is ongoing</h2>
+          <p>The core areas below are covered by TypeScript compilation, focused safety and orchestration suites, the full TestGen package suite, regression fixtures, and real Jest and Vitest executions. The ticket pipeline is an experimental pilot surface: its gates are executable, while live multi-repository validation is still in progress.</p>
+        </div>
+
+        <div class="phase-tabs reveal" role="tablist" aria-label="Verification areas">
+          <button class="phase-tab active" type="button" data-phase="1" role="tab" aria-selected="true"><strong>1</strong><span>Generation</span><small class="done">Passed</small></button>
+          <button class="phase-tab" type="button" data-phase="2" role="tab"><strong>2</strong><span>Repair</span><small class="done">Passed</small></button>
+          <button class="phase-tab" type="button" data-phase="3" role="tab"><strong>3</strong><span>Safety</span><small class="done">Passed</small></button>
+          <button class="phase-tab" type="button" data-phase="4" role="tab"><strong>4</strong><span>Runners</span><small class="done">Passed</small></button>
+          <button class="phase-tab" type="button" data-phase="5" role="tab"><strong>5</strong><span>Pilot</span><small class="now">In validation</small></button>
+        </div>
+
+        <div class="roadmap-list">
+          <article class="roadmap-item highlight reveal" data-roadmap="1">
+            <span class="roadmap-status complete">Generation - passed</span>
+            <div><h3>Structural fixtures and honest planning</h3><p>Live TypeScript fixtures, depth and cycle handling, structured unsupported results, stable scenario IDs, one-to-one emission, and observable-assertion gates are covered by focused tests.</p></div>
+          </article>
+          <article class="roadmap-item reveal" data-roadmap="2">
+            <span class="roadmap-status complete">Repair - passed</span>
+            <div><h3>Registry, orchestration, and durable knowledge</h3><p>Canonical issue metadata, operation-only recipes, stable retry identities, multi-fault progression, v2 knowledge promotion, durable replay, and complete human handoff are implemented.</p></div>
+          </article>
+          <article class="roadmap-item reveal" data-roadmap="3">
+            <span class="roadmap-status complete">Safety - passed</span>
+            <div><h3>Protected writes and exact recovery</h3><p>Ownership, provenance, containment, symlink defenses, artifact-kind rules, content/provenance transactions, fault injection, and three-state orphan recovery are executable requirements.</p></div>
+          </article>
+          <article class="roadmap-item reveal" data-roadmap="4">
+            <span class="roadmap-status complete">Runners - passed</span>
+            <div><h3>Independent Jest and Vitest adapters</h3><p>Both adapters use shared shell-free process infrastructure, preserve structured failures, fail closed on malformed JSON, handle suite failures, and have real executable integration coverage.</p></div>
+          </article>
+          <article class="roadmap-item reveal" data-roadmap="5">
+            <span class="roadmap-status current">Pilot - current</span>
+            <div><h3>Ticket-to-test gates and Phase 1 measurement</h3><p>RTC approval, scored mapping, frozen RED artifacts, GREEN verification, mutation evidence, traceability, batch execution, and correlation reporting are implemented. Live ADO validation and the reviewed 15+15 sample remain pilot work.</p></div>
+          </article>
+        </div>
+
+        <div class="architecture-note reveal"><span><strong>Verification snapshot - 24 August 2026</strong> - on Windows at development commit <code>242d6c6</code>, TypeScript compiled without diagnostics and all 38 package suites passed: 500 tests passed and five probe-confirmed symlink capability tests skipped (505 total). The repository audit covered <code>main</code> and both active remote development branches. Their website files were identical; their unmerged feature work is described here as development or pilot work, not as a combined release.</span></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="shell footer-inner">
+      <div><strong>TestGen</strong> - evidence-backed React test generation and protected repair</div>
+      <div class="footer-values">deterministic by default &middot; explicit repair &middot; local-first inference</div>
+    </div>
+  </footer>
+
+  <script>
+    const menuButton = document.querySelector('.menu-button');
+    const navigation = document.querySelector('.nav-links');
+
+    function closeMenu() {
+      menuButton.setAttribute('aria-expanded', 'false');
+      menuButton.setAttribute('aria-label', 'Open navigation');
+      navigation.classList.remove('open');
+      document.body.classList.remove('menu-open');
+    }
+
+    menuButton.addEventListener('click', () => {
+      const isOpen = menuButton.getAttribute('aria-expanded') === 'true';
+      menuButton.setAttribute('aria-expanded', String(!isOpen));
+      menuButton.setAttribute('aria-label', isOpen ? 'Open navigation' : 'Close navigation');
+      navigation.classList.toggle('open', !isOpen);
+      document.body.classList.toggle('menu-open', !isOpen);
+    });
+
+    navigation.querySelectorAll('a').forEach(link => link.addEventListener('click', closeMenu));
+
+    const sections = [...document.querySelectorAll('main section[id]')];
+    const navAnchors = [...navigation.querySelectorAll('a')];
+    const sectionObserver = new IntersectionObserver(entries => {
+      const visible = entries.filter(entry => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (!visible) return;
+      navAnchors.forEach(link => link.classList.toggle('active', link.hash === '#' + visible.target.id));
+    }, { rootMargin: '-25% 0px -60% 0px', threshold: [0, .2, .5] });
+    sections.forEach(section => sectionObserver.observe(section));
+
+    const revealObserver = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: .08 });
+    document.querySelectorAll('.reveal').forEach(element => revealObserver.observe(element));
+
+    document.querySelector('[data-copy-code]').addEventListener('click', async event => {
+      const button = event.currentTarget;
+      const text = document.querySelector('#quick-start-code').innerText;
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = 'Copied';
+        setTimeout(() => { button.textContent = 'Copy'; }, 1600);
+      } catch {
+        button.textContent = 'Select code';
+      }
+    });
+
+    const phaseTabs = [...document.querySelectorAll('.phase-tab')];
+    const roadmapItems = [...document.querySelectorAll('[data-roadmap]')];
+    phaseTabs.forEach(tab => tab.addEventListener('click', () => {
+      const phase = tab.dataset.phase;
+      phaseTabs.forEach(item => {
+        const active = item === tab;
+        item.classList.toggle('active', active);
+        item.setAttribute('aria-selected', String(active));
+      });
+      roadmapItems.forEach(item => item.classList.toggle('highlight', item.dataset.roadmap === phase));
+      document.querySelector('[data-roadmap="' + phase + '"]').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }));
+  </script>
+</body>
+</html>
