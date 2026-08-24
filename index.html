@@ -857,7 +857,7 @@
         <div class="stat-grid reveal">
           <div class="stat-card"><strong>12 / 20</strong><span>First-run green in the committed BOL evaluation corpus</span></div>
           <div class="stat-card"><strong>0%</strong><span>Generation nondeterminism across five repetitions</span></div>
-          <div class="stat-card"><strong>38 / 500</strong><span>Package suites / passing tests in the current development verification</span></div>
+          <div class="stat-card"><strong>40 / 503</strong><span>Package suites / passing tests in the current development verification</span></div>
           <div class="stat-card"><strong>214 / 355</strong><span>Suites passing in one external pilot, after generator fixes</span></div>
         </div>
 
@@ -1080,6 +1080,7 @@
 <span class="command">$ npx ts-node packages/testgen/src/cli.ts pilot batch-run --dir tickets --steps A,B,C</span>
 <span class="command">$ npx ts-node packages/testgen/src/cli.ts pilot correlate</span></pre>
         </div>
+        <div class="architecture-note reveal"><span><strong>Mapping calibration - 24 August 2026</strong> - PILOT-1 correctly remains blocked because <code>validateCategory</code> does not exist. PILOT-2 resolves the real <code>formatCurrency</code> target at 56.0% from explicit reference, cross-file call graph, lexical match, test adjacency, and ownership evidence. A controlled repository-history test then links a real <code>PILOT-2</code> commit to that symbol's file and moves the same model above 65% to <code>review-required</code>. The threshold and weights were not lowered.</span></div>
         <p class="usage-note reveal">The Phase 1 batch and correlation commands are active development tooling, not a completed fleet rollout. Live ADO pilot execution, reviewed ground truth, and promotion thresholds remain external gates.</p>
       </div>
     </section>
@@ -1123,7 +1124,7 @@
           </article>
         </div>
 
-        <div class="architecture-note reveal"><span><strong>Verification snapshot - 24 August 2026</strong> - on Windows at development commit <code>242d6c6</code>, TypeScript compiled without diagnostics and all 38 package suites passed: 500 tests passed and five probe-confirmed symlink capability tests skipped (505 total). The repository audit covered <code>main</code> and both active remote development branches. Their website files were identical; their unmerged feature work is described here as development or pilot work, not as a combined release.</span></div>
+        <div class="architecture-note reveal"><span><strong>Verification snapshot - 24 August 2026</strong> - on Windows at development commit <code>ed65bd5</code>, TypeScript compiled without diagnostics and all 40 package suites passed: 503 tests passed and five probe-confirmed symlink capability tests skipped (508 total). The mapping calibration preserves the 65% review gate, and external package-resolution uncertainty is handled provisionally without weakening relative-import validation.</span></div>
       </div>
     </section>
   </main>
