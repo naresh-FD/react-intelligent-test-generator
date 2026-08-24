@@ -151,5 +151,5 @@ The current local verification snapshot is:
 | Public claims | 24 files scanned; 0 violations |
 | Disposable Expense scaffold | Locked install, Prisma generation, format, lint, architecture, typecheck, contract tests, production build and dependency audit passed |
 
-The interactive web version of this guide is available at
-[`site/application-generator.html`](../site/application-generator.html).
+The interactive web version of this guide is the documentation homepage at
+[`site/index.html`](../site/index.html).
