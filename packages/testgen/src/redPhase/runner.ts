@@ -13,7 +13,7 @@ import type {
   TestFramework,
 } from './types';
 import { generateTestSuite } from './templateEngine';
-import { classifyRedTaxonomy } from '../greenPhase/runner';
+import { classifyRedTaxonomy, isProvenRed } from '../tdd/gate';
 import type { FrozenTestRecord } from '../greenPhase/types';
 
 export function runRedPhase(input: RedPhaseInput): RedPhaseResult {
@@ -49,15 +49,13 @@ export function runRedPhase(input: RedPhaseInput): RedPhaseResult {
     verifications.push(v);
   }
 
-  const PROVEN_RED = new Set(['EXPECTED_RED_ASSERTION', 'EXPECTED_RED_MISSING_REQUIRED_API']);
-
   if (!config.dryRun) {
     const rawOutput = verifications[0]?.errorOutput ?? '';
     const failCount = verifications[0]?.failCount ?? 0;
     const passCount = verifications[0]?.passCount ?? 0;
     const taxonomy = classifyRedTaxonomy(rawOutput, failCount, passCount);
 
-    if (!PROVEN_RED.has(taxonomy)) {
+    if (!isProvenRed(taxonomy)) {
       console.error(
         `\nRED phase REFUSED to freeze: taxonomy is "${taxonomy}".\n` +
         `A frozen record is only written when the generated test proves RED behavior\n` +
@@ -124,7 +122,9 @@ function writeFrozenRecord(
     generatedAt: new Date().toISOString(),
   };
   const frozenPath = path.join(outputDir, `${rtc.source.ticketId}.frozen.json`);
-  fs.writeFileSync(frozenPath, JSON.stringify(frozenRecord, null, 2), 'utf8');
+  const temp = `${frozenPath}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(temp, `${JSON.stringify(frozenRecord, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+  fs.renameSync(temp, frozenPath);
   console.log(`Froze test artifact at ${frozenPath} (hash: ${testFileHash.slice(0, 12)}…)`);
 }
 

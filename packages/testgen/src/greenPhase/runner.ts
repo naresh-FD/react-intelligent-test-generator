@@ -11,6 +11,7 @@ import type {
   RequirementGreenResult,
 } from './types';
 import type { TestFramework } from '../redPhase/types';
+import { PROVEN_RED_TAXONOMIES } from '../tdd/gate';
 
 export function runGreenPhase(input: GreenPhaseInput): GreenPhaseResult {
   const { ticketId, repoRoot, redResultDir, framework } = input;
@@ -30,10 +31,6 @@ export function runGreenPhase(input: GreenPhaseInput): GreenPhaseResult {
     };
   }
 
-  const PROVEN_RED_TAXONOMIES: ReadonlySet<RedTaxonomyVerdict> = new Set([
-    'EXPECTED_RED_ASSERTION',
-    'EXPECTED_RED_MISSING_REQUIRED_API',
-  ]);
   if (!PROVEN_RED_TAXONOMIES.has(frozenRecord.redTaxonomy)) {
     return {
       ticketId,
