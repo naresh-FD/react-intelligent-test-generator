@@ -103,37 +103,46 @@ artifacts. Reproduce with:
 npm --workspace packages/testgen run eval:manifest
 ```
 
-Manifest `bol-v1`, seed 12345, repeat 5, TestGen SHA `cc6f416`, Node v22.22.2, TS 5.9.3.
+Manifest `bol-v1`, seed 12345, repeat 5, TestGen SHA `5af70d9`, Node v22.22.2, TS 5.9.3.
 
-| Metric | First baseline (`cc6f416`) | Current (`b675435`) |
+| Metric | First baseline (`cc6f416`) | Current (`5af70d9`) |
 | --- | --- | --- |
 | Eligible cases | 20 | 20 |
-| Generated | 9 | 11 |
-| First-run compiled | 4 (20.0%) | 4 (20.0%) |
-| **First-run passed** | **0 (0.0%)** | **0 (0.0%)** |
-| Compile failed | 5 | 7 |
+| Generated | 9 | 17 |
+| First-run compiled | 4 (20.0%) | 16 (80.0%) |
+| **First-run passed** | **0 (0.0%)** | **12 (60.0%)** |
+| Compile failed | 5 | 1 |
 | Test failed | 4 | 4 |
-| Known skips | 8 | 9 |
-| Generator crashes | 3 | **0** |
+| Known skips | 8 | 3 |
+| Generator crashes | 3 | 0 |
 | Unknown failures | 0 | 0 |
 | Harness errors | 0 | 0 |
 | Generation nondeterminism | 0.0% | 0.0% |
 | Execution flake | 0.0% | 0.0% |
+| Median branch coverage | not measured | 58.2% |
 
-Compile failures rose from 5 to 7 because the F1 fix drained the crash bucket into the
-compile bucket. No case moved down the outcome ladder: the three former crashes became
-one classified skip and two compile failures, all strictly better than the generator
-aborting. Per-case comparison, not bucket rates, is what establishes that.
+The jump from 0% to 60% first-run green came from a single generator fix pass
+(root-caused against the Aug 17 run) rather than any change to the corpus: literal-union
+props no longer widen to `string` in the untyped `defaultProps` object, boolean props
+that gate rendering (`isOpen`/`visible`/`expanded`/`show*`) default to `true` instead of
+`false`, assertions are only planned against props that are actually serialized into
+defaults, and assertions no longer target attribute expressions or conditionally
+rendered elements the default fixtures never reach. This is also why compile failures
+fell (5 → 1) and generator crashes disappeared (3 → 0): those fixes removed failure
+modes rather than reclassifying them into a different bucket.
 
-Read this honestly: **no case in the corpus currently produces a test that compiles and
-passes untouched.** The 0% is a real product measurement taken with a verified
-instrument, not a placeholder.
-
-Two results are genuinely positive. Generation is byte-identical across five
+Two further results are genuinely positive. Generation is byte-identical across five
 repetitions, so "deterministic by default" is now measured rather than asserted. And
 there are zero harness errors and zero unknown failures — every outcome is classified.
 
-The known defects behind the failures are tracked as F1-F3 under Known hazards.
+Read this honestly: 8 of 20 cases (40%) still do not produce a test that compiles and
+passes untouched — 1 compile failure, 4 test failures, 3 known skips. The remaining
+category breakdown (`eval/results/baseline.md`) shows those concentrated in
+`forms-router`, `internal-custom-package`, and `module-federation` (0% first-run green
+each) and `async-api` (50%); `context-custom-hook` and `redux-react-query` are at 100%.
+The generator defects behind the F1-era failures are tracked as F1-F3 under Known
+hazards; F1-F3 are now resolved, and the 8 remaining failures have not yet been
+root-caused to named defect IDs.
 
 ### Instrument caveat
 
@@ -179,7 +188,7 @@ reappears in a public surface.
 | "~45 min" / "~5 min" | No time study exists. |
 | "first-run 60%" | The 60% figure is post-fix. |
 | "no manual edits" | Never measured. |
-| "BOL validated" | No BOL baseline exists. |
+| "BOL validated" | A BOL baseline is measured (60% first-run green), but a measured baseline is not validation; the Phase 4/5 reliability and pilot gates have not been passed. |
 
 <!-- claims-check:ignore-end -->
 
@@ -198,8 +207,10 @@ generated-file handling.
 /providers/mocks, optional local LLM modes, evaluation harness scaffold.
 
 **Phase 3 — External pilot validation.** *Current.* One recorded React Admin `ra-core`
-pilot at 214/355 post-fix. Generator-level gaps identified in the component-render path.
-BOL baseline still pending.
+pilot at 214/355 post-fix. BOL baseline recorded: 60% first-run green, 80% first-run
+compile (see Measured baseline). Remaining first-run failures are concentrated in
+`forms-router`, `internal-custom-package`, and `module-federation`; not yet root-caused
+to named defect IDs.
 
 **Phase 4 — Reliability hardening.** *Next gate.* Human-reviewed golden tests;
 reproducible baseline artifacts; untouched first-run green rate; provider and
@@ -270,8 +281,8 @@ for the cases outside the 60% first-run green rate.
 | ID | Defect | Evidence |
 | --- | --- | --- |
 | ~~F1~~ | **Resolved in `6f8c657`.** Scenario IDs ignored the enclosing `describe`, so identically titled tests in a multi-export file collided and the planner rejected the whole plan. IDs now include the describe chain, with a deterministic suffix for same-scope duplicates. Crashes 3 → 0. | was `generator/behavioralPlan.ts:213` |
-| F2 | Fixture type widening: a string-literal-union prop is emitted as a bare string. `variant: "default"` is inferred `string` and is not assignable to `"success" \| "link" \| "default" \| …`. Component defaults are still built from flattened type strings (`mockValueForProp`) rather than structural type evidence. | `generator/mocks.ts:19,35` |
-| F3 | Assertion for content the component never renders: asserts `getByText(/Example label/i)` for a `label` prop whose value the component does not render, so the test fails against a correct component. | `generator/mocks.ts` fixture naming + component assertion planning |
+| ~~F2~~ | **Resolved in `c9d3a2d`.** A string-literal-union prop widened to bare `string` inside the untyped `defaultProps` object literal and failed to satisfy the component's prop type. Literal fixtures are now flagged (`fixture.isLiteralType`) and pinned with `as const`. | was `generator/mocks.ts:19,35` |
+| ~~F3~~ | **Resolved in `c9d3a2d`.** Two related causes: assertions were planned from any prop's fixture while `defaultProps` only serialized required props, so optional props were asserted without being passed; and attribute expressions (`type={type}`) were collected as observable text, inventing assertions for content that never renders. Selectors now record their source prop so assertion-backed props are included in defaults, and attribute expressions are excluded from observable text. | was `generator/mocks.ts` fixture naming + component assertion planning |
 
 ---
 
