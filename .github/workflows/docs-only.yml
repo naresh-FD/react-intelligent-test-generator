@@ -1,0 +1,27 @@
+name: Docs-only guard
+
+# This repository publishes documentation only. TestGen source code lives in the private
+# repository; this check fails any change that brings code or package tooling here.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  docs-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject source code and package tooling
+        run: |
+          set -eu
+          disallowed=$(git ls-files | grep -E '^(packages|src|test|tests|scripts|examples)/|(^|/)package(-lock)?\.json$|(^|/)(tsconfig[^/]*|jest\.config[^/]*|vite\.config[^/]*)$|\.(ts|tsx|js|jsx|mjs|cjs|py)$' || true)
+          if [ -n "$disallowed" ]; then
+            echo "This repository is documentation only. Move these files to the private repository:"
+            echo "$disallowed"
+            exit 1
+          fi
+          echo "Docs-only check passed."
