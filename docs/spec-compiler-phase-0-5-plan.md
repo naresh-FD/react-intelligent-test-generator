@@ -5,7 +5,7 @@ application repo showed the ticket-driven pipeline already covers most of the de
 document's back half. This plan covers only the gaps.
 
 Source design: *TestGen Next-Generation Technical Design v1.0* (October 2026).
-Implementation: private repo, branch `claude/new-session-ce5tgb`, `packages/testgen/src/spec/`.
+Implementation: private repo `main` (merged in #25), `packages/testgen/src/spec/`.
 
 ## What already existed (reused, not rebuilt)
 
@@ -61,7 +61,7 @@ Full package suite: 39 suites, 532 tests passing; `tsc` clean; public-claims sca
 | Feature Contract for components that do not exist yet | Greenfield contract-first input is not defined |
 | Requirement Ready Rate on real documents, Valid RED Rate, Mutation Kill Rate | Only the synthetic corpus has been measured |
 | Optional LLM adapter (design Phase 11) | Intentionally not started |
-| Not yet merged | The work is on a branch in the private repo; nothing here is a released capability |
+| Not released | Merged to the private repo's `main` but not in a tagged release; it is experimental and CLI-reachable only through `testgen spec` |
 
 ## Rules the implementation keeps
 
