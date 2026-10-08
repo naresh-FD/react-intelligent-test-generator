@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - index.html
+      - playground.html
+      - assets/**
       - .github/workflows/pages.yml
   workflow_dispatch:
 
