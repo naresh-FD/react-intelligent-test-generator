@@ -1,0 +1,652 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TestGen Playground</title>
+<meta name="description" content="Interactive playground: run a TDD slice, score a mapping, step through the delivery pipeline and the AIS roadmap.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0B1B33;--muted:#44546E;--line:#D7E0EE;--line-2:#E3EBF7;--page:#F7F9FC;--card:#FFFFFF;
+  --accent:#1D4ED8;--accent-soft:#EAF1FF;--accent-line:#C6D8F7;--done-bg:#F5F9FF;--done-fg:#173FA8;
+  --red:#A32615;--red-bg:#FFF6F4;--red-line:#F0C9C2;--red-chip:#FBE4E1;--red-ink:#6E1B10;
+  --amber-bg:#FBF0D8;--amber-ink:#5A3B05;--amber-chip:#7A4A05;--green-bg:#E3F4EA;--green-ink:#0B4A2B;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;--mono:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
+}
+@property --deg{syntax:'<angle>';inherits:false;initial-value:0deg}
+@property --num{syntax:'<integer>';inherits:false;initial-value:0}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--page);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.6;overflow-x:clip}
+a{color:inherit;text-decoration:none}
+a:hover{text-decoration:underline}
+button{font:inherit;color:inherit;cursor:pointer}
+button:disabled{cursor:not-allowed;opacity:.5}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+h1,h2,h3{margin:0;font-weight:600;letter-spacing:-.025em;text-wrap:balance}
+p{margin:0}
+.wrap{max-width:1200px;margin:0 auto;padding:0 40px}
+.mono{font-family:var(--mono)}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.lead{color:var(--muted);text-wrap:pretty}
+section{border-bottom:1px solid var(--line);scroll-margin-top:72px}
+section.alt{background:var(--card)}
+.sec{padding-top:88px;padding-bottom:88px;display:flex;flex-direction:column;gap:36px}
+.head{display:flex;flex-direction:column;gap:12px;max-width:800px}
+.head h2{font-size:38px;line-height:1.12}
+.row{display:flex;flex-wrap:wrap;gap:24px 48px}
+.chip{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.05em;padding:3px 10px;border-radius:99px;white-space:nowrap}
+.btn{display:inline-flex;align-items:center;gap:10px;padding:12px 22px;border-radius:10px;font-weight:600;border:1px solid transparent}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-soft{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-line)}
+.btn-line{background:#fff;border-color:var(--ink);font-weight:500}
+.icon-btn{width:46px;height:46px;border:1px solid var(--line);border-radius:10px;background:#fff;display:inline-flex;align-items:center;justify-content:center}
+.pill{padding:8px 16px;border-radius:99px;border:1px solid var(--line);background:#fff;font-size:14px;font-weight:500}
+.pill[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+.tile{text-align:left;padding:16px 18px;border-radius:12px;border:1px solid var(--line);background:#fff;display:flex;flex-direction:column;gap:2px}
+.tile.past{background:var(--done-bg);border-color:var(--accent-line)}
+.tile[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.panel{background:var(--page);border:1px solid var(--line);border-radius:20px;padding:34px}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:24px 26px}
+.blocks{background:#fff;border:1px solid var(--red-line);border-radius:14px;padding:22px 24px;display:flex;flex-direction:column;gap:8px;align-self:flex-start}
+.blocks .eyebrow{color:var(--red)}
+.rail{height:4px;border-radius:99px;background:var(--line-2);overflow:hidden}
+.rail>span{display:block;height:100%;width:0;border-radius:99px;background:var(--accent);transition:width .5s cubic-bezier(.2,.7,.2,1)}
+.lift{transition:transform .18s ease,box-shadow .18s ease,background .2s,border-color .2s,color .2s}
+.lift:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(11,27,51,.08)}
+.grid{display:grid;gap:10px}
+/* nav */
+header{background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.nav{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 28px;padding:14px 40px;max-width:1200px;margin:0 auto}
+.brand{display:flex;align-items:center;gap:10px;font-size:21px;font-weight:600;letter-spacing:-.02em}
+.brand i{width:12px;height:12px;border-radius:3px;background:var(--accent);animation:pulse 1.8s ease-in-out infinite}
+.nav nav{display:flex;flex-wrap:wrap;gap:4px 24px;font-size:15px;font-weight:500}
+.nav nav a{padding:8px 0}
+.nav nav a.on{color:var(--accent)}
+/* hero */
+.hero{background:#fff}
+.hero .sec{padding-top:80px;padding-bottom:72px}
+.hero h1{font-size:clamp(38px,5vw,60px);line-height:1.06;letter-spacing:-.035em}
+.hero h1 em{font-style:normal;color:var(--accent)}
+.flow{position:relative;display:flex;justify-content:space-between;align-items:center;max-width:560px}
+.flow .track{position:absolute;left:44px;right:44px;top:50%;height:2px;background:#DCE5F4}
+.flow .lane{position:absolute;left:44px;right:44px;top:50%;height:0}
+.flow .token{position:absolute;top:-6px;width:12px;height:12px;margin-left:-6px;border-radius:99px;background:var(--accent);box-shadow:0 0 0 4px rgba(29,78,216,.15);animation:travel 4.5s cubic-bezier(.6,0,.4,1) infinite}
+.flow .node{position:relative;padding:9px 16px;border:1px solid var(--accent-line);border-radius:99px;background:#fff;font-family:var(--mono);font-size:12px;letter-spacing:.06em;animation:node 4.5s ease-in-out infinite}
+.flow .node:nth-of-type(2){animation-delay:1.5s}
+.flow .node:nth-of-type(3){animation-delay:3s}
+.jump{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr));gap:10px}
+.jump a{padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--page);display:flex;flex-direction:column;gap:2px;text-decoration:none}
+.jump a b{font-weight:600}
+.jump a span{font-size:13px;color:var(--muted)}
+/* trust */
+.trust{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:24px}
+.tcard{text-align:left;background:#fff;border:1px solid var(--line);border-radius:16px;padding:26px;display:flex;flex-direction:column;gap:10px;transition:border-color .2s,box-shadow .2s,transform .2s}
+.tcard:hover{border-color:#A9BFEA;box-shadow:0 14px 32px rgba(29,78,216,.10);transform:translateY(-3px)}
+.tcard[aria-expanded="true"]{border-color:var(--accent)}
+.tcard .ex{display:none;font-size:14px;padding:12px 14px;background:var(--accent-soft);border-radius:10px;color:#1B2B47}
+.tcard[aria-expanded="true"] .ex{display:block;animation:swap .45s ease both}
+/* tdd */
+.segs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr));gap:10px}
+.seg{padding:16px 18px;border-radius:12px;border:1px solid var(--line-2);background:#fff;display:flex;flex-direction:column;gap:4px;transition:background .3s,border-color .3s}
+.seg b{font-family:var(--mono);font-size:12px;letter-spacing:.06em;font-weight:500}
+.seg small{font-size:14px;color:var(--muted)}
+.seg em{font-style:normal;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.05em;margin-top:4px;color:var(--muted)}
+.seg.done{background:var(--accent-soft);border-color:var(--accent-line)}.seg.done b,.seg.done em{color:var(--done-fg)}
+.seg.now{border-color:var(--accent)}.seg.now b,.seg.now em{color:var(--accent)}
+.seg.blocked{background:var(--red-bg);border-color:var(--red-line)}.seg.blocked b,.seg.blocked em{color:var(--red)}
+.steps{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+.steps li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 16px;border-radius:12px;border:1px solid var(--line-2);background:#fff;transition:background .25s,border-color .25s}
+.steps li .n{font-family:var(--mono);font-size:13px;color:var(--muted);margin-right:12px}
+.steps li .chip{background:#EAF0FA;color:var(--muted)}
+.steps li.done{background:var(--done-bg);border-color:var(--accent-line)}.steps li.done .chip{background:#DDEBFF;color:var(--done-fg)}
+.steps li.next{border-color:var(--accent)}.steps li.next .chip{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.steps li.blocked{background:var(--red-bg);border-color:var(--red-line)}.steps li.blocked .chip{background:var(--red-chip);color:#8A2417}
+.pop{animation:pop .4s ease both}
+.verdict{padding:22px 24px;border-radius:16px;background:#EAF0FA;color:#1B2B47;text-wrap:pretty}
+.verdict.ok{background:#DDEBFF;color:#0F2F7E}
+.verdict.bad{background:var(--red-chip);color:var(--red-ink)}
+.receipt{display:none;background:#fff;border:1px dashed #A9BFEA;border-radius:16px;padding:20px 24px;flex-direction:column;gap:9px;font-family:var(--mono);font-size:13px}
+.receipt.show{display:flex;animation:print .9s cubic-bezier(.2,.7,.2,1) both}
+.receipt .r{display:flex;align-items:center;gap:10px;color:#1B2B47;opacity:0}
+.receipt.show .r{animation:fadeup .5s ease both}
+.tags{display:flex;flex-wrap:wrap;gap:8px;font-family:var(--mono);font-size:12px}
+.tags span{padding:4px 12px;border:1px solid var(--line);border-radius:99px}
+label.check{display:flex;align-items:center;gap:10px;font-size:15px;padding:8px 4px;cursor:pointer}
+label.check input{width:20px;height:20px;accent-color:var(--ink)}
+/* thresholds */
+.big{font-size:40px;font-weight:600;line-height:1;letter-spacing:-.03em;color:var(--accent);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent);height:28px;margin:0}
+.zones{position:relative;padding-top:14px}
+.zones .bar{display:flex;height:10px;border-radius:99px;overflow:hidden;gap:2px}
+.zones .bar span{transition:background .3s}
+.z0{flex:65 1 0;background:#F6D9D4}.z0.on{background:#EDA79C}
+.z1{flex:20 1 0;background:#F6E3BC}.z1.on{background:#E9C46A}
+.z2{flex:15 1 0;background:#CBE9D6}.z2.on{background:#7FCB9E}
+.marker{position:absolute;top:0;width:2px;height:34px;margin-left:-1px;background:var(--ink);border-radius:2px;transition:left .35s cubic-bezier(.2,.7,.2,1)}
+.ticks{position:relative;height:18px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.ticks span{position:absolute}
+.map{padding:16px 20px;border-radius:14px;display:flex;flex-direction:column;gap:2px;transition:background .3s}
+.map.z-0{background:var(--red-chip);color:var(--red-ink)}.map.z-1{background:var(--amber-bg);color:var(--amber-ink)}.map.z-2{background:var(--green-bg);color:var(--green-ink)}
+.map b{font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;font-weight:500}
+.cov{display:grid;grid-template-columns:minmax(110px,190px) minmax(0,1fr) 44px;gap:14px;align-items:center}
+.cov .t{height:8px;background:var(--line-2);border-radius:99px;overflow:hidden}
+.cov .t span{display:block;height:100%;background:var(--accent);border-radius:99px;transform-origin:left center;transform:scaleX(0)}
+.cov.go .t span{animation:grow 1.1s cubic-bezier(.2,.7,.2,1) both}
+/* evidence */
+.donut{flex:0 0 112px;width:112px;height:112px;border-radius:99px;background:conic-gradient(var(--accent) 0 var(--deg),#DCE5F4 var(--deg) 360deg);display:flex;align-items:center;justify-content:center;animation:donut 1.6s cubic-bezier(.2,.7,.2,1) .2s both}
+.donut div{width:86px;height:86px;border-radius:99px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:600}
+.ev{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 16px;padding:15px 0;border-bottom:1px solid var(--line-2)}
+.ev:last-child{border-bottom:0}
+.ev .chip.pass{background:#DDEBFF;color:var(--done-fg)}.ev .chip.req{background:var(--amber-bg);color:var(--amber-chip)}
+.ev.hide{display:none}
+.ev.in{animation:swap .4s ease both}
+/* stack */
+.tree{padding:26px 30px;background:var(--ink);color:#EAF0FA;border-radius:16px;font-family:var(--mono);font-size:14px;display:flex;flex-direction:column}
+.tree button{text-align:left;background:transparent;border:0;border-radius:6px;padding:2px 8px;margin:0 -8px;color:#EAF0FA;font-family:var(--mono);font-size:14px;line-height:1.75;transition:background .2s}
+.tree button[aria-pressed="true"]{background:#1A2E52}
+.tree button span{color:#9DB4D8}
+.tree p{margin-top:14px;padding-top:14px;border-top:1px solid #23395E;color:#C9D6EC;font-family:var(--sans);font-size:14px}
+.swap{animation:swap .45s ease both}
+.count::after{content:counter(num)}
+.count{counter-reset:num var(--num);animation:count 1.8s cubic-bezier(.2,.7,.2,1) .3s both}
+footer .wrap{padding-top:26px;padding-bottom:26px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px 32px;font-size:14px;color:var(--muted)}
+/* motion */
+@keyframes fadeup{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes swap{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(.97)}55%{transform:scale(1.015)}100%{transform:scale(1)}}
+@keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes travel{0%{left:0%}100%{left:100%}}
+@keyframes node{0%,22%{background:#fff;color:var(--ink);box-shadow:0 0 0 0 rgba(29,78,216,0)}6%,16%{background:var(--accent);color:#fff;box-shadow:0 0 0 8px rgba(29,78,216,.14)}}
+@keyframes count{to{--num:561}}
+@keyframes donut{to{--deg:205.7deg}}
+@keyframes print{from{clip-path:inset(0 0 100% 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(29,78,216,.35)}50%{box-shadow:0 0 0 7px rgba(29,78,216,0)}}
+.fade{animation:fadeup .7s ease both}
+@supports (animation-timeline: view()){.reveal{animation:fadeup linear both;animation-timeline:view();animation-range:entry 0% cover 22%}}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+  .flow .token{display:none}
+  .reveal{animation:none}
+}
+@media (max-width:640px){.wrap,.nav{padding-left:16px;padding-right:16px}.sec{padding-top:56px;padding-bottom:56px}.head h2{font-size:30px}.panel{padding:22px}}
+</style>
+</head>
+<body id="top">
+<header>
+  <div class="nav">
+    <a class="brand" href="index.html"><i aria-hidden="true"></i>TestGen</a>
+    <nav aria-label="Playground sections">
+      <a href="#pipeline">Pipeline</a>
+      <a href="#tdd">TDD slice</a>
+      <a href="#thresholds">Thresholds</a>
+      <a href="#ais">AIS roadmap</a>
+      <a href="#evidence">Evidence</a>
+      <a href="index.html">Docs home</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<section class="hero">
+  <div class="wrap sec">
+    <div class="head">
+      <span class="eyebrow fade">Playground</span>
+      <h1 class="fade" style="animation-delay:.08s">AI proposes. Gates decide. <em>You approve.</em></h1>
+      <p class="lead fade" style="animation-delay:.16s;font-size:20px;max-width:640px">Try the rules TestGen works by. Everything on this page runs in your browser: nothing is sent anywhere and nothing calls a model.</p>
+    </div>
+    <div class="flow fade" style="animation-delay:.24s" aria-hidden="true">
+      <div class="track"></div><div class="lane"><span class="token"></span></div>
+      <span class="node">PROPOSE</span><span class="node">DECIDE</span><span class="node">APPROVE</span>
+    </div>
+    <div class="jump fade" style="animation-delay:.32s">
+      <a href="#pipeline"><b>Pipeline</b><span>Seven stages and what stops each</span></a>
+      <a href="#tdd"><b>TDD slice</b><span>Run a slice, break RED on purpose</span></a>
+      <a href="#thresholds"><b>Thresholds</b><span>Score a mapping against fixed cut-offs</span></a>
+      <a href="#ais"><b>AIS roadmap</b><span>Phases 0 to 6, one at a time</span></a>
+      <a href="#evidence"><b>Evidence</b><span>What is verified and what is not</span></a>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap sec" style="padding-top:64px;padding-bottom:64px">
+    <div class="trust">
+      <button type="button" class="tcard reveal" aria-expanded="false" data-trust>
+        <span style="display:flex;justify-content:space-between;gap:12px"><span class="eyebrow">01 · Propose</span><span class="mono" style="font-size:12px;color:var(--muted)" data-hint>Show example</span></span>
+        <span style="font-size:22px;font-weight:600;line-height:1.2">Models</span>
+        <span style="font-size:15px;color:var(--muted)">Suggest requirement-to-code mappings and other candidates. Output is a proposal, never a decision.</span>
+        <span class="ex">Example: a candidate mapping from AC-01 to PaymentForm, with the evidence that produced its score.</span>
+      </button>
+      <button type="button" class="tcard reveal" aria-expanded="false" data-trust>
+        <span style="display:flex;justify-content:space-between;gap:12px"><span class="eyebrow">02 · Decide</span><span class="mono" style="font-size:12px;color:var(--muted)" data-hint>Show example</span></span>
+        <span style="font-size:22px;font-weight:600;line-height:1.2">Deterministic gates</span>
+        <span style="font-size:15px;color:var(--muted)">Hashes, fixed thresholds, RED classification, frozen tests and quality gates. Missing evidence is BLOCKED.</span>
+        <span class="ex">Example: a score of 0.72 is below 0.85, so the mapping cannot be used without review.</span>
+      </button>
+      <button type="button" class="tcard reveal" aria-expanded="false" data-trust>
+        <span style="display:flex;justify-content:space-between;gap:12px"><span class="eyebrow">03 · Approve</span><span class="mono" style="font-size:12px;color:var(--muted)" data-hint>Show example</span></span>
+        <span style="font-size:22px;font-weight:600;line-height:1.2">A person</span>
+        <span style="font-size:15px;color:var(--muted)">Approves the plan, every mapping that is not automatic, and the draft PR. Nothing is merged or deployed.</span>
+        <span class="ex">Example: the approval is bound to the plan hash; editing the document afterwards makes it stale.</span>
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- PIPELINE -->
+<section id="pipeline" class="alt">
+  <div class="wrap sec">
+    <div class="row reveal" style="justify-content:space-between;align-items:flex-end;gap:20px">
+      <div class="head"><span class="eyebrow">Pipeline</span><h2>Seven stages. Choose one to see what stops it.</h2></div>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="icon-btn lift" id="stagePrev" aria-label="Previous stage"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <button type="button" class="btn btn-soft lift" id="stagePlay" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path id="stagePlayIcon" d="M7 5l12 7-12 7z"/></svg><span id="stagePlayLabel">Autoplay</span></button>
+        <button type="button" class="icon-btn lift" id="stageNext" aria-label="Next stage"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="rail"><span id="stageRail"></span></div>
+      <div class="grid" id="stages" style="grid-template-columns:repeat(auto-fit,minmax(min(140px,100%),1fr))"></div>
+    </div>
+    <div class="panel row" id="stagePanel" aria-live="polite">
+      <div style="flex:1.3 1 340px;min-width:0;display:flex;flex-direction:column;gap:10px">
+        <span class="eyebrow" id="stageNum">Stage 04 of 07</span>
+        <h3 style="font-size:32px;line-height:1.15" id="stageName">Gate</h3>
+        <p class="lead" id="stageDesc"></p>
+      </div>
+      <div class="blocks" style="flex:1 1 300px;min-width:0"><span class="eyebrow">Blocks when</span><span id="stageBlocks" style="color:#4A1A10"></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- TDD -->
+<section id="tdd">
+  <div class="wrap sec">
+    <div class="head reveal"><span class="eyebrow">Receipt-backed TDD</span><h2>The test is frozen first. The receipt proves it never moved.</h2><p class="lead">Run one slice step by step or all at once. Make RED invalid to see why a bad failure is BLOCKED rather than counted.</p></div>
+    <div class="segs" id="segs"></div>
+    <div class="row" style="gap:24px;align-items:stretch">
+      <div class="card" style="flex:1.3 1 460px;min-width:0;display:flex;flex-direction:column;gap:20px;padding:30px">
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+          <button type="button" class="btn btn-primary lift" id="runStep">Run next step</button>
+          <button type="button" class="btn btn-soft lift" id="runAuto">Auto-run</button>
+          <button type="button" class="btn btn-line lift" id="runReset">Reset</button>
+          <label class="check"><input type="checkbox" id="runInvalid">Make RED invalid (compile error)</label>
+        </div>
+        <div class="rail" style="height:6px"><span id="runRail"></span></div>
+        <ol class="steps" id="steps"></ol>
+      </div>
+      <div style="flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:16px">
+        <div class="verdict" id="verdict" role="status">Press Run next step, or Auto-run to play the whole slice.</div>
+        <div class="receipt" id="receipt">
+          <span style="display:flex;justify-content:space-between;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)"><span>TddReceiptV1</span><span>stored</span></span>
+        </div>
+        <div class="card" style="display:flex;flex-direction:column;gap:12px">
+          <h3 style="font-size:19px;line-height:1.25">Invalid RED is BLOCKED</h3>
+          <div class="tags"><span>compile error</span><span>broken fixture</span><span>setup failure</span><span>timeout</span><span>artificial failure</span></div>
+          <p style="font-size:14px;color:var(--muted)">Only a complete receipt earns the label TDD-verified. Without one, the work is described as regression-tested or test-covered.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- THRESHOLDS -->
+<section id="thresholds" class="alt">
+  <div class="wrap sec">
+    <div class="head reveal"><span class="eyebrow">Thresholds</span><h2>Fixed numbers that nobody can quietly lower.</h2></div>
+    <div class="row" style="gap:40px 64px">
+      <div style="flex:1 1 440px;min-width:0;display:flex;flex-direction:column;gap:18px">
+        <h3 style="font-size:21px">Existing-code mapping confidence</h3>
+        <label for="conf" style="display:flex;justify-content:space-between;align-items:baseline;gap:12px"><span style="font-size:15px;color:var(--muted)">Drag to score a mapping, or try a preset</span><span class="big" id="confText">0.72</span></label>
+        <input id="conf" type="range" min="0" max="100" value="72">
+        <div class="zones"><span class="marker" id="confMarker" style="left:72%"></span><div class="bar"><span class="z0" id="z0"></span><span class="z1" id="z1"></span><span class="z2" id="z2"></span></div></div>
+        <div class="ticks"><span style="left:0">0</span><span style="left:65%;transform:translateX(-50%)">0.65</span><span style="left:85%;transform:translateX(-50%)">0.85</span><span style="right:0">1</span></div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px" id="presets">
+          <button type="button" class="pill lift" data-conf="36"><span class="mono">0.36</span> fixture without git evidence</button>
+          <button type="button" class="pill lift" data-conf="72"><span class="mono">0.72</span> needs a person</button>
+          <button type="button" class="pill lift" data-conf="91"><span class="mono">0.91</span> strong evidence</button>
+        </div>
+        <div class="map" id="map" aria-live="polite"><b id="mapLabel"></b><span id="mapText" style="font-size:15px"></span></div>
+      </div>
+      <div style="flex:1 1 420px;min-width:0;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><h3 style="font-size:21px">Minimum coverage depth</h3><button type="button" class="pill lift" id="replay">Replay</button></div>
+        <div id="cov" style="display:flex;flex-direction:column;gap:16px"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- AIS -->
+<section id="ais">
+  <div class="wrap sec">
+    <div class="head reveal"><span class="eyebrow">AIS roadmap</span><h2>From a technical document to a verified GREEN.</h2><p class="lead">Each phase adds a gate, not an autonomous step. Everything here is experimental; Phase 6 is built and tested but not merged yet.</p></div>
+    <div class="grid" id="phases" style="grid-template-columns:repeat(auto-fit,minmax(min(130px,100%),1fr))"></div>
+    <div class="card row" id="phasePanel" style="padding:32px" aria-live="polite">
+      <div style="flex:1.3 1 360px;min-width:0;display:flex;flex-direction:column;gap:10px">
+        <span style="display:flex;flex-wrap:wrap;gap:10px;align-items:center"><span class="eyebrow" id="phaseNum"></span><span class="chip" id="phaseStatus"></span></span>
+        <h3 style="font-size:30px;line-height:1.15" id="phaseName"></h3>
+        <p class="lead" id="phaseDesc"></p>
+      </div>
+      <div style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:8px;padding:20px 22px;background:var(--page);border:1px solid var(--line);border-radius:14px;align-self:flex-start">
+        <span class="eyebrow" style="color:var(--muted)">Command</span>
+        <code class="mono" id="phaseCmd" style="font-size:14px;overflow-wrap:anywhere"></code>
+        <span class="eyebrow" style="color:var(--red);margin-top:10px">Never</span>
+        <span id="phaseNever" style="color:#4A1A10;font-size:15px"></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- EVIDENCE -->
+<section id="evidence" class="alt">
+  <div class="wrap sec">
+    <div class="row" style="gap:40px 64px;align-items:center">
+      <div class="reveal" style="flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:22px">
+        <span class="eyebrow">Evidence and promotion</span>
+        <h2 style="font-size:38px;line-height:1.12">Claims stay behind the evidence.</h2>
+        <div style="display:flex;align-items:center;gap:22px"><div class="donut" role="img" aria-label="4 of 7 checks passed"><div>4/7</div></div><p style="font-size:15px;color:var(--muted)">promotion checks passed. Delivery stays blocked on drift, altered frozen tests, incomplete receipts, NOT_RUN or failing gates.</p></div>
+      </div>
+      <div style="flex:1.2 1 440px;min-width:0;display:flex;flex-direction:column;gap:14px">
+        <div role="group" aria-label="Filter evidence" style="display:flex;flex-wrap:wrap;gap:8px" id="filters">
+          <button type="button" class="pill lift" data-filter="all" aria-pressed="true">All · 7</button>
+          <button type="button" class="pill lift" data-filter="pass" aria-pressed="false">Pass · 4</button>
+          <button type="button" class="pill lift" data-filter="req" aria-pressed="false">Required · 3</button>
+        </div>
+        <div style="background:var(--page);border:1px solid var(--line);border-radius:20px;padding:6px 26px" id="evList">
+          <div class="ev" data-kind="pass"><div><b>TestGen package</b><div style="font-size:14px;color:var(--muted)">50 suites, 539 passed, 5 skips</div></div><span class="chip pass">PASS</span></div>
+          <div class="ev" data-kind="pass"><div><b>ADO adapter</b><div style="font-size:14px;color:var(--muted)">3 suites, 22 passed</div></div><span class="chip pass">PASS</span></div>
+          <div class="ev" data-kind="pass"><div><b>Typecheck and claims</b><div style="font-size:14px;color:var(--muted)">0 public-claim violations</div></div><span class="chip pass">PASS</span></div>
+          <div class="ev" data-kind="pass"><div><b>Disposable scaffold</b><div style="font-size:14px;color:var(--muted)">Install, Prisma, lint, build, audit and more</div></div><span class="chip pass">PASS</span></div>
+          <div class="ev" data-kind="req"><div><b>Expense all-slice pilot</b><div style="font-size:14px;color:var(--muted)">Not yet run</div></div><span class="chip req">REQUIRED</span></div>
+          <div class="ev" data-kind="req"><div><b>Second application pilot</b><div style="font-size:14px;color:var(--muted)">Not yet run</div></div><span class="chip req">REQUIRED</span></div>
+          <div class="ev" data-kind="req"><div><b>Live ADO sandbox</b><div style="font-size:14px;color:var(--muted)">Not yet run</div></div><span class="chip req">REQUIRED</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STACK -->
+<section>
+  <div class="wrap sec">
+    <div class="row" style="gap:40px">
+      <div class="reveal" style="flex:1 1 380px;min-width:0;display:flex;flex-direction:column;gap:16px">
+        <span class="eyebrow">Generated stack</span>
+        <h2 style="font-size:34px;line-height:1.14">A deterministic monorepo on React, Fastify and PostgreSQL.</h2>
+        <p class="lead">Click a line to see what it is. Only provenance-matched generated files can be regenerated, and paths that traverse, symlink or collide with human-owned files are rejected.</p>
+      </div>
+      <div class="tree" style="flex:1 1 420px;min-width:0" id="tree">
+        <button type="button" aria-pressed="true" data-detail="One repository, npm workspaces, one lockfile.">npm workspaces</button>
+        <button type="button" aria-pressed="false" data-detail="The web app. Protected access is checked in loaders and actions.">├── apps/web <span>React</span></button>
+        <button type="button" aria-pressed="false" data-detail="The API. Protected routes are checked in Fastify hooks.">├── apps/api <span>Fastify</span></button>
+        <button type="button" aria-pressed="false" data-detail="Shared request and response contracts used by both apps.">├── packages/contracts</button>
+        <button type="button" aria-pressed="false" data-detail="Shared UI components.">├── packages/ui</button>
+        <button type="button" aria-pressed="false" data-detail="The PostgreSQL schema and migrations.">├── prisma/</button>
+        <button type="button" aria-pressed="false" data-detail="Local containers for development and evidence runs.">├── docker/</button>
+        <button type="button" aria-pressed="false" data-detail="Builds and collects evidence. It never deploys.">└── azure-pipelines.yml <span>build and evidence, no deploy</span></button>
+        <p id="treeDetail" aria-live="polite">One repository, npm workspaces, one lockfile.</p>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer><div class="wrap"><span>TestGen · playground</span><span style="display:flex;flex-wrap:wrap;gap:8px 24px"><a href="index.html">Docs home</a><a href="index.html#ais">AIS status</a><a href="https://github.com/naresh-FD/react-intelligent-test-generator">GitHub</a><a href="#top">Back to top</a></span></div></footer>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var restart = function (el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); };
+  var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+
+  // ---------- trust cards ----------
+  document.querySelectorAll('[data-trust]').forEach(function (card) {
+    card.addEventListener('click', function () {
+      var open = card.getAttribute('aria-expanded') !== 'true';
+      document.querySelectorAll('[data-trust]').forEach(function (c) { c.setAttribute('aria-expanded', 'false'); c.querySelector('[data-hint]').textContent = 'Show example'; });
+      card.setAttribute('aria-expanded', open ? 'true' : 'false');
+      card.querySelector('[data-hint]').textContent = open ? 'Hide example' : 'Show example';
+    });
+  });
+
+  // ---------- pipeline ----------
+  var STAGES = [
+    ['Input', 'An Azure DevOps Epic and Feature hierarchy, or a JSON or YAML blueprint, read through a read-only provider.', 'Nothing here can write back to the source.'],
+    ['Normalize', 'A canonical package of stories, revisions, evidence and hashes, with a 200-item limit.', 'Revision drift between the source and the package.'],
+    ['Design', 'An architecture plan covering routes, components, APIs, data, authorization, tests and a trace graph.', 'Unresolved decisions in the plan.'],
+    ['Gate', 'Human approval bound to the exact package and plan hashes.', 'Any drift. A change to the package or plan invalidates the approval.'],
+    ['Scaffold', 'A deterministic, transactional monorepo shell. Ownership is set before any file is written.', 'Unsafe writes, path traversal, symlinks and collisions with human-owned files.'],
+    ['Build', 'TDD slices: RED, bounded implementation, GREEN and refactor, with one receipt per criterion.', 'Invalid RED, modified frozen tests and incomplete receipts.'],
+    ['Deliver', 'One linked draft PR with an audit comment, after every gate and a revision recheck. It never merges or deploys.', 'Input drift, NOT_RUN or failing gates, and writes that would overwrite human-owned content.']
+  ];
+  var stage = 3, stageTimer = null;
+  var stageBox = $('stages');
+  STAGES.forEach(function (s, i) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'tile lift'; b.dataset.i = i;
+    b.innerHTML = '<span class="mono" style="font-size:12px;opacity:.8">0' + (i + 1) + '</span><span style="font-size:18px;font-weight:600;line-height:1.25">' + esc(s[0]) + '</span>';
+    b.addEventListener('click', function () { stopStages(); showStage(i); });
+    stageBox.appendChild(b);
+  });
+  function showStage(i) {
+    stage = (i + STAGES.length) % STAGES.length;
+    stageBox.querySelectorAll('.tile').forEach(function (b, j) {
+      b.setAttribute('aria-pressed', j === stage ? 'true' : 'false');
+      b.classList.toggle('past', j < stage);
+    });
+    $('stageNum').textContent = 'Stage 0' + (stage + 1) + ' of 07';
+    $('stageName').textContent = STAGES[stage][0];
+    $('stageDesc').textContent = STAGES[stage][1];
+    $('stageBlocks').textContent = STAGES[stage][2];
+    $('stageRail').style.width = ((stage + 1) / STAGES.length * 100).toFixed(1) + '%';
+    restart($('stagePanel'), 'swap');
+  }
+  function stopStages() {
+    if (stageTimer) clearInterval(stageTimer);
+    stageTimer = null;
+    $('stagePlay').setAttribute('aria-pressed', 'false');
+    $('stagePlayLabel').textContent = 'Autoplay';
+    $('stagePlayIcon').setAttribute('d', 'M7 5l12 7-12 7z');
+  }
+  $('stagePrev').addEventListener('click', function () { stopStages(); showStage(stage - 1); });
+  $('stageNext').addEventListener('click', function () { stopStages(); showStage(stage + 1); });
+  $('stagePlay').addEventListener('click', function () {
+    if (stageTimer) { stopStages(); return; }
+    $('stagePlay').setAttribute('aria-pressed', 'true');
+    $('stagePlayLabel').textContent = 'Pause';
+    $('stagePlayIcon').setAttribute('d', 'M7 5h4v14H7zM13 5h4v14h-4z');
+    showStage(stage + 1);
+    stageTimer = setInterval(function () { showStage(stage + 1); }, 2400);
+  });
+  showStage(stage);
+
+  // ---------- TDD slice ----------
+  var STEPS = ['Criterion approved with current hashes', 'Test written and frozen', 'RED classified', 'Bounded patch to approved files', 'Focused GREEN, frozen test unchanged', 'Regression pass, then refactor', 'Sanitized receipt stored'];
+  var SEGS = [['RED', 'Fails for the intended behavior', 3], ['PATCH', 'Bounded to approved files', 4], ['GREEN', 'Frozen test unchanged', 5], ['REFACTOR', 'Affected tests rerun', 6], ['RECEIPT', 'Complete and sanitized', 7]];
+  var RECEIPT = ['Requirement hash', 'Frozen-test hash, identical for RED and GREEN', 'Source-tree hashes', 'Exact commands and exit codes', 'RED classification', 'Regression and refactor results'];
+  var step = 0, invalid = false, runTimer = null;
+  var stepsBox = $('steps'), segsBox = $('segs'), receipt = $('receipt');
+  STEPS.forEach(function (name, i) {
+    var li = document.createElement('li');
+    li.innerHTML = '<span style="display:flex;align-items:center;min-width:0"><span class="n">0' + (i + 1) + '</span><span style="font-weight:500">' + esc(name) + '</span></span><span class="chip">WAITING</span>';
+    stepsBox.appendChild(li);
+  });
+  SEGS.forEach(function (g) {
+    var d = document.createElement('div');
+    d.className = 'seg';
+    d.innerHTML = '<b>' + g[0] + '</b><small>' + esc(g[1]) + '</small><em>WAITING</em>';
+    segsBox.appendChild(d);
+  });
+  RECEIPT.forEach(function (r, i) {
+    var s = document.createElement('span');
+    s.className = 'r'; s.style.animationDelay = (0.25 + i * 0.12).toFixed(2) + 's';
+    s.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#173FA8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"/></svg>' + esc(r);
+    receipt.appendChild(s);
+  });
+  function renderRun(changed) {
+    var blocked = invalid && step > 2;
+    var shown = blocked ? 2 : step;
+    stepsBox.querySelectorAll('li').forEach(function (li, i) {
+      var cls = '', chip = 'WAITING';
+      if (blocked && i === 2) { cls = 'blocked'; chip = 'BLOCKED'; }
+      else if (i < shown) { cls = 'done'; chip = 'DONE'; }
+      else if (i === shown && !blocked && step < 7) { cls = 'next'; chip = 'NEXT'; }
+      li.className = cls;
+      li.querySelector('.chip').textContent = chip;
+      if (changed && ((i === shown - 1 && !blocked) || (blocked && i === 2))) restart(li, 'pop');
+    });
+    var current = SEGS.findIndex(function (g) { return shown < g[2]; });
+    if (current < 0) current = SEGS.length;
+    segsBox.querySelectorAll('.seg').forEach(function (d, i) {
+      var cls = 'seg', label = 'WAITING';
+      if (blocked && i === 0) { cls += ' blocked'; label = 'BLOCKED'; }
+      else if (shown >= SEGS[i][2]) { cls += ' done'; label = 'DONE'; }
+      else if (i === current && !blocked) { cls += ' now'; label = 'IN PROGRESS'; }
+      d.className = cls;
+      d.querySelector('em').textContent = label;
+      if (changed && ((shown === SEGS[i][2] && !blocked) || (blocked && i === 0))) restart(d, 'pop');
+    });
+    var v = $('verdict');
+    v.className = 'verdict';
+    if (blocked) { v.classList.add('bad'); v.textContent = 'Not a valid RED. Compile errors, broken fixtures, setup failures, timeouts and artificial failures are BLOCKED, and nothing downstream runs.'; }
+    else if (step >= 7) { v.classList.add('ok'); v.textContent = 'Receipt complete. This slice can be called TDD-verified.'; }
+    else if (step > 0) v.textContent = 'Step ' + step + ' of 7 done: ' + STEPS[step - 1] + '.';
+    else v.textContent = 'Press Run next step, or Auto-run to play the whole slice.';
+    if (changed) restart(v, 'swap');
+    $('runRail').style.width = (shown / 7 * 100).toFixed(1) + '%';
+    $('runRail').style.background = blocked ? '#C2410C' : '';
+    receipt.classList.toggle('show', step >= 7 && !blocked);
+    var finished = blocked || step >= 7;
+    $('runStep').disabled = finished || !!runTimer;
+    $('runStep').textContent = step >= 7 ? 'Slice complete' : 'Run next step';
+    $('runAuto').disabled = finished;
+    $('runAuto').textContent = runTimer ? 'Stop' : 'Auto-run';
+  }
+  function stopRun() { if (runTimer) clearInterval(runTimer); runTimer = null; }
+  function advance() {
+    step = Math.min(step + 1, 7);
+    if (step >= 7 || (invalid && step > 2)) stopRun();
+    renderRun(true);
+  }
+  $('runStep').addEventListener('click', advance);
+  $('runAuto').addEventListener('click', function () {
+    if (runTimer) { stopRun(); renderRun(false); return; }
+    runTimer = setInterval(advance, 850);
+    advance();
+  });
+  $('runReset').addEventListener('click', function () { stopRun(); step = 0; renderRun(true); });
+  $('runInvalid').addEventListener('change', function (e) { stopRun(); invalid = e.target.checked; step = 0; renderRun(true); });
+  renderRun(false);
+
+  // ---------- thresholds ----------
+  var conf = $('conf');
+  function renderConf(changedBand) {
+    var v = Number(conf.value), c = v / 100;
+    var band = c >= 0.85 ? 2 : c >= 0.65 ? 1 : 0;
+    $('confText').textContent = c.toFixed(2);
+    $('confMarker').style.left = v + '%';
+    ['z0', 'z1', 'z2'].forEach(function (z, i) { $(z).classList.toggle('on', i === band); });
+    var m = $('map'), prev = m.dataset.band;
+    m.className = 'map z-' + band;
+    $('mapLabel').textContent = ['Below review threshold', 'Person reviews', 'Auto-map'][band];
+    $('mapText').textContent = [
+      'Under 0.65. Thresholds are never lowered to make up for missing signals, and a blocked mapping is never approvable.',
+      'Between 0.65 and 0.85 a person reviews and approves it.',
+      'At or above 0.85, with at least two kinds of evidence and no tie, the mapping is automatic.'][band];
+    if (prev !== String(band)) { m.dataset.band = band; if (changedBand) restart(m, 'swap'); }
+    document.querySelectorAll('#presets [data-conf]').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.conf === String(v) ? 'true' : 'false'); });
+  }
+  conf.addEventListener('input', function () { renderConf(true); });
+  document.querySelectorAll('#presets [data-conf]').forEach(function (b) {
+    b.addEventListener('click', function () { conf.value = b.dataset.conf; renderConf(true); });
+  });
+  renderConf(false);
+  var COV = [['Lines', 85], ['Functions', 85], ['Statements', 85], ['Branches', 80], ['Critical modules, lines', 90], ['Critical modules, branches', 85], ['Mutation score', 70]];
+  COV.forEach(function (r, i) {
+    var d = document.createElement('div');
+    d.className = 'cov';
+    d.innerHTML = '<span style="font-size:15px;color:var(--muted)">' + esc(r[0]) + '</span><div class="t"><span style="width:' + r[1] + '%;animation-delay:' + (i * 0.08).toFixed(2) + 's"></span></div><span class="mono" style="font-size:13px;text-align:right">' + r[1] + '%</span>';
+    $('cov').appendChild(d);
+  });
+  function growBars() { document.querySelectorAll('.cov').forEach(function (d) { restart(d, 'go'); }); }
+  $('replay').addEventListener('click', growBars);
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting) { growBars(); io.disconnect(); } }); }, { threshold: 0.3 });
+    io.observe($('cov'));
+  } else growBars();
+
+  // ---------- AIS roadmap ----------
+  var PHASES = [
+    ['Trust boundary', 'EXPERIMENTAL', 'Fixed mapping thresholds, grounding, path containment, a safe writer and an egress gate. Everything later is built on these.', 'enforced in every command', 'Lowering a threshold to make up for missing evidence.'],
+    ['Document contract', 'EXPERIMENTAL', 'Markdown, text, Word and PDF documents become one hashed technical-document contract, with a pointer back to the source of every statement.', 'testgen document parse <file>', 'Keeping a statement it cannot point back to.'],
+    ['Document intelligence', 'EXPERIMENTAL', 'Models propose requirements; deterministic grounding and three-of-three consensus decide what reaches a person for review.', 'testgen document interpret <file>', 'Approving, generating or writing anything.'],
+    ['Project discovery', 'EXPERIMENTAL', 'Reads an existing project and reports its framework, test runner, test placement and package manager, with evidence for each value.', 'testgen project discover', 'Running scripts, using the network or installing anything.'],
+    ['TDD plan', 'EXPERIMENTAL', 'A project-aware plan per requirement. A mapping the scorer cannot accept on its own waits for a hash-bound human approval.', 'testgen tdd plan --document <file>', 'Treating a plan as permission to execute.'],
+    ['Bootstrap and first RED', 'EXPERIMENTAL', 'Sets up a new project only from an explicit profile and approval hash, then writes one test, proves it fails because the behaviour is missing, and freezes it.', 'testgen tdd red establish --document <file>', 'Freezing a test that fails for any other reason.'],
+    ['GREEN gate', 'IN REVIEW', 'Verifies a fix made by a person or another tool: only the approved target changed, no test changed, the frozen test passes and tests that use the target still pass.', 'testgen tdd green verify --freeze <file>', 'Writing production code, editing a test or calling a model.']
+  ];
+  var phase = 5, phaseBox = $('phases');
+  PHASES.forEach(function (p, i) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'tile lift';
+    b.innerHTML = '<span style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span class="mono" style="width:30px;height:30px;border-radius:99px;border:2px solid ' + (p[1] === 'IN REVIEW' ? '#B45309' : 'currentColor') + ';display:inline-flex;align-items:center;justify-content:center;font-size:13px">' + i + '</span><span class="mono" style="font-size:10px;letter-spacing:.06em">' + (p[1] === 'IN REVIEW' ? 'IN REVIEW' : '') + '</span></span><span style="font-size:15px;font-weight:600;line-height:1.25">' + esc(p[0]) + '</span>';
+    b.addEventListener('click', function () { showPhase(i); });
+    phaseBox.appendChild(b);
+  });
+  function showPhase(i) {
+    phase = i;
+    phaseBox.querySelectorAll('.tile').forEach(function (b, j) { b.setAttribute('aria-pressed', j === phase ? 'true' : 'false'); b.classList.toggle('past', j < phase); });
+    var p = PHASES[phase], review = p[1] === 'IN REVIEW';
+    $('phaseNum').textContent = 'Phase ' + phase + ' of 6';
+    var st = $('phaseStatus');
+    st.textContent = p[1];
+    st.style.background = review ? 'var(--amber-bg)' : '#DDEBFF';
+    st.style.color = review ? 'var(--amber-chip)' : 'var(--done-fg)';
+    $('phaseName').textContent = p[0];
+    $('phaseDesc').textContent = p[2];
+    $('phaseCmd').textContent = p[3];
+    $('phaseNever').textContent = p[4];
+    restart($('phasePanel'), 'swap');
+  }
+  showPhase(phase);
+
+  // ---------- evidence filter ----------
+  document.querySelectorAll('#filters [data-filter]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var f = b.dataset.filter, n = 0;
+      document.querySelectorAll('#filters [data-filter]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      document.querySelectorAll('#evList .ev').forEach(function (row) {
+        var show = f === 'all' || row.dataset.kind === f;
+        row.classList.toggle('hide', !show);
+        if (show) { row.style.animationDelay = (n++ * 0.06).toFixed(2) + 's'; restart(row, 'in'); }
+      });
+    });
+  });
+
+  // ---------- stack tree ----------
+  document.querySelectorAll('#tree button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('#tree button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      var d = $('treeDetail');
+      d.textContent = b.dataset.detail;
+      restart(d, 'swap');
+    });
+  });
+
+  // ---------- nav highlight ----------
+  if ('IntersectionObserver' in window) {
+    var links = {};
+    document.querySelectorAll('.nav nav a[href^="#"]').forEach(function (a) { links[a.getAttribute('href').slice(1)] = a; });
+    var navIo = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { if (e.isIntersecting && links[e.target.id]) { Object.keys(links).forEach(function (k) { links[k].classList.toggle('on', k === e.target.id); }); } });
+    }, { rootMargin: '-45% 0px -50% 0px' });
+    Object.keys(links).forEach(function (id) { var el = $(id); if (el) navIo.observe(el); });
+  }
+})();
+</script>
+</body>
+</html>
