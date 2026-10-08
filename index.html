@@ -162,6 +162,10 @@
       *, *::before, *::after { transition-duration: .01ms !important; }
       .reveal { opacity: 1; transform: none; }
     }
+    .ais-figure { margin: 0 0 22px; padding: 0; }
+    .ais-figure img { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); background: #fff; }
+    .ais-figure figcaption { margin-top: 9px; color: var(--muted); font-size: 13px; }
+    .ais-grid { display: grid; grid-template-columns: 1fr; gap: 6px; }
   </style>
 </head>
 <body>
@@ -175,6 +179,7 @@
         <a href="#tdd">TDD</a>
         <a href="#quality">Quality</a>
         <a href="#operate">Operate</a>
+        <a href="#ais">AIS</a>
         <a href="#status">Status</a>
         <a class="home-link" href="https://github.com/naresh-FD/react-intelligent-test-generator">Source code</a>
       </nav>
@@ -345,6 +350,19 @@ azure-pipelines.yml  build and evidence, no deploy</pre>
           <article class="panel reveal"><h3>ApplicationDeliveryProvider</h3><p>Opt-in ADO write boundary used only after verification and revision recheck.</p><ul><li>Push exact <code>codex/&lt;ticket&gt;-&lt;slug&gt;</code> branch</li><li>Create or update one linked draft PR</li><li>Upsert one audit comment</li><li>Never merge, deploy, transition work items, or bypass policy</li></ul></article>
         </div>
         <div class="callout reveal"><strong>Authentication:</strong> interactive runs use Microsoft Entra delegated authentication; unattended runs use service-principal or workload identity. PAT is an explicit development fallback and is rejected by production delivery profiles. Work-item read, <code>vso.work_write</code>, and <code>vso.code_write</code> remain separate least-privilege capabilities.</div>
+      </div>
+    </section>
+
+    <section id="ais">
+      <div class="shell">
+        <div class="section-heading reveal"><div class="eyebrow">AIS roadmap · TestGen</div><h2>From a technical document to a verified GREEN</h2><p>Where the AIS + TDD work in TestGen stands. Models only propose; deterministic gates decide; a person approves every mapping that is not automatic. Items marked <strong>in review</strong> are built and tested on a branch but not merged to <code>main</code> yet. The canonical status is <a href="https://github.com/naresh-FD/react-intelligent-test-generator/blob/main/docs/product-status.md">docs/product-status.md</a>.</p></div>
+        <div class="ais-grid">
+          <figure class="ais-figure reveal"><a href="assets/ais/ais-status-board.svg" title="Open full size"><img src="assets/ais/ais-status-board.svg" alt="Status board: built, partial, planned and not measured capabilities" loading="lazy" width="1600" height="1328"></a><figcaption>Tap or click any picture to open it full size. Built means code and tests exist; everything in the AIS roadmap is EXPERIMENTAL. Partial and planned items make no implementation claim beyond what the card says.</figcaption></figure>
+          <figure class="ais-figure reveal"><a href="assets/ais/ais-roadmap.svg" title="Open full size"><img src="assets/ais/ais-roadmap.svg" alt="AIS roadmap, Phases 0 to 6" loading="lazy" width="1600" height="640"></a><figcaption>Each phase adds a gate, not an autonomous step.</figcaption></figure>
+          <figure class="ais-figure reveal"><a href="assets/ais/tdd-flow.svg" title="Open full size"><img src="assets/ais/tdd-flow.svg" alt="TDD flow from technical document to verified GREEN, with human checkpoints and stop conditions" loading="lazy" width="1600" height="620"></a><figcaption>TestGen writes the first RED and its freeze; the fix is written by a person or another tool; the GREEN gate decides whether it counts.</figcaption></figure>
+          <figure class="ais-figure reveal"><a href="assets/ais/mapping-trust.svg" title="Open full size"><img src="assets/ais/mapping-trust.svg" alt="Mapping trust boundary: scorer, fixed thresholds, document-declared target and human approval" loading="lazy" width="1600" height="700"></a><figcaption>Thresholds are fixed at 0.65 and 0.85. A blocked mapping can never be approved.</figcaption></figure>
+          <figure class="ais-figure reveal"><a href="assets/ais/green-gate.svg" title="Open full size"><img src="assets/ais/green-gate.svg" alt="Phase 6 GREEN gate: five ordered checks and their refusal codes" loading="lazy" width="1600" height="880"></a><figcaption>In review. Verification writes no code, calls no model, uses no network and installs nothing.</figcaption></figure>
+        </div>
       </div>
     </section>
 
