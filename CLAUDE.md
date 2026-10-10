@@ -1,4 +1,4 @@
-# react-intelligent-test-generator — public docs repository
+# TestGen Docs — public docs repository
 
 This repository is **documentation and plans only**. It publishes the GitHub Pages site and holds
 public docs (`index.html`, `application-generator.html`, `docs/`).
