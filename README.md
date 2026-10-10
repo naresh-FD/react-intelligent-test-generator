@@ -1,6 +1,6 @@
-# React Intelligent Test Generator
+# TestGen Docs
 
-This is the standalone public web-documentation repository for React Intelligent Test Generator.
+This is the standalone public web-documentation repository for TestGen (React Intelligent Test Generator).
 
 Published site: <https://naresh-fd.github.io/react-intelligent-test-generator/>
 
