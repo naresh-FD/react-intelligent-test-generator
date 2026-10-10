@@ -3,7 +3,7 @@
 **Last verified:** 2026-08-15
 **Verified at commit:** `b5b296144e880c455bed10a12cf7e8162e20e7fe` (`main`)
 **Environment:** Linux x86_64, Node `v22.22.2`, npm `10.9.7`
-**AIS roadmap rows (Phases 0-5):** verified 2026-10-05 on the private `main` that merged the Phase 5 work (`b5a4add`): 60 suites / 967 tests passed, `tsc --noEmit` clean, public-claims check clean (local run).
+**AIS roadmap rows (Phases 0-6):** verified 2026-10-10 on the private `main` that merged the document-declared target, argument-vector runners and Phase 6 work (`1c02779`): 68 suites / 1048 tests passed, `tsc --noEmit` clean, public-claims check clean (local run).
 **Evidence gaps (not measured):** `REAL_MODEL_PHASE2_METRICS_NOT_MEASURED` (Phase 2 numbers use scripted agent replies), `REAL_REPOSITORY_DISCOVERY_CORPUS_NOT_MEASURED` (Phase 3 was exercised on fixtures and one read-only smoke run).
 
 This document is the **canonical source for every public TestGen capability claim**.
@@ -13,14 +13,6 @@ below. When this document and any other document disagree, this document wins.
 
 Every row is backed by code that was read, or by a command that was executed, at the
 commit above. No row is backed by a plan, an intention, or a commit message alone.
-
----
-
-## At a glance
-
-![AIS + TDD TestGen: built vs planned](../assets/ais/ais-status-board.svg)
-
-The picture is generated from the rows below; the rows win if they ever disagree. Cards marked IN REVIEW are listed under *In review* and are not capability claims.
 
 ---
 
@@ -71,17 +63,11 @@ The picture is generated from the rows below; the rows win if they ever disagree
 | Project-aware TDD plan (`testgen tdd plan`) and Conduit capability adapter (`testgen capability`) | `EXPERIMENTAL` | `src/tddplan/*`, `src/capability/*`; `tddPlan.test.ts`, `capability*.test.ts`; shared golden fixtures `fixtures/capability` | "Experimental. Produces a deterministic, project-aware TDD plan from a technical document and a repository, and exposes it through Conduit's provisional local capability-process contract for controlled development testing. A plan is not an execution authorisation. Nothing is generated, written or installed, and no model is called." |
 | TDD bootstrap (`testgen tdd bootstrap plan\|diff\|apply\|verify\|profiles`) | `EXPERIMENTAL` | `src/bootstrap/*`; `greenfieldBootstrap.test.ts`, `bootstrapProfiles.test.ts` | "Experimental. Plans, previews and (only with a matching human approval hash) creates the minimal project files for a new React/TypeScript project whose stack the technical document states or a reviewed profile is explicitly selected for; the document wins on conflict. It records an ownership manifest that detects tampering, never overwrites a file, and installs nothing." |
 | First valid RED (`testgen tdd red plan\|establish\|inspect`) | `EXPERIMENTAL` | `src/tddred/*`; `tddRed.test.ts` (real Jest and Vitest runs) | "Experimental. Creates one failing test from an accepted mapping (automatic or verified human approval), proves it fails because the behaviour is missing using the project's own runner, and freezes it. It writes only that test and its freeze, never edits production code, calls no model, and removes the test if the failure does not prove the behaviour missing. On real repositories the mapping scorer rarely reaches an acceptable mapping without git evidence; see the Phase 5 notes." |
+| Document-declared implementation target | `EXPERIMENTAL` | `src/mapping/declaredTarget.ts`; `declaredTarget.test.ts`, `tddRed.test.ts` (end to end through the real scorer) | "Experimental. A technical document can name its target (`Implementation target: path#Symbol`). TestGen checks the file and exported symbol exist and lists it for a person to approve; it never raises a confidence or produces an automatic mapping." |
+| GREEN gate (`testgen tdd green verify\|inspect`, AIS Phase 6) | `EXPERIMENTAL` | `src/tddgreen/*`, `src/tddred/baseline.ts`; `tddGreen.test.ts` (P6-T01..T17, real runner) | "Experimental. Verifies a fix made by a person or another tool against a frozen RED: only the approved target may change, no test or configuration may change, the frozen test must pass and tests that use the target must still pass. It writes no code, calls no model, uses no network and installs nothing." |
 | Autonomous agent orchestration | `PLANNED` | `docs/agent-rollout.md`; all benchmarks are `TBD`. | "Planned. Gated behind reliability work." |
 
-### In review (built and tested on a branch, not merged to `main`)
-
-These are not capability claims. They move into the table above only when they are merged and re-verified.
-
-| Work | Branch | What it adds |
-| --- | --- | --- |
-| Document-declared implementation target | `feat/ais-explicit-target-mapping` | A technical document can name its target (`Implementation target: path#Symbol`). TestGen checks the file and exported symbol exist and lists it for a person to approve; it never raises a confidence or produces an automatic mapping. |
-| Argument-vector test runners | `feat/ais-explicit-target-mapping` | The legacy RED, GREEN and mutation runners start the project's runner with an argument vector, never a shell string or `npx`. |
-| GREEN gate (`testgen tdd green verify\|inspect`, AIS Phase 6) | `feat/ais-phase-6-green-gate` | Verifies a fix made by a person or another tool against a frozen RED: only the approved target may change, no test or configuration may change, the frozen test must pass and tests that use the target must still pass. It writes no code and calls no model. |
+Since 2026-10-10 the legacy RED, GREEN and mutation runners start the project's test runner with an argument vector, never a shell string or `npx` (`src/utils/testProcess.ts`, guarded by `testProcess.test.ts`).
 
 ---
 
