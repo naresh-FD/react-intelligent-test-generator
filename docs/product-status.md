@@ -66,6 +66,17 @@ commit above. No row is backed by a plan, an intention, or a commit message alon
 | Document-declared implementation target | `EXPERIMENTAL` | `src/mapping/declaredTarget.ts`; `declaredTarget.test.ts`, `tddRed.test.ts` (end to end through the real scorer) | "Experimental. A technical document can name its target (`Implementation target: path#Symbol`). TestGen checks the file and exported symbol exist and lists it for a person to approve; it never raises a confidence or produces an automatic mapping." |
 | GREEN gate (`testgen tdd green verify\|inspect`, AIS Phase 6) | `EXPERIMENTAL` | `src/tddgreen/*`, `src/tddred/baseline.ts`; `tddGreen.test.ts` (P6-T01..T17, real runner) | "Experimental. Verifies a fix made by a person or another tool against a frozen RED: only the approved target may change, no test or configuration may change, the frozen test must pass and tests that use the target must still pass. It writes no code, calls no model, uses no network and installs nothing." |
 | Autonomous agent orchestration | `PLANNED` | `docs/agent-rollout.md`; all benchmarks are `TBD`. | "Planned. Gated behind reliability work." |
+| Reverse-engineering reference lab (stage RE-1) | `PLANNED` | No lab documentation or fixtures are described in this document. | "Planned." |
+| Application evidence graph with per-relationship provenance (stage RE-1) | `PLANNED` | Not described as shipped in this document; repository intelligence is covered by its own row above. | "Planned." |
+| Real-repository benchmark corpus with reviewed golden expectations (stage RE-0) | `PLANNED` | The committed corpus is the 20-case BOL baseline, and all 20 `goldenTestFile` values are still `null` (see *Measured baseline*). | "Planned." |
+| Spec-compiler binding gaps closed (stage RE-2) | `PLANNED` | `docs/spec-compiler-phase-0-5-plan.md` lists prop-name binding, control lookup, multi-outcome criteria and boundary, error and dependency readiness under *Still open*, and blocks the API, error-state, navigation, accessibility and data-rendering classes as `NO_RECIPE:<CLASS>`. | "Planned." |
+| Four-way failure taxonomy: test defect, application defect, environment failure, insufficient evidence (stage RE-3) | `PLANNED` | Failure classification is described in the failure knowledge graph and RED rows above; this four-way split is not claimed. | "Planned." |
+| Change-aware test selection (stage RE-4) | `PLANNED` | Not described as shipped in this document. | "Planned." |
+| Mutation-effectiveness measurement on real repositories (stage RE-4) | `PLANNED` | `docs/spec-compiler-phase-0-5-plan.md` records that only the synthetic corpus has been measured for mutation kill rate. | "Planned." |
+| Optional runtime behaviour evidence from approved recordings (stage RE-4) | `PLANNED` | Not described as shipped in this document. | "Planned." |
+| Versioned Conduit capability calls: discover, plan, generate, verify, repair-propose, report (stage RE-5) | `PLANNED` | The current Conduit capability adapter is `EXPERIMENTAL` and its contract is provisional (see the adapter row above). | "Planned." |
+| Evidence exchange with RepoScribe and Argus through Conduit (stage RE-5) | `PLANNED` | Not described as shipped in this document. | "Planned." |
+| Limited pilot with canary rollout and rehearsed rollback (stage RE-5) | `PLANNED` | The only external measurement is the single recorded pilot (see *Recorded pilot evidence*). | "Planned." |
 
 Since 2026-10-10 the legacy RED, GREEN and mutation runners start the project's test runner with an argument vector, never a shell string or `npx` (`src/utils/testProcess.ts`, guarded by `testProcess.test.ts`).
 
@@ -247,6 +258,22 @@ experimental and must stop at human-reviewed draft PRs.
 **Phase 7 — Autonomous orchestration.** *Planned.* Agentic repair only after
 deterministic reliability gates; bounded actions; transactional rollback; human
 approval; auditable decisions; no production-code modification to rescue generated tests.
+
+### Reverse-engineering program stages (RE-0 to RE-5)
+
+These are **planned** program stages for grounding generated tests in evidence. They are not global phase numbers, they are not a capability claim, and they do not change the status of any phase above. Earlier planning drafts that called these stages "Phase 0-5" mean RE-0 to RE-5; do not use "Phase" for them in a public document. The AIS rows in the header and the superseded plan in `docs/spec-compiler-phase-0-5-plan.md` keep their own numbering, and Conduit's delivery plan numbers its phases separately: a Conduit phase and a TestGen phase with the same number are unrelated.
+
+| Stage | Planned scope | Canonical phase it serves | Status |
+| --- | --- | --- | --- |
+| RE-0 | Pinned baseline, benchmark corpus with reviewed golden expectations, root causes for the remaining first-run failures | Phase 3 (current) exit and Phase 4 entry | `PLANNED` |
+| RE-1 | Reverse-engineering reference lab; application evidence graph with per-relationship provenance | Phase 4, as supporting work (the Phase 4 text above does not name an evidence graph) | `PLANNED` |
+| RE-2 | Close the spec-compiler binding gaps listed under *Still open* in `docs/spec-compiler-phase-0-5-plan.md` | Phase 6 | `PLANNED` |
+| RE-3 | Four-way failure taxonomy and scoped-repair promotion on the existing repair runtime | Phase 4 (controlled repair, deterministic failure classification); agentic repair stays in Phase 7 | `PLANNED` |
+| RE-4 | Change-aware selection, mutation measurement on real repositories, optional runtime evidence, reporting | Phase 4 (assertion-retention and repair-safety measurements); report-only delivery belongs to Phase 5 | `PLANNED` |
+| RE-5 | Versioned Conduit capability calls, evidence exchange with RepoScribe and Argus, limited pilot | Phase 5 | `PLANNED` |
+
+The order is a dependency order, not a schedule; no dates are committed. A stage's exit evidence follows the promotion rules below: a machine-readable artifact at a pinned commit, never a plan or a console transcript.
+<!-- conduit-change: CONDUIT-2026-002 -->
 
 ---
 
