@@ -334,5 +334,9 @@ npm --workspace packages/testgen run test:regression
 npm --workspace packages/testgen run test:public-claims
 ```
 
-Result at commit `15876e1` on Linux: `tsc` clean; 25 suites / 390 tests passing,
-0 skips; regression suite passing (5 fixtures); public-claims scan clean.
+Latest recorded result (stated in the header above, local run on the private `main` at
+`1c02779`, 2026-10-10): 68 suites / 1048 tests passed, `tsc --noEmit` clean, public-claims
+check clean. The regression-suite fixture count was last recorded at `15876e1` (5 fixtures)
+and is not restated for `1c02779`. The earlier result at `15876e1` (25 suites / 390 tests)
+is superseded. These figures were carried over from the header and were not re-run when
+this paragraph was updated. <!-- conduit-change: CONDUIT-2026-001 -->
